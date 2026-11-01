@@ -5,7 +5,7 @@
 --    from api/qbo/doc.js after acct_doc_access says yes (Sales / Accounting: any customer; a customer: only their own).
 --  * customer_statement: once QuickBooks has sent the copies, the statement's invoice list comes from QuickBooks (each one opens
 --    QuickBooks' copy). Until then it stays the app's own invoices, as before.
--- Run once in Supabase. Safe to re-run.
+-- Run once in Supabase. Safe to re-run. RUN LIVE 11/1/2026 (Matt, via Claude). The live customer_statement matched 060 (only Windows line endings differed).
 begin;
 
 create table if not exists acct_qbo_docs (
