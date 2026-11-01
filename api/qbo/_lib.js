@@ -81,6 +81,30 @@ export async function caller(req) {
     return me && me.level ? me : null
   } catch { return null }
 }
+/** call a database function as the person calling (their own login and permissions) */
+export function userRpc(req, fn, args) {
+  const auth = req.headers.authorization || ''
+  if (!auth.startsWith('Bearer ')) return Promise.reject(new Error('Sign in first'))
+  return sbFetch(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args || {}) }, { apikey: ANON, Authorization: auth, 'Content-Type': 'application/json' })
+}
+
+// ---------- stored files (private bucket qbo-docs, 149) ----------
+const BUCKET = 'qbo-docs'
+const objPath = p => p.split('/').map(encodeURIComponent).join('/')
+export async function storeFile(path, buf, type = 'application/pdf') {
+  const r = await fetch(`${SB}/storage/v1/object/${BUCKET}/${objPath(path)}`, { method: 'POST', body: buf,
+    headers: { ...serviceHeaders(), 'Content-Type': type, 'x-upsert': 'true', 'Cache-Control': 'no-cache' } })
+  if (!r.ok) throw new Error(`Couldn't store the file (${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)})`)
+}
+/** a link to a stored file that works for a few minutes */
+export async function signedUrl(path, seconds = 300) {
+  const r = await fetch(`${SB}/storage/v1/object/sign/${BUCKET}/${objPath(path)}`, { method: 'POST', body: JSON.stringify({ expiresIn: seconds }),
+    headers: { ...serviceHeaders(), 'Content-Type': 'application/json' } })
+  const j = await r.json().catch(() => ({}))
+  const u = j.signedURL || j.signedUrl
+  if (!r.ok || !u) throw new Error(`Couldn't open the stored copy (${r.status})`)
+  return u.startsWith('http') ? u : `${SB}/storage/v1${u.startsWith('/') ? '' : '/'}${u}`
+}
 
 // ---------- QuickBooks login ----------
 const basic = () => 'Basic ' + Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString('base64')
@@ -379,9 +403,112 @@ async function queryAll(c, sql, entity) {
   }
   return out
 }
-export async function syncCustomers(c) {
+// ---------- every app customer matched to its QuickBooks customer (149) ----------
+// Matched by exact name, ignoring case and punctuation: the QuickBooks name from the customer import first, then the
+// legal name, then the app name. Only a single, unclaimed match is taken; anything else is left for a person.
+export const nameKey = s => String(s ?? '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+export async function matchCustomers(c) {
   const refs = await table(`qbo_refs?env=eq.${ENV}&kind=eq.customer&select=key,qbo_id&limit=5000`)
-  if (!refs || !refs.length) return { customers: 0 }
+  const have = new Set((refs || []).map(r => String(r.key)))
+  const claimed = new Set((refs || []).map(r => String(r.qbo_id)))
+  const ours = await table('customers?kind=eq.external&select=id,name,legal_name,qbo_name&limit=5000')
+  const todo = (ours || []).filter(cu => !have.has(String(cu.id)))
+  if (!todo.length) return { matched: 0, unmatched: [] }
+  const theirs = await queryAll(c, 'select Id, DisplayName, CompanyName from Customer', 'Customer')
+  const byName = new Map()
+  const put = (k, x) => { if (!k) return; const s = byName.get(k) || new Map(); s.set(String(x.Id), x); byName.set(k, s) }
+  for (const x of theirs) { put(nameKey(x.DisplayName), x); put(nameKey(x.CompanyName), x) }
+  let matched = 0; const unmatched = []
+  for (const cu of todo) {
+    let hit = null
+    for (const n of [cu.qbo_name, cu.legal_name, cu.name]) {
+      const s = byName.get(nameKey(n))
+      if (s && s.size === 1) { hit = [...s.values()][0]; break }
+      if (s && s.size > 1) break   // two QuickBooks customers share that name: leave it for a person
+    }
+    if (hit && !claimed.has(String(hit.Id))) { await setRef('customer', cu.id, hit.Id, hit.DisplayName); claimed.add(String(hit.Id)); matched++ }
+    else unmatched.push(cu.name)
+  }
+  return { matched, unmatched }
+}
+
+// ---------- copies of QuickBooks invoices and credit memos (149) ----------
+// Customers see QuickBooks' own copy of each open invoice and the last 12 months of invoices on their statement.
+// The details are kept in acct_qbo_docs; the PDF (exactly as QuickBooks makes it) in the private qbo-docs bucket.
+export const DOC_MONTHS = 12
+const docPath = (kind, id) => `${ENV}/${kind}/${id}.pdf`
+export function docRow(kind, x, customerId, invoiceId) {
+  const lines = (x.Line || []).filter(l => l.DetailType === 'SalesItemLineDetail').map(l => ({
+    item: l.SalesItemLineDetail?.ItemRef?.name ?? null, description: l.Description ?? '', qty: l.SalesItemLineDetail?.Qty ?? null,
+    price: l.SalesItemLineDetail?.UnitPrice ?? null, amount: Number(l.Amount ?? 0) }))
+  return { env: ENV, kind, qbo_id: String(x.Id), customer_id: customerId ?? null, qbo_customer_id: x.CustomerRef ? String(x.CustomerRef.value) : null,
+    doc_number: x.DocNumber || null, txn_date: x.TxnDate || null, due_date: x.DueDate || null, total: Number(x.TotalAmt ?? 0),
+    balance: Number(kind === 'Invoice' ? (x.Balance ?? 0) : (x.RemainingCredit ?? 0)), lines, memo: x.CustomerMemo?.value ?? null,
+    invoice_id: invoiceId ?? null, qbo_updated_at: x.MetaData?.LastUpdatedTime ?? null, synced_at: new Date().toISOString() }
+}
+/** QuickBooks' PDF of one invoice or credit memo */
+export async function qboPdf(c, kind, id) {
+  const r = await fetch(`${API}/v3/company/${c.realm_id}/${kind.toLowerCase()}/${encodeURIComponent(id)}/pdf?${MINOR}`, {
+    headers: { Authorization: `Bearer ${c.access_token}`, Accept: 'application/pdf' } })
+  if (r.status === 401) await table(`qbo_connection?env=eq.${ENV}`, { method: 'PATCH', body: JSON.stringify({ access_expires_at: new Date(0).toISOString() }) }).catch(() => {})
+  if (!r.ok) { const e = new Error(`QuickBooks didn't give the PDF (${r.status})`); e.status = r.status; e.tid = r.headers.get('intuit_tid'); throw e }
+  return Buffer.from(await r.arrayBuffer())
+}
+/** make sure the stored PDF is QuickBooks' latest; returns the stored path */
+export async function ensurePdf(c, d) {
+  const fresh = d.pdf_path && d.pdf_at && (!d.qbo_updated_at || new Date(d.pdf_at) >= new Date(d.qbo_updated_at))
+  if (fresh) return d.pdf_path
+  const path = docPath(d.kind, d.qbo_id)
+  await storeFile(path, await qboPdf(c, d.kind, d.qbo_id))
+  await table(`acct_qbo_docs?env=eq.${ENV}&kind=eq.${d.kind}&qbo_id=eq.${encodeURIComponent(d.qbo_id)}`, { method: 'PATCH',
+    body: JSON.stringify({ pdf_path: path, pdf_at: new Date().toISOString() }), headers: { Prefer: 'return=minimal' } })
+  return path
+}
+const docKey = (kind, id) => `${kind}:${id}`
+/** keep the copies current: open ones (any age) and anything QuickBooks changed since the last run (12 months back the first time).
+ *  PDFs are fetched while time is left (open and newest first); the rest on the next run or when someone opens one. */
+export async function syncDocs(c, { ours, open = [], credits = [], until = Date.now() + 30000 } = {}) {
+  const t0 = new Date().toISOString()
+  const cutoff = new Date(Date.now() - DOC_MONTHS * 31 * 86400000).toISOString().slice(0, 10)
+  const ckey = `acct.docs_cursor.${ENV}`
+  const cur = (await table(`app_settings?key=eq.${ckey}&select=value`))?.[0]?.value || `${cutoff}T00:00:00Z`
+  const changedInv = await queryAll(c, `select * from Invoice where MetaData.LastUpdatedTime >= '${esc(cur)}'`, 'Invoice')
+  const changedCm = await queryAll(c, `select * from CreditMemo where MetaData.LastUpdatedTime >= '${esc(cur)}'`, 'CreditMemo')
+  const pushes = await table(`acct_pushes?env=eq.${ENV}&status=eq.sent&qbo_id=not.is.null&select=invoice_id,qbo_id&limit=10000`)
+  const linked = new Map((pushes || []).map(p => [String(p.qbo_id), p.invoice_id]))
+  const pick = new Map()
+  const consider = (kind, x) => {
+    const cust = ours.get(String(x.CustomerRef?.value))
+    if (cust == null) return
+    const openNow = kind === 'Invoice' ? Number(x.Balance) > 0 : Number(x.RemainingCredit) > 0
+    if (!openNow && String(x.TxnDate || '') < cutoff) return
+    pick.set(docKey(kind, x.Id), docRow(kind, x, cust, kind === 'Invoice' ? linked.get(String(x.Id)) : null))
+  }
+  for (const x of open) consider('Invoice', x)
+  for (const x of changedInv) consider('Invoice', x)
+  for (const x of credits) consider('CreditMemo', x)
+  for (const x of changedCm) consider('CreditMemo', x)
+  const rows = [...pick.values()]
+  for (let i = 0; i < rows.length; i += 200) await table('acct_qbo_docs?on_conflict=env,kind,qbo_id', { method: 'POST', body: JSON.stringify(rows.slice(i, i + 200)),
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } })
+  await upsert('app_settings', [{ key: ckey, value: new Date(Date.parse(t0) - 10 * 60000).toISOString() }], 'key')
+  // PDFs: missing or older than QuickBooks' last change
+  const stored = await table(`acct_qbo_docs?env=eq.${ENV}&customer_id=not.is.null&select=kind,qbo_id,balance,txn_date,qbo_updated_at,pdf_path,pdf_at&limit=20000`)
+  const stale = (stored || []).filter(d => !d.pdf_path || (d.qbo_updated_at && (!d.pdf_at || new Date(d.pdf_at) < new Date(d.qbo_updated_at))))
+    .sort((a, b) => (Number(b.balance) > 0) - (Number(a.balance) > 0) || String(b.txn_date).localeCompare(String(a.txn_date)))
+  let pdfs = 0, pdfError = null
+  for (const d of stale) {
+    if (Date.now() > until) break
+    try { await ensurePdf(c, d); pdfs++ } catch (e) { pdfError = String(e.message || e).slice(0, 200); if (e.status === 401) break }
+  }
+  return { docs: rows.length, pdfs, pdfs_left: stale.length - pdfs, ...(pdfError ? { pdf_error: pdfError } : {}) }
+}
+
+export async function syncCustomers(c, { until = Date.now() + 30000 } = {}) {
+  let match = { matched: 0, unmatched: [] }
+  try { match = await matchCustomers(c) } catch (e) { match.error = String(e.message || e).slice(0, 200) }
+  const refs = await table(`qbo_refs?env=eq.${ENV}&kind=eq.customer&select=key,qbo_id&limit=5000`)
+  if (!refs || !refs.length) return { customers: 0, matched: match.matched }
   const ours = new Map(refs.map(r => [String(r.qbo_id), Number(r.key)]))
   const ids = [...ours.keys()]
   const bal = new Map(), items = new Map(ids.map(id => [id, []]))
@@ -390,17 +517,59 @@ export async function syncCustomers(c) {
     for (const x of r.Customer || []) bal.set(String(x.Id), Number(x.Balance))
   }
   const add = (ref, item) => { const k = String(ref && ref.value); if (items.has(k)) items.get(k).push(item) }
-  for (const x of await queryAll(c, `select Id, DocNumber, TxnDate, DueDate, TotalAmt, Balance, CustomerRef from Invoice where Balance > '0'`, 'Invoice'))
-    add(x.CustomerRef, { type: 'Invoice', doc: x.DocNumber || null, date: x.TxnDate, due: x.DueDate || null, total: Number(x.TotalAmt), balance: Number(x.Balance) })
+  const open = await queryAll(c, `select * from Invoice where Balance > '0'`, 'Invoice')
+  for (const x of open)
+    add(x.CustomerRef, { type: 'Invoice', kind: 'Invoice', qbo_id: String(x.Id), doc: x.DocNumber || null, date: x.TxnDate, due: x.DueDate || null, total: Number(x.TotalAmt), balance: Number(x.Balance) })
   const since = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10)
-  for (const x of await queryAll(c, `select Id, DocNumber, TxnDate, TotalAmt, RemainingCredit, CustomerRef from CreditMemo where TxnDate >= '${since}'`, 'CreditMemo'))
-    if (Number(x.RemainingCredit) > 0) add(x.CustomerRef, { type: 'Credit', doc: x.DocNumber || null, date: x.TxnDate, due: null, total: -Number(x.TotalAmt), balance: -Number(x.RemainingCredit) })
+  const credits = (await queryAll(c, `select * from CreditMemo where TxnDate >= '${since}'`, 'CreditMemo')).filter(x => Number(x.RemainingCredit) > 0)
+  for (const x of credits)
+    add(x.CustomerRef, { type: 'Credit', kind: 'CreditMemo', qbo_id: String(x.Id), doc: x.DocNumber || null, date: x.TxnDate, due: null, total: -Number(x.TotalAmt), balance: -Number(x.RemainingCredit) })
   for (const x of await queryAll(c, `select Id, PaymentRefNum, TxnDate, TotalAmt, UnappliedAmt, CustomerRef from Payment where TxnDate >= '${since}'`, 'Payment'))
     if (Number(x.UnappliedAmt) > 0) add(x.CustomerRef, { type: 'Payment', doc: x.PaymentRefNum || null, date: x.TxnDate, due: null, total: -Number(x.TotalAmt), balance: -Number(x.UnappliedAmt) })
   const rows = ids.map(id => ({ customer_id: ours.get(id), qbo_customer_id: id, balance: bal.has(id) ? bal.get(id) : null,
     open_items: items.get(id).sort((a, b) => String(a.date).localeCompare(String(b.date))) }))
   const n = await rpc('acct_record_balances', { p_env: ENV, p_rows: rows })
-  return { customers: n }
+  // invoice copies; never let it stop the balances (needs 149)
+  let docs
+  try { docs = await syncDocs(c, { ours, open, credits, until }) } catch (e) { docs = { docs_error: String(e.message || e).slice(0, 300) } }
+  return { customers: n, matched: match.matched, unmatched: match.unmatched.length, ...(match.error ? { match_error: match.error } : {}), ...docs }
+}
+
+// ---------- link an app invoice to one already in QuickBooks (149) ----------
+// Nothing changes in QuickBooks. Without confirm it only looks: what QuickBooks has, and what doesn't match.
+export async function linkInvoice(c, invoiceId, docNumber, { confirm = false, admin = false, by = null } = {}) {
+  const p = await rpc('acct_invoice_payload', { p_inv: invoiceId })
+  if (p.status === 'void') throw new Error('This invoice is void.')
+  const relink = p.push && p.push.status === 'sent'
+  if (relink && !admin) throw new Error(`This invoice is already in QuickBooks as #${p.push.doc_number}. Only an Accounting Admin can change which QuickBooks invoice it's linked to.`)
+  const num = String(docNumber || '').trim()
+  if (!num) throw new Error('Which QuickBooks invoice number?')
+  const found = (await query(c, `select * from Invoice where DocNumber = '${esc(num)}'`)).Invoice || []
+  if (!found.length) throw new Error(`QuickBooks${ENV === 'sandbox' ? ' (sandbox)' : ''} has no invoice numbered ${num}.`)
+  if (found.length > 1) throw new Error(`QuickBooks has ${found.length} invoices numbered ${num}. Give one of them a different number in QuickBooks first.`)
+  const q = found[0]
+  const taken = await table(`acct_pushes?env=eq.${ENV}&status=eq.sent&qbo_id=eq.${encodeURIComponent(q.Id)}&invoice_id=neq.${invoiceId}&select=invoice_id`)
+  if (taken && taken.length) {
+    const other = await table(`invoices?id=eq.${taken[0].invoice_id}&select=inv_number`)
+    throw new Error(`QuickBooks invoice ${num} is already linked to ${other?.[0]?.inv_number ?? 'another invoice'} in the app.`)
+  }
+  const warnings = []
+  const qName = q.CustomerRef?.name ?? null, qCust = q.CustomerRef ? String(q.CustomerRef.value) : null
+  const ref = await getRef('customer', p.customer.id)
+  if (ref && qCust && ref !== qCust) warnings.push(`In QuickBooks it's for ${qName}, but in the app this invoice is for ${p.customer.name}.`)
+  if (!ref && qName && ![p.customer.qbo_name, p.customer.legal_name, p.customer.name].some(n => n && nameKey(n) === nameKey(qName)))
+    warnings.push(`The customer names differ: QuickBooks has "${qName}", the app has "${p.customer.name}". Linking also matches them for future invoices.`)
+  if (r2(q.TotalAmt) !== r2(p.total)) warnings.push(`The totals differ: QuickBooks $${r2(q.TotalAmt).toFixed(2)}, app $${r2(p.total).toFixed(2)}. QuickBooks' amount is what the statement and balances use.`)
+  if (relink && String(p.push.qbo_id) !== String(q.Id)) warnings.push(`It's linked to QuickBooks #${p.push.doc_number} now. That invoice stays in QuickBooks: delete or void it there if it's a duplicate.`)
+  const info = { qbo_id: String(q.Id), doc_number: q.DocNumber, date: q.TxnDate, customer: qName, total: Number(q.TotalAmt), balance: Number(q.Balance) }
+  if (!confirm) return { needs_confirm: true, warnings, qbo: info }
+  if (!ref && qCust) await setRef('customer', p.customer.id, qCust, qName)
+  await rpc('acct_record_push', { p_inv: invoiceId, p_env: ENV, p_qbo_id: String(q.Id), p_doc: q.DocNumber, p_total: Number(q.TotalAmt),
+    p_balance: Number(q.Balance), p_error: null, p_by: `${by || 'someone'} (linked to QuickBooks #${q.DocNumber})`, p_line_map: null })
+  // the app didn't write these lines: no price pull-back from the old link
+  await table(`acct_pushes?invoice_id=eq.${invoiceId}&env=eq.${ENV}`, { method: 'PATCH', body: JSON.stringify({ line_map: null, pulled_at: null }), headers: { Prefer: 'return=minimal' } })
+  await table('acct_qbo_docs?env=eq.' + ENV + '&kind=eq.Invoice&qbo_id=eq.' + encodeURIComponent(q.Id), { method: 'PATCH', body: JSON.stringify({ invoice_id: invoiceId }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
+  return { linked: true, warnings, qbo: info }
 }
 
 export function send(res, status, body) { res.status(status).setHeader('Cache-Control', 'no-store'); return res.json(body) }

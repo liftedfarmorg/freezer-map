@@ -216,12 +216,16 @@ export interface StopManifest {
   transfer: boolean; from: ManifestLicense[]; to: ManifestLicense; transporter: ManifestLicense | null; orders: string[]; packages: ManifestPackage[]
 }
 /** customer dashboard + statement (060 customer_statement) */
-export interface StatementInvoice { id: number; inv_number: string; invoice_date: string; due_date: string | null; total: number; status: 'open' | 'paid' | 'void'; terms_label: string | null; po_number: string | null; share_token: string; so_number: string | null; balance: number; past_due: boolean }
-export interface StatementItem { type: 'Invoice' | 'Credit' | 'Payment'; doc: string | null; date: string; due: string | null; total: number; balance: number }
+export interface StatementInvoice { id: number; inv_number: string; invoice_date: string; due_date: string | null; total: number; status: 'open' | 'paid' | 'void'; terms_label: string | null; po_number: string | null; share_token: string; so_number: string | null; balance: number; past_due: boolean
+  /** from QuickBooks (149): opens QuickBooks' copy */
+  qbo_id?: string | null; kind?: 'Invoice' | 'CreditMemo' | null }
+export interface StatementItem { type: 'Invoice' | 'Credit' | 'Payment'; doc: string | null; date: string; due: string | null; total: number; balance: number
+  /** QuickBooks' copy (149): invoices and credit memos open it */
+  kind?: 'Invoice' | 'CreditMemo'; qbo_id?: string }
 export interface Statement {
   customer: { id: number; name: string; terms: string | null }
   balance: { amount: number; past_due: number; source: 'quickbooks' | 'app'; synced_at: string | null }
-  open_items: StatementItem[]; invoices: StatementInvoice[]
+  open_items: StatementItem[]; invoices: StatementInvoice[]; invoices_source?: 'quickbooks' | 'app'
   month: { start: string; shipped: number; min: number | null; left: number | null }
   pending_lbs: number; reserves: { year: number; reserved: number; shipped: number; pending: number; remaining: number; strains: number }
   contract_lbs: number | null; price_per_lb: number | null; from: string

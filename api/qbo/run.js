@@ -1,5 +1,5 @@
-// Accounting actions: { action: 'status' | 'push' | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, on? }
-import { Busy, ENV, caller, classId, companyName, connection, itemId, missingSetup, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
+// Accounting actions: { action: 'status' | 'push' | 'link' | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
+import { Busy, ENV, caller, classId, companyName, connection, itemId, linkInvoice, missingSetup, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
 
 export const config = { maxDuration: 60 }
 
@@ -37,11 +37,20 @@ export default async function handler(req, res) {
         return send(res, 400, { error: msg })
       }
     }
+    if (action === 'link') {
+      // already in QuickBooks under another number: link it, nothing changes in QuickBooks (149)
+      if (!edit) return send(res, 403, { error: 'You can only view Accounting' })
+      const id = Number(body.invoice_id)
+      if (!id) return send(res, 400, { error: 'Which invoice?' })
+      const c = await connection()
+      return send(res, 200, { env: ENV, ...(await linkInvoice(c, id, body.qbo_doc, { confirm: body.confirm === true, admin: !!me.admin && !me.viewing_as, by: me.email })) })
+    }
     if (action === 'sync') {
+      const t0 = Date.now()
       const c = await connection()
       const inv = await syncBalances(c)
       let cust
-      try { cust = await syncCustomers(c) } catch (e) { cust = { customers_error: String(e.message || e).slice(0, 300) } }
+      try { cust = await syncCustomers(c, { until: t0 + 45000 }) } catch (e) { cust = { customers_error: String(e.message || e).slice(0, 300) } }
       return send(res, 200, { env: ENV, ...inv, ...cust })
     }
     if (action === 'check') {

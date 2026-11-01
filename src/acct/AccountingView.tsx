@@ -53,7 +53,7 @@ export default function AccountingView({ backend, flash, tab, go, isAdmin, canEd
   if (!rows || !ov) return <div className="list"><h2>Accounting</h2><p className="muted">Loading…</p></div>
 
   const env: Env = conn?.env ?? ov.env
-  const sheet = open != null && <SendSheet api={api} id={open} flash={flash} canEdit={canEdit} env={env} onClose={() => setOpen(null)} onChanged={load} onPdf={() => setPdf(open)} />
+  const sheet = open != null && <SendSheet api={api} id={open} flash={flash} canEdit={canEdit} isAdmin={isAdmin} env={env} onClose={() => setOpen(null)} onChanged={load} onPdf={() => setPdf(open)} />
   const pdfSheet = pdf != null && <DocSheet backend={backend} kind="invoice" id={pdf} flash={flash} onClose={() => setPdf(null)} onChanged={load} canEdit={false} canVoid={false} />
   const banner = conn && !conn.connected
     ? <div className="warnbox">QuickBooks isn't connected. {conn.error}{isAdmin && tab !== 'settings' && <> <button className="linkbtn" onClick={() => go('settings')}>Connect it in Settings ›</button></>}</div>
@@ -101,7 +101,7 @@ function Dashboard({ ov, rows, conn, env, go, open, banner }: { ov: Overview; ro
         <Card title="Overdue in QuickBooks" badge={ov.overdue} action="In QuickBooks" onAction={() => go('sent')}>
           {od.length ? od.map(i => <button key={i.id} className="drow click" onClick={() => open(i.id)}><span><b>{i.inv}</b> <span className="muted">{i.customer} · due {dfmt(i.due)}</span></span><b>{money(Number(i.push?.balance ?? i.total))}</b></button>)
             : <Empty>Nothing overdue{ov.last_sync ? '' : ' (no sync yet)'}.</Empty>}
-          <p className="muted small">Paid / balance last checked {ov.last_sync ? when(ov.last_sync) : 'never'}. It checks every night.</p>
+          <p className="muted small">Paid / balance last checked {ov.last_sync ? when(ov.last_sync) : 'never'}. It checks every hour, 7am to 8pm Monday to Saturday.</p>
         </Card>
       </Cards>
     </div>
@@ -185,7 +185,7 @@ function SentList({ api, rows, env, flash, open, reload, lastSync, connected, ba
       <div className="row between wrap"><h2>In QuickBooks <EnvPill env={env} /></h2>
         <button className="ghost small" disabled={busy || !connected} onClick={sync}>{busy ? 'Checking…' : 'Check payments now'}</button></div>
       {banner}
-      <p className="muted small">QuickBooks is where payments are recorded. Balances here come from QuickBooks (last checked {lastSync ? when(lastSync) : 'never'}; it checks every night).</p>
+      <p className="muted small">QuickBooks is where payments are recorded. Balances here come from QuickBooks (last checked {lastSync ? when(lastSync) : 'never'}; it checks every hour).</p>
       <Tiles>
         <Tile label="Unpaid" value={dollars(tot(sent.filter(unpaid)))} sub={`${sent.filter(unpaid).length} invoices`} onClick={() => setF('unpaid')} />
         <Tile label="Overdue" value={dollars(tot(sent.filter(isOd)))} sub={`${sent.filter(isOd).length} invoices`} tone={sent.some(isOd) ? 'warn' : 'ok'} onClick={() => setF('overdue')} />
@@ -235,7 +235,43 @@ function ReviewTab({ api, rows, open }: { api: AcctApi; rows: AInvoice[]; open: 
 }
 
 // ---------- one invoice: how it goes to QuickBooks ----------
-function SendSheet({ api, id, flash, canEdit, env, onClose, onChanged, onPdf }: { api: AcctApi; id: number; flash: Flash; canEdit: boolean; env: Env; onClose: () => void; onChanged: () => void; onPdf: () => void }) {
+/** already in QuickBooks under another number: find it there and link it (nothing changes in QuickBooks). relink = an Accounting Admin
+ *  pointing a sent invoice at a different QuickBooks invoice (e.g. after deleting a duplicate there). (149) */
+type LinkLook = { needs_confirm?: boolean; linked?: boolean; warnings: string[]; qbo: { qbo_id: string; doc_number: string; date: string; customer: string | null; total: number; balance: number } }
+function LinkBox({ api, id, env, relink, flash, onLinked }: { api: AcctApi; id: number; env: Env; relink: boolean; flash: Flash; onLinked: () => Promise<void> }) {
+  const [openBox, setOpenBox] = useState(false)
+  const [num, setNum] = useState('')
+  const [look, setLook] = useState<LinkLook | null>(null)
+  const [busy, setBusy] = useState(false)
+  const where = env === 'sandbox' ? 'the sandbox' : 'QuickBooks'
+  async function call(confirm: boolean) {
+    setBusy(true)
+    try {
+      const r = await api.server<LinkLook>('run', { action: 'link', invoice_id: id, qbo_doc: num.trim(), confirm })
+      if (r.linked) { flash(`Linked to ${where} #${r.qbo.doc_number}. Nothing was changed in QuickBooks.`); setOpenBox(false); setLook(null); setNum(''); await onLinked() }
+      else setLook(r)
+    } catch (e) { flash(msg(e), true); setLook(null) } finally { setBusy(false) }
+  }
+  if (!openBox) return <p className="muted small"><button className="linkbtn" onClick={() => setOpenBox(true)}>{relink ? `Linked to the wrong ${where} invoice? Change the link` : `Already in ${where} under another number? Link it instead of sending`}</button></p>
+  return (
+    <div className="infobox linkbox">
+      <p className="small">{relink ? `Point this invoice at a different invoice in ${where}. The one it's linked to now stays there: delete or void it in QuickBooks if it's a duplicate.`
+        : `Type the invoice number ${where} has for this sale. The app links to it and stops waiting to send; nothing is created or changed in QuickBooks. Paid status and balance then come from QuickBooks.`}</p>
+      <div className="row wrap">
+        <input value={num} onChange={e => { setNum(e.target.value); setLook(null) }} placeholder={`${env === 'sandbox' ? 'Sandbox' : 'QuickBooks'} invoice #`} onKeyDown={e => { if (e.key === 'Enter' && num.trim()) call(false) }} />
+        <button className="ghost small" disabled={busy || !num.trim()} onClick={() => call(false)}>{busy && !look ? 'Looking…' : 'Find it'}</button>
+        <button className="ghost small" onClick={() => { setOpenBox(false); setLook(null) }}>Cancel</button>
+      </div>
+      {look && <>
+        <p><b>#{look.qbo.doc_number}</b> · {look.qbo.customer ?? '?'} · {dfmt(look.qbo.date)} · {money(look.qbo.total)}{look.qbo.balance > 0 ? ` · ${money(look.qbo.balance)} open` : ' · paid'}</p>
+        {look.warnings.length > 0 && <div className="warnbox">{look.warnings.map((w, k) => <div key={k}>{w}</div>)}</div>}
+        <button className="primary small" disabled={busy} onClick={() => call(true)}>{busy ? 'Linking…' : look.warnings.length ? 'Link anyway' : `Link to #${look.qbo.doc_number}`}</button>
+      </>}
+    </div>
+  )
+}
+
+function SendSheet({ api, id, flash, canEdit, isAdmin = false, env, onClose, onChanged, onPdf }: { api: AcctApi; id: number; flash: Flash; canEdit: boolean; isAdmin?: boolean; env: Env; onClose: () => void; onChanged: () => void; onPdf: () => void }) {
   const [p, setP] = useState<Payload | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [classes, setClasses] = useState<AClass[]>([])
@@ -312,6 +348,8 @@ function SendSheet({ api, id, flash, canEdit, env, onClose, onChanged, onPdf }: 
           <span className="muted small">{locked ? 'Locked: it\'s in your real QuickBooks. Make changes there.' : env === 'sandbox' && p.push?.status === 'sent' ? 'Sending again updates the sandbox copy.' : ''}</span>
           {canEdit && !locked && <button className="primary" disabled={busy || p.problems.length > 0} onClick={send}>{busy ? 'Working…' : p.push?.status === 'sent' ? 'Send again (update)' : `Send to ${env === 'sandbox' ? 'sandbox' : 'QuickBooks'}`}</button>}
         </div>
+        {canEdit && p.status !== 'void' && (!locked || isAdmin) &&
+          <LinkBox api={api} id={id} env={env} relink={locked} flash={flash} onLinked={async () => { await load(); onChanged() }} />}
       </div>
     </div>
   )
@@ -397,7 +435,9 @@ function ConnPanel({ api, flash, conn, env, refresh }: { api: AcctApi; flash: Fl
       <ul className="muted small">
         <li>Which QuickBooks the app talks to is set in Vercel (QBO_ENV = sandbox or production). Switching means changing that, redeploying, and connecting here again.</li>
         <li>The sandbox is Intuit's test company. Sending there doesn't lock invoices or mark them paid.</li>
-        <li>In the real QuickBooks: sent invoices lock in the app, and paid / balance come back from QuickBooks every night (or Check payments now).</li>
+        <li>In the real QuickBooks: sent invoices lock in the app, and paid / balance come back from QuickBooks every hour, 7am to 8pm Monday to Saturday (or Check payments now).</li>
+        <li>Already in QuickBooks under another number? Open the invoice in To send and link it: nothing is created or changed in QuickBooks.</li>
+        <li>Customers are matched to QuickBooks by name on each check. Their statement then shows QuickBooks' balance and invoices, and each invoice opens QuickBooks' own copy.</li>
         <li>The QuickBooks login is kept on the server. Nobody can read it from the app.</li>
         <li>Problems with QuickBooks? Email <a href="mailto:accounting@lifted-organics.com?subject=QuickBooks%20connection">accounting@lifted-organics.com</a>. Include the error message and its QuickBooks ref, if it shows one.</li>
       </ul>

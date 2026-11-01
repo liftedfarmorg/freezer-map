@@ -40,9 +40,27 @@ export function StatementTiles({ s, onBalance }: { s: Statement; onBalance?: () 
 }
 
 /** the statement: what QuickBooks has open, and every invoice in the last 12 months */
-export function StatementView({ s, staff }: { s: Statement; staff?: boolean }) {
+/** opens QuickBooks' copy of an invoice or credit memo in a new tab (149). The tab is opened on the click, so pop-up blockers allow it. */
+export type OpenDoc = (kind: 'Invoice' | 'CreditMemo', qboId: string) => Promise<string>
+function DocLink({ kind, id, label, openDoc, onError }: { kind: 'Invoice' | 'CreditMemo'; id: string; label: string; openDoc: OpenDoc; onError: (m: string) => void }) {
   const [busy, setBusy] = useState(false)
+  async function go() {
+    const w = window.open('', '_blank')
+    if (w) w.document.title = `${label} · Lifted Farms`
+    setBusy(true)
+    try { const url = await openDoc(kind, id); if (w) w.location.href = url; else window.location.href = url }
+    catch (e) { if (w) w.close(); onError(String((e as Error).message ?? e)) }
+    finally { setBusy(false) }
+  }
+  return <button className="linkbtn" disabled={busy} title={`Open ${kind === 'CreditMemo' ? 'credit memo' : 'invoice'} ${label}`} onClick={go}>{busy ? 'Opening…' : label}</button>
+}
+
+export function StatementView({ s, staff, openDoc }: { s: Statement; staff?: boolean; openDoc?: OpenDoc }) {
+  const [busy, setBusy] = useState(false)
+  const [docErr, setDocErr] = useState<string | null>(null)
   const b = s.balance
+  const docCell = (kind: 'Invoice' | 'CreditMemo' | null | undefined, id: string | null | undefined, label: string) =>
+    kind && id && openDoc ? <DocLink kind={kind} id={id} label={label} openDoc={openDoc} onError={setDocErr} /> : label
   const open = s.invoices.filter(i => i.status === 'open' && i.balance > 0)
   return (
     <div className="stmt">
@@ -50,12 +68,13 @@ export function StatementView({ s, staff }: { s: Statement; staff?: boolean }) {
         <p className="muted small">{b.source === 'quickbooks' ? `From our books, updated ${when(b.synced_at)}.` : staff ? 'QuickBooks production isn\'t connected yet, so this is the app\'s own open invoices (no credit memos or Roshi invoices).' : 'From our invoices. Payments can take a day to show.'}</p>
         <button className="ghost small" disabled={busy} onClick={async () => { setBusy(true); try { await downloadStatement(s) } finally { setBusy(false) } }}>{busy ? 'Making PDF…' : 'Download statement (PDF)'}</button>
       </div>
+      {docErr && <p className="bad-t small">{docErr}</p>}
       {b.source === 'quickbooks' && s.open_items.length > 0 && <>
         <h3>Open items</h3>
         <div className="cwrap"><table className="restable wide">
           <thead><tr><th>Date</th><th>Type</th><th>#</th><th>Due</th><th className="num">Amount</th><th className="num">Open</th></tr></thead>
           <tbody>{s.open_items.map((x, i) => <tr key={i} className={x.type === 'Invoice' && x.due && x.due < today() ? 'pastdue' : ''}>
-            <td>{dfmt(x.date)}</td><td>{TYPE_L[x.type] ?? x.type}</td><td>{x.doc ?? ''}</td><td>{dfmt(x.due)}</td>
+            <td>{dfmt(x.date)}</td><td>{TYPE_L[x.type] ?? x.type}</td><td>{docCell(x.kind, x.qbo_id, x.doc ?? '')}</td><td>{dfmt(x.due)}</td>
             <td className="num">{money(x.total)}</td><td className="num"><b>{money(x.balance)}</b></td></tr>)}</tbody>
           <tfoot><tr><td colSpan={5}><b>Balance</b></td><td className="num"><b>{money(b.amount)}</b></td></tr></tfoot>
         </table></div>
@@ -64,8 +83,10 @@ export function StatementView({ s, staff }: { s: Statement; staff?: boolean }) {
       <h3>Invoices <span className="muted small">since {dfmt(s.from)}</span></h3>
       {!s.invoices.length ? <p className="muted">No invoices yet.</p> : <div className="cwrap"><table className="restable wide">
         <thead><tr><th>Date</th><th>Invoice</th><th className="hide-s">Order</th><th>Due</th><th className="num">Total</th><th className="num">Open</th><th></th></tr></thead>
-        <tbody>{s.invoices.map(i => <tr key={i.id} className={i.past_due ? 'pastdue' : ''}>
-          <td>{dfmt(i.invoice_date)}</td><td><a href={`/?doc=${i.share_token}`} target="_blank" rel="noreferrer">{i.inv_number}</a></td><td className="hide-s">{i.so_number ?? ''}</td>
+        <tbody>{s.invoices.map(i => <tr key={i.qbo_id ? `q${i.qbo_id}` : i.id} className={i.past_due ? 'pastdue' : ''}>
+          <td>{dfmt(i.invoice_date)}</td>
+          <td>{i.qbo_id ? docCell(i.kind ?? 'Invoice', i.qbo_id, i.inv_number) : <a href={`/?doc=${i.share_token}`} target="_blank" rel="noreferrer">{i.inv_number}</a>}</td>
+          <td className="hide-s">{i.so_number ?? ''}</td>
           <td>{dfmt(i.due_date)}</td><td className="num">{money(i.total)}</td><td className="num">{i.balance ? money(i.balance) : ''}</td>
           <td><span className={`pill ${i.status === 'paid' || !i.balance ? 'cp-ok' : i.past_due ? 'cp-bad' : 'cp-warn'}`}>{i.status === 'paid' || !i.balance ? 'Paid' : i.past_due ? 'Past due' : 'Open'}</span></td></tr>)}</tbody>
       </table></div>}
@@ -77,6 +98,16 @@ export function StatementView({ s, staff }: { s: Statement; staff?: boolean }) {
 export function CustomerDashboard({ backend, customerId, staff, rev = 0 }: { backend: Backend; customerId?: number | null; staff?: boolean; rev?: number }) {
   const { s, err } = useStatement(backend, customerId, rev)
   const [open, setOpen] = useState(false)
+  const sb = backend.client()
+  // QuickBooks' copy of an invoice or credit memo: api/qbo/doc.js checks it's theirs and hands back a 5-minute link
+  const openDoc: OpenDoc | undefined = sb ? async (kind, qboId) => {
+    const { data } = await sb.auth.getSession()
+    const r = await fetch('/api/qbo/doc', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+      body: JSON.stringify({ kind, qbo_id: qboId }) })
+    const j = await r.json().catch(() => ({})) as { url?: string; error?: string }
+    if (!r.ok || !j.url) throw new Error(j.error ?? `Couldn't open it (${r.status})`)
+    return j.url
+  } : undefined
   if (err) return staff ? <div className="warnbox">{err}</div> : null
   if (s === undefined) return <p className="muted">Loading…</p>
   if (!s) return null
@@ -84,7 +115,7 @@ export function CustomerDashboard({ backend, customerId, staff, rev = 0 }: { bac
     <div className="cdash">
       <StatementTiles s={s} onBalance={() => setOpen(true)} />
       <button className="linkbtn" onClick={() => setOpen(!open)}>{open ? '▾ Hide statement' : '▸ Statement and invoices'}</button>
-      {open && <StatementView s={s} staff={staff} />}
+      {open && <StatementView s={s} staff={staff} openDoc={openDoc} />}
     </div>
   )
 }

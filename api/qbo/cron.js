@@ -1,8 +1,12 @@
-// Hourly 7am-7pm Pacific, Mon-Sat (vercel.json crons, in UTC): pull paid / balance for invoices in QuickBooks.
+// Hourly 7am-7pm Pacific, Mon-Sat (vercel.json crons, in UTC): pull paid / balance for invoices in QuickBooks,
+// customer balances and open items, every customer matched to QuickBooks, and QuickBooks' invoice copies (149).
 // If CRON_SECRET is set in Vercel, Vercel sends it and anything else is turned away.
 import { ENV, connection, missingSetup, send, syncBalances, syncCustomers, table } from './_lib.js'
 
+export const config = { maxDuration: 60 }
+
 export default async function handler(req, res) {
+  const t0 = Date.now()
   const secret = process.env.CRON_SECRET
   if (secret && req.headers.authorization !== `Bearer ${secret}`) return send(res, 401, { error: 'no' })
   if (missingSetup().length) return send(res, 200, { skipped: 'not set up' })
@@ -12,7 +16,7 @@ export default async function handler(req, res) {
     const inv = await syncBalances(c)
     // customer balances for the dashboards; never let it stop the invoice check (needs 060)
     let cust
-    try { cust = await syncCustomers(c) } catch (e) { cust = { customers_error: String(e.message || e).slice(0, 300) } }
+    try { cust = await syncCustomers(c, { until: t0 + 45000 }) } catch (e) { cust = { customers_error: String(e.message || e).slice(0, 300) } }
     return send(res, 200, { env: ENV, ...inv, ...cust })
   }
   catch (e) {

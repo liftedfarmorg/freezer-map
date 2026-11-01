@@ -80,6 +80,11 @@ Server functions: `api/qbo/connect.js` (start sign-in), `callback.js` (Intuit se
 
 Auto-send (invoices go 30 minutes after they're made, `api/qbo/autopush.js`) is switched on and off in Accounting > Settings > QuickBooks by an Accounting Admin (`app_settings` key `acct.auto_push`). Turn it off before switching `QBO_ENV` from sandbox to production, send one invoice by hand to check it, then turn it back on.
 
+QuickBooks is the source of truth for invoices and AR (149, run `supabase/149_qbo_invoice_copies.sql`):
+- Link instead of send: an invoice already in QuickBooks under another number is linked from Accounting > To send (open it, "Already in QuickBooks under another number?"). Nothing is created or changed in QuickBooks; paid / balance then come from QuickBooks. An Accounting Admin can change a link (e.g. after deleting a duplicate in QuickBooks).
+- Every customer is matched to its QuickBooks customer on each hourly check (exact name ignoring case and punctuation: QuickBooks name from the import, then legal name, then app name; ambiguous names are left alone).
+- Copies: open QuickBooks invoices and credit memos (any age) and the last 12 months are kept in `acct_qbo_docs`, with QuickBooks' own PDF in the private `qbo-docs` bucket (fetched when new or changed, within the check's time limit; or on the spot when someone opens one). The customer statement (portal and Sales) lists QuickBooks' invoices, and each opens its copy through `api/qbo/doc.js` (customers only their own).
+
 ## Processing: dry flower (047)
 
 Run `supabase/047_processing.sql`. It adds the Processing module (Off / View / User / Admin), a product on every pallet

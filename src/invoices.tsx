@@ -62,7 +62,7 @@ export function DocSheet({ backend, kind, id, flash, onClose, onChanged, canEdit
           {edit && editable && <InvoiceEditor d={d} terms={terms} busy={busy} run={run} backend={backend} />}
           {d.kind === 'invoice' && canEdit && d.status !== 'void' && (
             <div className="row wrap docact">
-              {d.acct_status === 'sent' ? <span className="muted small">Payments are recorded in QuickBooks; paid shows here after the nightly check.</span>
+              {d.acct_status === 'sent' ? <span className="muted small">Payments are recorded in QuickBooks; paid shows here after the hourly check.</span>
                 : d.status === 'open' ? <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setInvoiceStatus(d.id, 'paid'), 'Marked paid')}>Mark paid</button>
                 : <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setInvoiceStatus(d.id, 'open'), 'Marked open')}>Mark not paid</button>}
               {canVoid && d.acct_status !== 'sent' && <button className="ghost small" disabled={busy} onClick={() => { const why = prompt(`Void ${d.number}? Say why (optional):`); if (why !== null) run(() => backend.setInvoiceStatus(d.id, 'void', why), 'Voided') }}>Void</button>}
