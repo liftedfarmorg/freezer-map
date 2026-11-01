@@ -496,11 +496,15 @@ export async function syncDocs(c, { ours, open = [], credits = [], until = Date.
   const stored = await table(`acct_qbo_docs?env=eq.${ENV}&customer_id=not.is.null&select=kind,qbo_id,balance,txn_date,qbo_updated_at,pdf_path,pdf_at&limit=20000`)
   const stale = (stored || []).filter(d => !d.pdf_path || (d.qbo_updated_at && (!d.pdf_at || new Date(d.pdf_at) < new Date(d.qbo_updated_at))))
     .sort((a, b) => (Number(b.balance) > 0) - (Number(a.balance) > 0) || String(b.txn_date).localeCompare(String(a.txn_date)))
-  let pdfs = 0, pdfError = null
-  for (const d of stale) {
-    if (Date.now() > until) break
-    try { await ensurePdf(c, d); pdfs++ } catch (e) { pdfError = String(e.message || e).slice(0, 200); if (e.status === 401) break }
+  // five at a time (QuickBooks allows 10 at once per company); stops when time is up or the login is refused
+  let pdfs = 0, pdfError = null, next = 0, stop = false
+  const worker = async () => {
+    while (!stop && next < stale.length && Date.now() < until) {
+      const d = stale[next++]
+      try { await ensurePdf(c, d); pdfs++ } catch (e) { pdfError = String(e.message || e).slice(0, 200); if (e.status === 401) stop = true }
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(5, stale.length) }, worker))
   return { docs: rows.length, pdfs, pdfs_left: stale.length - pdfs, ...(pdfError ? { pdf_error: pdfError } : {}) }
 }
 

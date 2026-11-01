@@ -175,8 +175,18 @@ function SentList({ api, rows, env, flash, open, reload, lastSync, connected, ba
   const shown = sent.filter(i => (f === 'all' || (f === 'unpaid' ? unpaid(i) : f === 'overdue' ? isOd(i) : !unpaid(i))) && (!ql || `${i.inv} ${i.customer} ${i.push?.doc_number ?? ''}`.toLowerCase().includes(ql)))
   async function sync() {
     setBusy(true)
-    try { const r = await api.server<{ checked: number; paid: number; reopened: number; changed: number }>('run', { action: 'sync' }); await reload()
-      flash(`Checked ${r.checked}${r.paid ? ` · ${r.paid} now paid` : ''}${r.reopened ? ` · ${r.reopened} reopened` : ''}${r.changed ? ` · ${r.changed} changed in QuickBooks` : ''}`) }
+    try {
+      type R = { checked: number; paid: number; reopened: number; changed: number; customers?: number; matched?: number; unmatched?: number
+        docs?: number; pdfs?: number; pdfs_left?: number; docs_error?: string; customers_error?: string }
+      const r = await api.server<R>('run', { action: 'sync' }); await reload()
+      const parts = [`Checked ${r.checked} sent invoice${r.checked === 1 ? '' : 's'}`, r.paid ? `${r.paid} now paid` : '', r.reopened ? `${r.reopened} reopened` : '',
+        r.changed ? `${r.changed} changed in QuickBooks` : '',
+        r.customers != null ? `${r.customers} customer balances from QuickBooks${r.matched ? ` (${r.matched} newly matched)` : ''}` : '',
+        r.unmatched ? `${r.unmatched} customers not matched to QuickBooks` : '',
+        r.docs != null ? `${r.docs} invoice copies updated` : '',
+        r.pdfs_left ? `${r.pdfs_left} PDFs still to fetch: click again` : r.docs != null ? 'all PDFs saved' : '']
+      const err = r.docs_error ?? r.customers_error
+      flash(parts.filter(Boolean).join(' · ') + (err ? ` · Problem: ${err}` : ''), !!err) }
     catch (e) { flash(msg(e), true) } finally { setBusy(false) }
   }
   const tot = (xs: AInvoice[]) => xs.reduce((a, i) => a + Number(i.push?.balance ?? i.push?.total ?? 0), 0)
