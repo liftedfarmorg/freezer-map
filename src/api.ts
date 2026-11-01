@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { accessFromRole } from './types'
 import type { SalesDoc } from './docs'
-import type { Item, HarvestLot, LotImpact, Invoice, NewOrderLine, PaymentTerm, FOrder, Prefs, ModKey, Level, ReserveYears, CustomerTerms, UnmatchedTag, ShippedCheck, StopManifest, OrderInput, Terms, Statement, SampleHold, MenuNumbers, MenuRow, ReserveRequest, Balance, ImportResult, Order, RoshiRow, Reserve, LinkInfo, AppUser, Customer, Me, Role, Freezer, FreezerStatus, InvEvent, ListName, ListRow, Load, LoadItem, LoadStop, MixLine, Pallet, Settings, SingleInput, Slot, Snapshot, StopInput, Strain, Vehicle } from './types'
+import type { MyContract, ReserveLineInput, Item, HarvestLot, LotImpact, Invoice, NewOrderLine, PaymentTerm, FOrder, Prefs, ModKey, Level, ReserveYears, CustomerTerms, UnmatchedTag, ShippedCheck, StopManifest, OrderInput, Terms, Statement, SampleHold, MenuNumbers, MenuRow, ReserveRequest, Balance, ImportResult, Order, RoshiRow, Reserve, LinkInfo, AppUser, Customer, Me, Role, Freezer, FreezerStatus, InvEvent, ListName, ListRow, Load, LoadItem, LoadStop, MixLine, Pallet, Settings, SingleInput, Slot, Snapshot, StopInput, Strain, Vehicle } from './types'
 
 export interface SaveUser { email: string; name: string; kind: 'staff' | 'customer' | 'none'; customerId: number | null; access: Partial<Record<ModKey, Level>>; owner?: boolean; login?: 'microsoft' | 'email' | null }
 export interface Overview {
@@ -50,6 +50,14 @@ export interface Backend {
   reserveYears(): Promise<ReserveYears>
   requestReserveBatch(year: number, lines: { strain: string; lbs: number }[], note: string): Promise<number>
   decideRequests(items: { id: number; approve: boolean; lbs: number | null }[], note: string): Promise<{ approved: number; declined: number }>
+  /** portal (150): one request across crop years; a line can come from a sample hold */
+  requestReserveLines(lines: ReserveLineInput[], note: string): Promise<number>
+  /** portal (150): change a submitted or confirmed order until pallets are assigned */
+  updateMyOrder(id: number, lines: OrderInput[], note: string, po: string, wanted: string | null): Promise<number>
+  releaseMyHold(lineId: number): Promise<void>
+  /** portal (150): ids of my open orders that already have pallets assigned (In fulfillment) */
+  myOrderFlags(): Promise<number[]>
+  myContract(): Promise<MyContract | null>
   reserveStrains(): Promise<string[]>
   setReserveDeadline(year: number, date: string | null): Promise<void>
   listTerms(): Promise<CustomerTerms[]>
@@ -466,8 +474,26 @@ class SupaBackend implements Backend {
   async decideRequests(items: { id: number; approve: boolean; lbs: number | null }[], note: string) {
     const { data, error } = await this.sb.rpc('decide_reserve_requests', { p_items: items, p_note: note || null })
     fail(error)
+    this.notify('decision', items.map(i => i.id))
     return data as { approved: number; declined: number }
   }
+  async requestReserveLines(lines: ReserveLineInput[], note: string) {
+    const { data, error } = await this.sb.rpc('request_reserve_batch', { p_lines: lines, p_note: note || null, p_year: null })
+    fail(error)
+    const r = data as { ids: number[]; count: number }
+    if (r.ids?.length) this.notify('reserve', r.ids[0])
+    return r.count
+  }
+  async updateMyOrder(id: number, lines: OrderInput[], note: string, po: string, wanted: string | null) {
+    const { error } = await this.sb.rpc('update_my_order', { p_id: id, p_lines: lines, p_note: note || null, p_po: po || null, p_wanted: wanted || null })
+    if (error && /update_my_order/.test(error.message)) throw new Error('Changing orders needs 150_portal_redesign.sql run in Supabase.')
+    fail(error)
+    this.notify('order', id, { modified: true })
+    return id
+  }
+  async releaseMyHold(lineId: number) { const { error } = await this.sb.rpc('release_my_hold', { p_line: lineId }); fail(error) }
+  async myOrderFlags() { const { data, error } = await this.sb.rpc('my_order_flags'); if (error) return []; return (data ?? []) as number[] }
+  async myContract() { const { data, error } = await this.sb.rpc('my_contract'); if (error) return null; return data as MyContract | null }
   async reserveYears(): Promise<ReserveYears> {
     const { data, error } = await this.sb.rpc('reserve_years')
     if (error) return { current: new Date().getFullYear(), years: [] }   // before 020 is run
@@ -497,9 +523,10 @@ class SupaBackend implements Backend {
     this.notify('reserve', data as number)
   }
   // email staff (best effort; the request or order is saved either way)
-  private async notify(kind: 'reserve' | 'order', id: number) {
+  private async notify(kind: 'reserve' | 'order' | 'decision', id: number | number[], extra: Record<string, unknown> = {}) {
     const { data: s } = await this.sb.auth.getSession()
-    fetch('/api/notify-request', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.session?.access_token ?? ''}` }, body: JSON.stringify({ kind, id }) }).catch(() => {})
+    const body = Array.isArray(id) ? { kind, ids: id, ...extra } : { kind, id, ...extra }
+    fetch('/api/notify-request', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.session?.access_token ?? ''}` }, body: JSON.stringify(body) }).catch(() => {})
   }
   async placeOrder(lines: OrderInput[], note: string, po: string, wanted: string | null, sample = false) {
     const { data, error } = await this.sb.rpc('place_order', { p_lines: lines, p_note: note || null, p_po: po || null, p_wanted: wanted || null, ...(sample ? { p_sample: true } : {}) })
@@ -544,6 +571,7 @@ class SupaBackend implements Backend {
   }
   async decideRequest(id: number, approve: boolean, note: string) {
     const { error } = await this.sb.rpc('decide_reserve_request', { p_id: id, p_approve: approve, p_note: note || null }); fail(error)
+    this.notify('decision', [id])
   }
   async listOrders() {
     return pageAll<Order>((a, b) => this.sb.from('orders').select('*, order_lines(*)').order('order_date', { ascending: false }).order('id', { ascending: false }).range(a, b))
@@ -1124,6 +1152,11 @@ class DemoBackend implements Backend {
   async reserveStrains() { return [] as string[] }
   async requestReserveBatch() { return 0 }
   async decideRequests() { return { approved: 0, declined: 0 } }
+  async requestReserveLines() { return 0 }
+  async updateMyOrder(): Promise<number> { throw new Error('Not in demo') }
+  async releaseMyHold() {}
+  async myOrderFlags() { return [] as number[] }
+  async myContract() { return null }
   async setReserveDeadline() {}
   async listTerms() { return [] }
   async setTerms() {}

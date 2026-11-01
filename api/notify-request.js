@@ -1,4 +1,5 @@
-// Emails staff when a customer asks to change a reserve (to Admins) or places an order (to Sales and Admins).
+// Emails staff when a customer asks to change a reserve (to Admins) or places or changes an order (to Sales and Admins),
+// and emails the customer's portal logins when an Admin approves or declines their reserve requests (kind 'decision', 150).
 // Needs RESEND_API_KEY in Vercel (Settings > Environment Variables). Without it, nothing is sent.
 // Optional: NOTIFY_FROM (default "Lifted Orders <orders@lifted-orders.app>"), STAFF_APP_URL.
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -12,6 +13,7 @@ export default async function handler(req, res) {
   const url = process.env.VITE_SUPABASE_URL, anon = process.env.VITE_SUPABASE_ANON_KEY
   const auth = req.headers.authorization || ''
   const body = req.body || {}
+  if (body.kind === 'decision') return decision(req, res, { key, url, anon, auth, body })
   const id = Number(body.id), kind = body.kind === 'order' ? 'order' : 'reserve'
   if (!url || !anon || !auth.startsWith('Bearer ') || !id) return res.status(400).json({ error: 'bad request' })
 
@@ -31,8 +33,9 @@ export default async function handler(req, res) {
   if (kind === 'order') {
     const total = (q.lines || []).reduce((a, l) => a + Number(l.lbs), 0)
     const rows = (q.lines || []).map(l => `<tr><td style="padding:2px 12px 2px 0">${esc(l.strain)}</td><td style="text-align:right">${lbs(l.lbs)} lbs</td><td style="text-align:right;padding-left:12px">${l.price != null ? '$' + Number(l.price).toFixed(2) + '/lb' : ''}</td></tr>`).join('')
-    subject = `New order: ${q.customer} · ${lbs(total)} lbs`
-    html = wrap(`<p><b>${esc(q.customer)}</b> placed an order for ${lbs(total)} lbs.</p>
+    const changed = !!body.modified
+    subject = `${changed ? 'Changed order' : 'New order'}: ${q.customer} · ${lbs(total)} lbs`
+    html = wrap(`<p><b>${esc(q.customer)}</b> ${changed ? 'changed an order. It now has' : 'placed an order for'} ${lbs(total)} lbs${changed ? ' and is back to Submitted for you to confirm again' : ''}.</p>
       <table style="border-collapse:collapse">${rows}</table>
       <p>Placed by ${esc(who)}${q.po ? `<br>PO: ${esc(q.po)}` : ''}${q.wanted ? `<br>Wanted by: ${esc(q.wanted)}` : ''}${q.note ? `<br>Note: "${esc(q.note)}"` : ''}</p>
       <p><a href="${esc(app)}/?go=orders">Review and confirm in Lifted Inventory Management</a> (Sales &gt; Orders).</p>`)
@@ -59,4 +62,38 @@ export default async function handler(req, res) {
     body: JSON.stringify({ from: process.env.NOTIFY_FROM || 'Lifted Orders <orders@lifted-orders.app>', to, subject, html }),
   })
   return res.status(200).json({ sent: send.ok })
+}
+
+// an Admin decided reserve requests: tell each customer once (request_decision_notification marks them emailed)
+async function decision(req, res, { key, url, anon, auth, body }) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Boolean) : []
+  if (!url || !anon || !auth.startsWith('Bearer ') || !ids.length) return res.status(400).json({ error: 'bad request' })
+  const r = await fetch(`${url}/rest/v1/rpc/request_decision_notification`, {
+    method: 'POST', headers: { apikey: anon, Authorization: auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_ids: ids }),
+  })
+  if (!r.ok) return res.status(400).json({ error: 'not allowed' })
+  const groups = (await r.json()) || []
+  const portal = process.env.PORTAL_URL || 'https://www.lifted-orders.app'
+  let sent = 0
+  for (const g of groups) {
+    if (!g.to || !g.to.length) continue
+    const yr = l => (l.crop_year ? ` (${l.crop_year} crop)` : '')
+    const line = l => {
+      if (l.status === 'declined') return `<li><b>${esc(l.strain)}</b>${esc(yr(l))}: not approved. Your reserve stays at ${lbs(l.from)} lbs.${l.note ? ` <i>${esc(l.note)}</i>` : ''}</li>`
+      const got = l.approved != null ? Number(l.approved) : Number(l.asked)
+      const part = got !== Number(l.asked) ? ` (you asked for ${lbs(l.asked)})` : ''
+      return `<li><b>${esc(l.strain)}</b>${esc(yr(l))}: approved. Your reserve is now <b>${lbs(got)} lbs</b>${part}.${l.note ? ` <i>${esc(l.note)}</i>` : ''}</li>`
+    }
+    const ok = g.lines.filter(l => l.status === 'approved').length, no = g.lines.length - ok
+    const subject = no === 0 ? 'Lifted approved your reserve request' : ok === 0 ? 'Update on your reserve request' : 'Lifted reviewed your reserve request'
+    const html = wrap(`<p>Hi ${esc(g.customer)},</p><p>Lifted reviewed your reserve request:</p><ul>${g.lines.map(line).join('')}</ul>
+      <p><a href="${esc(portal)}">See your Contract Reserves</a></p><p>Lifted Farms</p>`)
+    const send = await fetch('https://api.resend.com/emails', {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.NOTIFY_FROM || 'Lifted Orders <orders@lifted-orders.app>', to: g.to, subject, html }),
+    })
+    if (send.ok) sent++
+  }
+  return res.status(200).json({ sent })
 }
