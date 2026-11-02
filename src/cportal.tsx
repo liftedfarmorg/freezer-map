@@ -138,6 +138,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [reqNote, setReqNote] = useState('')
   const [lastReq, setLastReq] = useState<Change[]>([])
   const [q, setQ] = useState('')
+  const [editQ, setEditQ] = useState('')
+  const [orderQ, setOrderQ] = useState('')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
 
   // order form
@@ -209,6 +211,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const availFor = (k: string) => (menuRow(k)?.open ?? 0) + f10(activeHeld(k))
   function resErr(r: ResRow) {
     const v = ed[r.k] ?? 0, base = r.asked ?? r.res
+    if (v === base) return ''   // only lines being changed are checked (some reserves aren't in steps of 10)
     if (not10(v)) return TEN
     if (v < r.used) return `Can't go below the ${fmt(r.used)} lbs already picked up`
     if (v - base > availFor(r.k)) return `Only ${fmt(availFor(r.k))} more lbs available`
@@ -220,7 +223,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     ...reserves.filter(r => (ed[r.k] ?? 0) !== (r.asked ?? r.res)).map(r => ({ s: r.s, y: r.y, from: r.res, to: ed[r.k] ?? 0 })),
   ]
   const anyResErr = editNew.some(n => !!newErr(n)) || reserves.some(r => !!resErr(r))
-  const clearEdit = () => { setEdit(null); setEditNew([]); setMenuOpen([]); setReqNote('') }
+  const clearEdit = () => { setEdit(null); setEditNew([]); setMenuOpen([]); setReqNote(''); setEditQ('') }
   const changedLine = (r: ResRow) => {
     const v = ed[r.k] ?? 0, base = r.asked ?? r.res
     return v !== base ? <span style={{ color: 'var(--teal-ink)', fontWeight: 500 }}>Was {fmt(base)} · {v > base ? '+' : '−'}{fmt(Math.abs(v - base))}</span> : null
@@ -267,7 +270,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     bad: allLines.some(l => l.k in ord && (!!lineError(l, ord[l.k] ?? 0) || (smp[l.k] && !!holdError(l, ord[l.k] ?? 0, holdAsk[l.k] ?? 0)))),
   }
   function newOrder(pre: Record<string, number> = {}) {
-    setEditing(null); setOrd(pre); setSmp({}); setHoldAsk({}); setPo(''); setNote(''); setWanted(''); go('order')
+    setEditing(null); setOrd(pre); setSmp({}); setHoldAsk({}); setPo(''); setNote(''); setWanted(''); setOrderQ(''); go('order')
   }
   function modify(o: Order) {
     const m: Record<string, number> = {}, s: Record<string, boolean> = {}, h: Record<string, number> = {}
@@ -275,7 +278,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       const k = kOf(l.strain, l.crop_year ?? cy); m[k] = (m[k] ?? 0) + Number(l.lbs)
       if (l.is_sample) { s[k] = true; if (l.hold_lbs) h[k] = Number(l.hold_lbs) }
     }
-    setEditing(o); setOrd(m); setSmp(s); setHoldAsk(h); setPo(o.po_number ?? ''); setNote(o.notes ?? ''); setWanted(o.wanted_date ?? ''); go('order')
+    setOrderQ(''); setEditing(o); setOrd(m); setSmp(s); setHoldAsk(h); setPo(o.po_number ?? ''); setNote(o.notes ?? ''); setWanted(o.wanted_date ?? ''); go('order')
   }
   function closeOrder() { const was = editing; setEditing(null); setOrd({}); go(was ? 'orders' : 'home') }
   async function placeOrder() {
@@ -515,14 +518,16 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {e && <StepErr msg={e} />}
           <button className={c('linkish')} style={{ minWidth: 0, textAlign: 'left', color: 'var(--red)' }} onClick={() => setEditNew(editNew.filter((_, j) => j !== i))}>Remove</button></div> }
       }),
-    ].sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
+    ].sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y).filter(x => !editQ || x.s.toLowerCase().includes(editQ.toLowerCase()))
     return (
       <div className={c('screen')}>
         <header className={c('hdr')}><button className={c('back')} onClick={() => go(back[0])}>{I.back}{back[1]}</button><h1>Edit Reserves</h1>
-          <p className={c('sub')}>Set the total lbs you want for each strain, in steps of 10. Tap a number to type it. Lifted reviews each change.</p></header>
+          <p className={c('sub')}>Set the total lbs you want for each strain, in steps of 10. Tap a number to type it. Lifted reviews each change.</p>
+          <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={editQ} onChange={e => setEditQ(e.target.value)} aria-label="Search your reserves" /></label></header>
         <main className={c('main')}>
           <div className={c('colhead')}><h2 className={c('h2 small')} style={{ margin: 0 }}>Your reserves</h2><span>Total reserve</span></div>
           {items.map(x => x.el)}
+          {items.length === 0 && <p className={c('meta')} style={{ margin: '0 4px' }}>No reserves match "{editQ}".</p>}
           <button className={c('btn ghost')} style={{ height: 48, border: '1.5px dashed #9aa69e', background: 'transparent', color: 'var(--teal-dk)', fontSize: 15 }} onClick={() => go('menu')}>+ Add a strain from the open menu</button>
           <label className={c('field')} style={{ marginTop: 4 }}>Note to Lifted (optional)<input type="text" value={reqNote} onChange={e => setReqNote(e.target.value)} /></label>
         </main>
@@ -570,7 +575,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         </header>
         <main className={c('main')} style={{ paddingTop: 12 }}>
           {years.length > 1 && <div className={c('filters')} role="group" aria-label="Filter by harvest year">
-            {(['all', ...years] as ('all' | number)[]).map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(y)}>{y === 'all' ? 'All' : `${y} harvest`}</button>)}</div>}
+            {(['all', ...years] as ('all' | number)[]).map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(y)}>{y === 'all' ? 'All' : String(y)}</button>)}</div>}
           <section className={c('card')}>
             <div className={c(`mg mg-head ${contract ? '' : 'nc'}`)}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span>{contract && <span style={{ textAlign: 'right' }}>Your reserve</span>}</div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 14 }}>{menuItems.length ? 'Nothing matches.' : 'Nothing on the menu right now.'}</p>}
@@ -611,29 +616,31 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function orderLineEl(l: OLine) {
     const picked = l.k in ord, qv = ord[l.k] ?? 0, sp = lineSplit(l, qv)
-    if (!picked) {
-      const sub = l.resLeft ? `${fmt(l.resLeft)} reserve left · + ${fmt(l.open)} available`
-        : l.hold ? <span style={{ color: 'var(--gold)' }}>Up to {fmt(sp.max)} · {fmt(l.hold)} held for you + {fmt(l.open)} available</span> : `Up to ${fmt(l.open)} · open menu`
-      return <div className={c('li')}><div className={c('grow')}><p className={c('name')}>{l.s} {yrTag(l.y)}</p><p className={c('meta')}>{sub}</p></div>
-        <button className={c('plus')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+</button></div>
-    }
-    const e = lineError(l, qv), sampleOk = !l.resLeft, hq = holdAsk[l.k] ?? 0, he = smp[l.k] ? holdError(l, qv, hq) : ''
+    const sub = l.resLeft ? <>{fmt(l.resLeft)} reserve + {fmt(l.open)} open</> : l.hold ? <span style={{ color: 'var(--gold)' }}>incl. {fmt(l.hold)} held for you</span> : null
     const unpick = () => { const o = { ...ord }; delete o[l.k]; setOrd(o); const s = { ...smp }; delete s[l.k]; setSmp(s); const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) }
+    const head = <div className={c('mg')}>
+      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}</div>
+      <b className={c('num mg-a')}>{fmt(sp.max)}</b>
+      <div style={{ textAlign: 'right' }}>{picked ? <button className={c('linkish')} style={{ color: 'var(--red)' }} onClick={unpick}>Remove</button>
+        : <button className={c('outline-btn')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+ Add</button>}</div></div>
+    if (!picked) return <div style={{ borderBottom: '1px solid var(--line-2)' }}>{head}</div>
+    const e = lineError(l, qv), sampleOk = !l.resLeft, hq = holdAsk[l.k] ?? 0, he = smp[l.k] ? holdError(l, qv, hq) : ''
     return (
-      <div className={c('box inrow')}>
-        <div className={c('row')} style={{ gap: 12 }}><div className={c('grow')}><p className={c('name')}>{l.s} {yrTag(l.y)}</p>
-          <p className={c('meta')}>Up to {fmt(sp.max)}{l.resLeft ? ` · ${fmt(l.resLeft)} reserve + ${fmt(l.open)} open` : l.hold ? ` · ${fmt(l.hold)} held + ${fmt(l.open)} open` : ' · open menu'}</p></div>
-          <Stepper val={qv} on bad={!!e} label={l.s} autoFocus={focusK === 'ord' + l.k} onChange={n => setOrd({ ...ord, [l.k]: n })} /></div>
-        {e && <StepErr msg={e} />}
-        <div className={c('chips')}>
-          {qv > 0 && !not10(qv) && <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} from your reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held for you</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} from open menu</span>}</>}
-          {sampleOk && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, marginLeft: 'auto' }}>
-            <input type="checkbox" checked={!!smp[l.k]} onChange={ev => { setSmp({ ...smp, [l.k]: ev.target.checked }); if (!ev.target.checked) { const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) } }} style={{ width: 18, height: 18, accentColor: 'var(--teal-dk)' }} /> Sample</label>}
-          <button className={c('linkish')} style={{ minWidth: 0, color: 'var(--red)', marginLeft: sampleOk ? undefined : 'auto' }} onClick={unpick}>Remove</button>
+      <div style={{ borderBottom: '1px solid var(--line-2)', background: 'var(--teal-tint)' }}>
+        {head}
+        <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className={c('row')} style={{ gap: 10, flexWrap: 'wrap' }}><span className={c('grow')} style={{ fontSize: 14, fontWeight: 600 }}>How many lbs?</span>
+            <Stepper val={qv} on bad={!!e} label={l.s} autoFocus={focusK === 'ord' + l.k} onChange={n => setOrd({ ...ord, [l.k]: n })} /></div>
+          {e && <StepErr msg={e} />}
+          <div className={c('chips')}>
+            {qv > 0 && !not10(qv) && <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} from your reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held for you</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} from open menu</span>}</>}
+            {sampleOk && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, marginLeft: 'auto' }}>
+              <input type="checkbox" checked={!!smp[l.k]} onChange={ev => { setSmp({ ...smp, [l.k]: ev.target.checked }); if (!ev.target.checked) { const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) } }} style={{ width: 18, height: 18, accentColor: 'var(--teal-dk)' }} /> Sample</label>}
+          </div>
+          {sampleOk && smp[l.k] && <><div className={c('row')} style={{ justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)', background: '#fff', borderRadius: 10, padding: '8px 10px', flexWrap: 'wrap' }}>
+            <span>If you like it, hold for me <span style={{ fontSize: 12 }}>({d?.holdDays ?? 10} days after it ships · up to {fmt(Math.max(sp.max - qv, 0))} lbs)</span></span>
+            <Stepper val={hq} bad={!!he} label={`${l.s} hold`} onChange={n => setHoldAsk({ ...holdAsk, [l.k]: n })} /></div>{he && <StepErr msg={he} />}</>}
         </div>
-        {sampleOk && smp[l.k] && <><div className={c('row')} style={{ justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)', background: '#f7f9f6', borderRadius: 10, padding: '8px 10px', flexWrap: 'wrap' }}>
-          <span>If you like it, hold for me <span style={{ fontSize: 12 }}>({d?.holdDays ?? 10} days after it ships · up to {fmt(Math.max(sp.max - qv, 0))} lbs)</span></span>
-          <Stepper val={hq} bad={!!he} label={`${l.s} hold`} onChange={n => setHoldAsk({ ...holdAsk, [l.k]: n })} /></div>{he && <StepErr msg={he} />}</>}
       </div>
     )
   }
@@ -665,12 +672,16 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function OrderScreen() {
     const p = priceOf(cy)
-    const section = (arr: OLine[]) => arr.length ? <section className={c('card')}>{arr.map(l => <Fragment key={l.k}>{orderLineEl(l)}</Fragment>)}</section> : null
+    const oq = orderQ.toLowerCase(), match = (l: OLine) => !oq || l.s.toLowerCase().includes(oq) || l.k in ord
+    const section = (all: OLine[]) => { const arr = all.filter(match); return arr.length ? <section className={c('card')}>
+      <div className={c('mg mg-head')}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span><span /></div>
+      {arr.map(l => <Fragment key={l.k}>{orderLineEl(l)}</Fragment>)}</section> : oq && all.length ? <p className={c('meta')} style={{ margin: '0 4px' }}>No strains match "{orderQ}".</p> : null }
     return (
       <div className={c('screen')}>
         <header className={c('hdr')}><div className={c('row')} style={{ justifyContent: 'space-between' }}><h1>{editing ? `Modify ${soLabel(editing)}` : 'New order'}</h1>
           <button className={c('iconbtn')} onClick={closeOrder} aria-label="Close">{I.close}</button></div>
-          <p className={c('sub')}>{contract ? 'Order from your contract reserves, or straight off the open menu.' : 'Order off the open menu.'} Fresh frozen by the lb, in steps of 10. Tap a number to type it.{p != null ? ` Your price: $${p.toFixed(2)}/lb.` : ''}</p></header>
+          <p className={c('sub')}>{contract ? 'Order from your contract reserves, or straight off the open menu.' : 'Order off the open menu.'} Fresh frozen by the lb, in steps of 10. Tap a number to type it.{p != null ? ` Your price: $${p.toFixed(2)}/lb.` : ''}</p>
+          <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={orderQ} onChange={e => setOrderQ(e.target.value)} aria-label="Search strains to order" /></label></header>
         <main className={c('main')}>
           {contract && <><h2 className={c('h2')} style={{ marginTop: 0 }}>From your reserves</h2>{section(orderable.resd) ?? <p className={c('meta')} style={{ margin: '0 4px' }}>No reserve left to order.</p>}
             <h2 className={c('h2')} style={{ marginTop: 10 }}>From the open menu</h2></>}
