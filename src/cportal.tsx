@@ -126,6 +126,20 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }, [])
   const go = (s: Screen) => { setScreen(s); history.pushState({ cp: s }, ''); window.scrollTo({ top: 0 }); if (s === 'home' || s === 'orders' || s === 'reserves' || s === 'menu') refresh() }
 
+  // phones: while the keyboard is up, hide the bottom bar (it rides above the keyboard and covers the box) and keep the box
+  // being typed in centred on screen once the keyboard has opened
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    if (!matchMedia('(pointer: coarse)').matches) return
+    const isBox = (el: EventTarget | null): el is HTMLInputElement => el instanceof HTMLInputElement && ['text', 'search', 'email', 'password'].includes(el.type) && !!el.closest('.cp')
+    const centre = () => { const el = document.activeElement; if (isBox(el)) (el.closest('.cp-box, .cp-sel, .cp-mg, label') ?? el).scrollIntoView({ block: 'center', behavior: 'smooth' }) }
+    let t = 0
+    const onIn = (e: FocusEvent) => { if (!isBox(e.target)) return; setTyping(true); clearTimeout(t); t = window.setTimeout(centre, 350) }
+    const onOut = () => setTimeout(() => { if (!isBox(document.activeElement)) setTyping(false) }, 50)
+    const vv = window.visualViewport, onVV = () => { clearTimeout(t); t = window.setTimeout(centre, 120) }
+    document.addEventListener('focusin', onIn); document.addEventListener('focusout', onOut); vv?.addEventListener('resize', onVV)
+    return () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut); vv?.removeEventListener('resize', onVV); clearTimeout(t) }
+  }, [])
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const toastT = useRef<number>()
   const toast = (m: string) => { setToastMsg(m); clearTimeout(toastT.current); toastT.current = window.setTimeout(() => setToastMsg(null), 3200) }
@@ -600,7 +614,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const years = [...new Set(shown.map(m => m.y))].sort((a, b) => b - a)
     // strains just picked with no lbs yet aren't errors here (their red line only shows once a number is typed)
     const menuBad = editNew.some(n => n.lbs > 0 && !!newErr(n)) || reserves.some(r => !!resErr(r))
-    const nNew = editNew.length, nChg = changes.filter(x => !x.isNew).length
     const toggleTray = (m: MenuItem) => {
       if (editNew.some(t => t.k === m.k)) setEditNew(editNew.filter(t => t.k !== m.k))
       else { setEditNew([...editNew, { k: m.k, s: m.s, y: m.y, lbs: 0 }]); setFocusK('tray' + m.k) }
@@ -648,7 +661,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             })}
           </section>
         </main>
-        {contract ? ((nNew || nChg) ? <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={clearEdit}>Cancel</button>
+        {contract ? ((changes.length > 0 || menuBad) ? <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={clearEdit}>Cancel</button>
           <button className={c('btn')} style={{ flex: 2 }} disabled={!changes.length || anyResErr} onClick={() => { setReviewFrom('menu'); go('reqReview') }}>{menuBad ? 'Fix the red lines' : changes.length && !anyResErr ? 'Review changes' : 'Set the lbs'}</button></div> : null)
           : <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>}
       </div>
@@ -933,7 +946,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen,
   }
   return (
-    <div className="cp">
+    <div className={typing ? 'cp cp-typing' : 'cp'}>
       <div className={c('col')}>
         {!d ? <div className={c('screen')}><header className={c('hdr home-hdr')}><div className={c('top')}><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></div>
           <p className={c('cust')}>{me.customer_name}</p></header>
