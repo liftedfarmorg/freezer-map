@@ -492,6 +492,9 @@ export async function syncDocs(c, { ours, open = [], credits = [], until = Date.
   for (let i = 0; i < rows.length; i += 200) await table('acct_qbo_docs?on_conflict=env,kind,qbo_id', { method: 'POST', body: JSON.stringify(rows.slice(i, i + 200)),
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } })
   await upsert('app_settings', [{ key: ckey, value: new Date(Date.parse(t0) - 10 * 60000).toISOString() }], 'key')
+  // deleted in QuickBooks: gone here too (never lets it stop the rest)
+  let pruned
+  try { pruned = await pruneDocs(c, { until: until - 10000 }) } catch (e) { pruned = { remove_error: String(e.message || e).slice(0, 200) } }
   // PDFs: missing or older than QuickBooks' last change
   const stored = await table(`acct_qbo_docs?env=eq.${ENV}&customer_id=not.is.null&select=kind,qbo_id,balance,txn_date,qbo_updated_at,pdf_path,pdf_at&limit=20000`)
   const stale = (stored || []).filter(d => !d.pdf_path || (d.qbo_updated_at && (!d.pdf_at || new Date(d.pdf_at) < new Date(d.qbo_updated_at))))
@@ -505,7 +508,84 @@ export async function syncDocs(c, { ours, open = [], credits = [], until = Date.
     }
   }
   await Promise.all(Array.from({ length: Math.min(5, stale.length) }, worker))
-  return { docs: rows.length, pdfs, pdfs_left: stale.length - pdfs, ...(pdfError ? { pdf_error: pdfError } : {}) }
+  return { docs: rows.length, pdfs, pdfs_left: stale.length - pdfs, ...(pdfError ? { pdf_error: pdfError } : {}), ...pruned }
+}
+
+// ---------- deleted (or voided) in QuickBooks: the app follows (QuickBooks is the source of truth) ----------
+//  * the copy of an invoice or credit memo deleted in QuickBooks is removed, PDF too: gone from statements and the portal.
+//  * an app invoice that is only a copy of a QuickBooks invoice (history imports 154 / 158) is voided when QuickBooks deletes or
+//    voids it, and its QuickBooks-only order (source 'qbo') is cancelled.
+//  * an invoice made in the app is never voided here (it may just need linking to the right QuickBooks invoice, like a duplicate
+//    deleted there): it shows in Accounting > Review as "Not found in QuickBooks" for a person to relink or void.
+//  * if QuickBooks seems to be missing most of the copies (e.g. a different company connected), nothing is removed.
+const COPY_BY = 'QuickBooks history import'
+export async function pruneDocs(c, { until = Date.now() + 20000 } = {}) {
+  const stored = (await table(`acct_qbo_docs?env=eq.${ENV}&select=kind,qbo_id,doc_number,total,invoice_id,pdf_path&limit=20000`)) || []
+  const gone = [], zeroed = []
+  let checked = 0
+  for (const kind of ['Invoice', 'CreditMemo']) {
+    const xs = stored.filter(d => d.kind === kind)
+    for (let i = 0; i < xs.length && Date.now() < until; i += 50) {
+      const chunk = xs.slice(i, i + 50)
+      const r = await query(c, `select Id, TotalAmt from ${kind} where Id in (${chunk.map(d => `'${esc(d.qbo_id)}'`).join(',')}) maxresults 100`)
+      const got = new Map((r[kind] || []).map(x => [String(x.Id), x]))
+      for (const d of chunk) {
+        const q = got.get(String(d.qbo_id))
+        if (!q) gone.push(d)
+        else if (kind === 'Invoice' && d.invoice_id && Number(q.TotalAmt) === 0) zeroed.push(d)   // voided in QuickBooks
+      }
+      checked += chunk.length
+    }
+  }
+  if (!gone.length && !zeroed.length) return { docs_removed: 0 }
+  if (gone.length > 10 && gone.length > checked / 2)
+    return { docs_removed: 0, remove_error: `QuickBooks is missing ${gone.length} of ${checked} invoice copies. Is the right QuickBooks company connected? Nothing was removed.` }
+
+  // app invoices linked to them
+  const goneIds = new Set(gone.map(d => d.invoice_id).filter(Boolean))
+  const invIds = [...new Set([...goneIds, ...zeroed.map(d => d.invoice_id)])]
+  const invs = invIds.length ? (await table(`invoices?id=in.(${invIds.join(',')})&select=id,inv_number,total,status,created_by,order_id,notes`)) || [] : []
+  const docOf = new Map([...gone, ...zeroed].filter(d => d.invoice_id).map(d => [d.invoice_id, d]))
+  let voided = 0, flagged = 0
+  const orderIds = new Set()
+  for (const i of invs) {
+    const d = docOf.get(i.id), deleted = goneIds.has(i.id), num = d.doc_number || d.qbo_id
+    const copy = String(i.created_by || '').startsWith(COPY_BY)
+    if (copy && i.status !== 'void' && (deleted || Number(i.total) !== 0)) {
+      const why = `${deleted ? 'Deleted' : 'Voided'} in QuickBooks (#${num}), so voided here ${new Date().toISOString().slice(0, 10)}`
+      await table(`invoices?id=eq.${i.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'void', paid_at: null, notes: [i.notes, why].filter(Boolean).join('\n'), updated_at: new Date().toISOString() }) })
+      await table('events', { method: 'POST', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify([{ user_email: 'quickbooks', type: 'invoice_void', note: why, details: { invoice_id: i.id, inv: i.inv_number, total: i.total, qbo_id: d.qbo_id } }]) })
+      voided++
+      if (i.order_id) orderIds.add(i.order_id)
+    } else if (!copy && deleted && i.status !== 'void') {
+      await table(`acct_pushes?invoice_id=eq.${i.id}&env=eq.${ENV}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ error: 'Not found in QuickBooks (deleted or voided there?)', balance: null }) })
+      flagged++
+    }
+  }
+  // orders that only existed because of the QuickBooks invoice: cancelled once none of their invoices is left
+  let cancelled = 0
+  if (orderIds.size) {
+    const ords = (await table(`orders?id=in.(${[...orderIds].join(',')})&source=eq.qbo&status=neq.cancelled&select=id,notes`)) || []
+    for (const o of ords) {
+      const left = await table(`invoices?order_id=eq.${o.id}&status=neq.void&select=id&limit=1`)
+      if (left && left.length) continue
+      await table(`orders?id=eq.${o.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'cancelled', notes: [o.notes, 'Cancelled: its QuickBooks invoice was deleted or voided there'].filter(Boolean).join('\n') }) })
+      cancelled++
+    }
+  }
+  // the copies and their PDFs
+  for (const kind of ['Invoice', 'CreditMemo']) {
+    const ids = gone.filter(d => d.kind === kind).map(d => d.qbo_id)
+    for (let i = 0; i < ids.length; i += 100)
+      await table(`acct_qbo_docs?env=eq.${ENV}&kind=eq.${kind}&qbo_id=in.(${ids.slice(i, i + 100).map(encodeURIComponent).join(',')})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+  }
+  const paths = gone.map(d => d.pdf_path).filter(Boolean)
+  if (paths.length) await fetch(`${SB}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: serviceHeaders(), body: JSON.stringify({ prefixes: paths }) }).catch(() => {})
+  return { docs_removed: gone.length, removed: gone.map(d => d.doc_number || d.qbo_id).slice(0, 20), invoices_voided: voided, orders_cancelled: cancelled, invoices_flagged: flagged }
 }
 
 export async function syncCustomers(c, { until = Date.now() + 30000 } = {}) {

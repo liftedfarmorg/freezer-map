@@ -177,15 +177,19 @@ function SentList({ api, rows, env, flash, open, reload, lastSync, connected, ba
     setBusy(true)
     try {
       type R = { checked: number; paid: number; reopened: number; changed: number; customers?: number; matched?: number; unmatched?: number
-        docs?: number; pdfs?: number; pdfs_left?: number; docs_error?: string; customers_error?: string }
+        docs?: number; pdfs?: number; pdfs_left?: number; docs_error?: string; customers_error?: string
+        docs_removed?: number; invoices_voided?: number; orders_cancelled?: number; invoices_flagged?: number; remove_error?: string }
       const r = await api.server<R>('run', { action: 'sync' }); await reload()
       const parts = [`Checked ${r.checked} sent invoice${r.checked === 1 ? '' : 's'}`, r.paid ? `${r.paid} now paid` : '', r.reopened ? `${r.reopened} reopened` : '',
         r.changed ? `${r.changed} changed in QuickBooks` : '',
         r.customers != null ? `${r.customers} customer balances from QuickBooks${r.matched ? ` (${r.matched} newly matched)` : ''}` : '',
         r.unmatched ? `${r.unmatched} customers not matched to QuickBooks` : '',
         r.docs != null ? `${r.docs} invoice copies updated` : '',
+        r.docs_removed ? `${r.docs_removed} deleted in QuickBooks, removed here` : '',
+        r.invoices_voided ? `${r.invoices_voided} copied invoice${r.invoices_voided === 1 ? '' : 's'} voided${r.orders_cancelled ? ` (${r.orders_cancelled} order${r.orders_cancelled === 1 ? '' : 's'} cancelled)` : ''}` : '',
+        r.invoices_flagged ? `${r.invoices_flagged} app invoice${r.invoices_flagged === 1 ? '' : 's'} no longer in QuickBooks: see Review` : '',
         r.pdfs_left ? `${r.pdfs_left} PDFs still to fetch: click again` : r.docs != null ? 'all PDFs saved' : '']
-      const err = r.docs_error ?? r.customers_error
+      const err = r.docs_error ?? r.customers_error ?? r.remove_error
       flash(parts.filter(Boolean).join(' · ') + (err ? ` · Problem: ${err}` : ''), !!err) }
     catch (e) { flash(msg(e), true) } finally { setBusy(false) }
   }
@@ -448,6 +452,7 @@ function ConnPanel({ api, flash, conn, env, refresh }: { api: AcctApi; flash: Fl
         <li>In the real QuickBooks: sent invoices lock in the app, and paid / balance come back from QuickBooks every hour, 7am to 8pm Monday to Saturday (or Check payments now).</li>
         <li>Already in QuickBooks under another number? Open the invoice in To send and link it: nothing is created or changed in QuickBooks.</li>
         <li>Customers are matched to QuickBooks by name on each check. Their statement then shows QuickBooks' balance and invoices, and each invoice opens QuickBooks' own copy.</li>
+        <li>Deleted an invoice in QuickBooks? The next check removes it here too. If the app made that invoice, it stays and shows in Review so you can link it to the right QuickBooks invoice or void it.</li>
         <li>The QuickBooks login is kept on the server. Nobody can read it from the app.</li>
         <li>Problems with QuickBooks? Email <a href="mailto:accounting@lifted-organics.com?subject=QuickBooks%20connection">accounting@lifted-organics.com</a>. Include the error message and its QuickBooks ref, if it shows one.</li>
       </ul>
