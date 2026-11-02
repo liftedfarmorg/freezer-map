@@ -81,7 +81,7 @@ interface Detail { k: string; s: string; y: number; q: number; fromHold: number;
 interface Change { s: string; y: number; from: number; to: number; isNew?: boolean }
 interface OLineView { s: string; y: number | null; lbs: number | null; price: number | null; amount: number | null }
 interface ORow {
-  key: string; label: string; status: 'submitted' | 'fulfillment' | 'shipped'; paid: boolean | null; date: string | null; due: string | null; wanted: string | null
+  key: string; label: string; status: 'submitted' | 'approved' | 'fulfillment' | 'shipped'; paid: boolean | null; date: string | null; due: string | null; wanted: string | null
   lines: OLineView[]; amount: number | null; po: string | null; so: string | null; order: Order | null; inv: StatementInvoice | null; holdLbs: number; rank: number
 }
 
@@ -315,11 +315,13 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         const paid = inv ? inv.status === 'paid' || Number(inv.balance) <= 0 : null
         const ql = inv?.qbo_id ? d.qbo[inv.qbo_id] : undefined   // what was actually invoiced (shipped weights) when QuickBooks has it
         rows.push({ key: 'o' + o.id, label: inv?.inv_number ?? soLabel(o), status: 'shipped', paid, date: o.shipped_date ?? inv?.invoice_date ?? o.order_date, due: inv?.due_date ?? null,
-          wanted: null, lines: ql?.length ? qboLines(ql) : lines, amount: inv ? Number(paid ? inv.total : inv.balance) : sum, po: o.po_number ?? inv?.po_number ?? null, so: o.so_number, order: o, inv, holdLbs, rank: 2 })
+          wanted: null, lines: ql?.length ? qboLines(ql) : lines, amount: inv ? Number(paid ? inv.total : inv.balance) : sum, po: o.po_number ?? inv?.po_number ?? null, so: o.so_number, order: o, inv, holdLbs, rank: 3 })
       } else {
         const ful = d.flags.includes(o.id)
-        rows.push({ key: 'o' + o.id, label: soLabel(o), status: ful ? 'fulfillment' : 'submitted', paid: null, date: o.order_date, due: null, wanted: o.wanted_date ?? null,
-          lines, amount: sum, po: o.po_number ?? null, so: o.so_number, order: o, inv: null, holdLbs, rank: ful ? 1 : 0 })
+        // pending = Lifted confirmed it (Approved); pallets assigned = In fulfillment
+        const st: ORow['status'] = ful ? 'fulfillment' : o.status === 'pending' ? 'approved' : 'submitted'
+        rows.push({ key: 'o' + o.id, label: soLabel(o), status: st, paid: null, date: o.order_date, due: null, wanted: o.wanted_date ?? null,
+          lines, amount: sum, po: o.po_number ?? null, so: o.so_number, order: o, inv: null, holdLbs, rank: st === 'submitted' ? 0 : st === 'approved' ? 1 : 2 })
       }
     }
     for (const i of invs) {
@@ -328,7 +330,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       // invoices from QuickBooks can share id 0 (not made in the app), so key them by QuickBooks' id or number
       rows.push({ key: 'i' + (i.qbo_id ?? i.inv_number ?? i.id), label: i.inv_number, status: 'shipped', paid, date: i.invoice_date, due: i.due_date, wanted: null,
         lines: i.qbo_id && d.qbo[i.qbo_id] ? qboLines(d.qbo[i.qbo_id]) : [], amount: Number(paid ? i.total : i.balance),
-        po: i.po_number, so: i.so_number, order: null, inv: i, holdLbs: 0, rank: 2 })
+        po: i.po_number, so: i.so_number, order: null, inv: i, holdLbs: 0, rank: 3 })
     }
     return rows.sort((a, b) => a.rank - b.rank || String(b.date ?? '').localeCompare(String(a.date ?? '')))
   }, [d])
@@ -380,7 +382,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const balance = d?.st?.balance
 
   function Home() {
-    const open = orows.filter(o => o.status !== 'shipped'), nSub = open.filter(o => o.status === 'submitted').length, nFul = open.length - nSub
+    const open = orows.filter(o => o.status !== 'shipped'), nSub = open.filter(o => o.status === 'submitted').length, nApp = open.filter(o => o.status === 'approved').length, nFul = open.filter(o => o.status === 'fulfillment').length
     const mon = new Date().toLocaleDateString('en-US', { month: 'short' })
     const cur = d?.mc?.months?.length ? d.mc.months[d.mc.months.length - 1] : null
     const thisMonth = cur && cur.month.slice(0, 7) === iso(new Date()).slice(0, 7) ? Number(cur.lbs) : Number(d?.st?.month.shipped ?? 0)
@@ -407,7 +409,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <p className={c('foot')}>{plural(menuN, 'strain')} · updates live as orders and reserves change</p></button>
           <div className={contract ? c('grid2') : ''}>
             <button className={c('tile small')} onClick={() => { setFilter('all'); go('orders') }}><p className={c('lbl')}>Orders &amp; Statement</p><p className={c('big')}>{open.length} in progress</p>
-              {open.length > 0 && <p className={c('foot')} style={{ color: 'var(--blue)', marginTop: 4 }}>{[nSub ? `${nSub} submitted` : '', nFul ? `${nFul} in fulfillment` : ''].filter(Boolean).join(' · ')}</p>}</button>
+              {open.length > 0 && <p className={c('foot')} style={{ color: 'var(--blue)', marginTop: 4 }}>{[nSub ? `${nSub} submitted` : '', nApp ? `${nApp} approved` : '', nFul ? `${nFul} in fulfillment` : ''].filter(Boolean).join(' · ')}</p>}</button>
             {contract && <button className={c('tile small tint')} onClick={() => go('contract')}><p className={c('lbl')}>My Contract · {mon}</p>
               <p className={c('big')}>{fmt(thisMonth)} lbs <span style={{ fontSize: 13, fontWeight: 500 }}>picked up</span></p>
               <p className={c('foot')} style={{ marginTop: 4 }}>{min == null ? 'No monthly minimum' : leftMin ? <><b style={{ color: 'var(--blue)' }}>{fmt(leftMin)} to go</b> · {fmt(min)} lb min</> : <b>✓ {fmt(min)} lb min met</b>}</p></button>}
@@ -783,7 +785,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function OrdersScreen() {
     const f = filter
-    const list = orows.filter(o => f === 'all' || (f === 'submitted' && o.status === 'submitted') || (f === 'fulfillment' && o.status === 'fulfillment') || (f === 'shipped' && o.status === 'shipped') || (f === 'unpaid' && o.paid === false) || (f === 'paid' && o.paid === true))
+    const list = orows.filter(o => f === 'all' || (f === 'submitted' && o.status === 'submitted') || (f === 'approved' && o.status === 'approved') || (f === 'fulfillment' && o.status === 'fulfillment') || (f === 'shipped' && o.status === 'shipped') || (f === 'unpaid' && o.paid === false) || (f === 'paid' && o.paid === true))
     const fb = (id: string, label: string) => <button key={id} aria-pressed={f === id} onClick={() => setFilter(id)}>{label}</button>
     const cx = confirmCancel
     return (
@@ -794,10 +796,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <span style={{ color: 'var(--teal-dk)' }}>{I.doc}</span><div className={c('grow')}><p className={c('name')} style={{ fontSize: 16 }}>Current statement</p>
               <p className={c('meta')}>{money2(d.st.balance.amount)} balance · {plural(openInvoices.length, 'open invoice')}</p></div>
             <span className={c('pillbtn')} style={{ background: 'none', padding: 0 }}>{stBusy ? 'Making…' : 'PDF'}</span></button>}
-          <div className={c('filters')} role="group" aria-label="Filter orders">{fb('all', 'All')}{fb('submitted', 'Submitted')}{fb('fulfillment', 'In fulfillment')}{fb('shipped', 'Shipped')}{fb('unpaid', 'Unpaid')}{fb('paid', 'Paid')}</div>
+          <div className={c('filters')} role="group" aria-label="Filter orders">{fb('all', 'All')}{fb('submitted', 'Submitted')}{fb('approved', 'Approved')}{fb('fulfillment', 'In fulfillment')}{fb('shipped', 'Shipped')}{fb('unpaid', 'Unpaid')}{fb('paid', 'Paid')}</div>
           <section className={c('card')}>{list.length ? list.map(o => {
             const lbs = o.lines.reduce((a, l) => a + (l.lbs ?? 0), 0), isOpen = openRow === o.key
-            const tags = o.status === 'submitted' ? <span className={c('chip c-sub')}>Submitted</span> : o.status === 'fulfillment' ? <span className={c('chip c-ful')}>In fulfillment</span>
+            const tags = o.status === 'submitted' ? <span className={c('chip c-sub')}>Submitted</span> : o.status === 'approved' ? <span className={c('chip c-ok')}>Approved</span> : o.status === 'fulfillment' ? <span className={c('chip c-ful')}>In fulfillment</span>
               : <><span className={c('chip c-ship')}>Shipped</span>{o.paid != null && <> <span className={c(`chip ${o.paid ? 'c-paid' : 'c-unpaid'}`)}>{o.paid ? 'Paid' : 'Unpaid'}</span></>}</>
             const sub = o.status !== 'shipped'
               ? <>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Wanted by {niceDate(o.wanted)}</b></> : ' · no date requested'}</>
@@ -815,7 +817,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 {o.lines.length === 0 && o.status === 'shipped' && <p className={c('meta')}>Open the invoice for the details.</p>}
                 {o.status === 'shipped' && o.paid === false && o.inv && Number(o.inv.balance) < Number(o.inv.total) && <p className={c('meta')}>{money(Number(o.inv.total) - Number(o.inv.balance))} of {money(Number(o.inv.total))} paid · {money(Number(o.inv.balance))} open</p>}
                 {(o.po || (o.status === 'shipped' && o.so && o.so !== o.label)) && <p className={c('meta')}>{[o.status === 'shipped' && o.so && o.so !== o.label ? `Order ${o.so}` : '', o.po ? `PO ${o.po}` : ''].filter(Boolean).join(' · ')}</p>}
-                {o.status === 'submitted' && o.order ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
+                {o.status === 'approved' && <p className={c('meta')}>Lifted approved this order. Changing it sends it back to Lifted to approve again.</p>}
+                {(o.status === 'submitted' || o.status === 'approved') && o.order ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => modify(o.order!)}>Modify order</button>
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--red)', flex: 1 }} onClick={() => setConfirmCancel(o)}>Cancel order</button></div>
                   : o.status === 'fulfillment' ? <div className={c('note')} style={{ background: 'var(--ful-bg)', color: 'var(--ful)', fontSize: 13, padding: '10px 12px' }}>Lifted is packing this order, so it can't be changed or cancelled here. Contact your Lifted rep to make changes.</div>
