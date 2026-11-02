@@ -6,7 +6,7 @@ import type React from 'react'
 import './cportal.css'
 import { downloadStatement } from './statement'
 import type { Backend } from './api'
-import type { Balance, Me, MenuRow, MyContract, Order, OrderInput, ReserveLineInput, ReserveRequest, SampleHold, Statement, StatementInvoice, Terms } from './types'
+import type { Balance, Me, QboLine, MenuRow, MyContract, Order, OrderInput, ReserveLineInput, ReserveRequest, SampleHold, Statement, StatementInvoice, Terms } from './types'
 
 /* ---------- helpers ---------- */
 const c = (s: string) => s.split(/\s+/).filter(Boolean).map(x => 'cp-' + x).join(' ')
@@ -27,6 +27,21 @@ const daysUntil = (v: string | null | undefined) => { const d = day(v); if (!d) 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 const snap = (v: number, d: number) => Math.max(0, d > 0 ? Math.floor(v / 10) * 10 + 10 : Math.ceil(v / 10) * 10 - 10)
 const soLabel = (o: Order) => o.so_number || `Order #${o.id}`
+const lbsFmt = (n: number) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })
+const priceFmt = (p: number) => `$${p % 1 ? p.toFixed(2) : p}/lb`
+/** QuickBooks' invoice lines as the portal shows them: fresh frozen lines are lbs of a strain; other lines (shipping, discounts, deposits) keep their amount */
+function qboLines(lines: QboLine[]): OLineView[] {
+  const out: OLineView[] = []
+  for (const l of lines) {
+    const desc = (l.description ?? '').split('\n')[0].trim(), text = `${l.item ?? ''} ${l.description ?? ''}`
+    const amount = l.amount != null ? Number(l.amount) : null
+    if (/fresh frozen/i.test(text) && Number(l.price ?? 0) >= 0 && Number(l.qty ?? 0) > 0) {
+      const yr = /\bFL(\d{2})-/.exec(l.description ?? '')
+      out.push({ s: desc.replace(/\s*-\s*fresh frozen$/i, '') || (l.item ?? ''), y: yr ? 2000 + Number(yr[1]) : null, lbs: Number(l.qty), price: l.price != null ? Number(l.price) : null, amount })
+    } else if (amount) out.push({ s: desc || (l.item ?? '').replace(/^.*:/, ''), y: null, lbs: null, price: null, amount })
+  }
+  return out
+}
 
 const I = {
   back: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>,
@@ -58,16 +73,17 @@ const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ m
 type Screen = 'home' | 'contract' | 'reserves' | 'edit' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
-  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>
+  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>; qbo: Record<string, QboLine[]>
 }
 interface ResRow { k: string; s: string; y: number; res: number; used: number; left: number; asked: number | null }
 interface MenuItem { k: string; s: string; y: number; open: number; hold: number; row: MenuRow }
 interface OLine { k: string; s: string; y: number; resLeft: number; open: number; hold: number }
 interface Detail { k: string; s: string; y: number; q: number; fromHold: number; fromRes: number; fromOpen: number; max: number; sample: boolean; hold: number; price: number | null }
 interface Change { s: string; y: number; from: number; to: number; isNew?: boolean }
+interface OLineView { s: string; y: number | null; lbs: number | null; price: number | null; amount: number | null }
 interface ORow {
   key: string; label: string; status: 'submitted' | 'fulfillment' | 'shipped'; paid: boolean | null; date: string | null; due: string | null; wanted: string | null
-  lines: { s: string; y: number; lbs: number; price: number | null }[]; amount: number | null; po: string | null; so: string | null; order: Order | null; inv: StatementInvoice | null; holdLbs: number; rank: number
+  lines: OLineView[]; amount: number | null; po: string | null; so: string | null; order: Order | null; inv: StatementInvoice | null; holdLbs: number; rank: number
 }
 
 async function loadAll(backend: Backend): Promise<Data> {
@@ -80,9 +96,10 @@ async function loadAll(backend: Backend): Promise<Data> {
   const cy = ys?.current ?? mc?.year ?? Math.max(new Date().getFullYear(), ...menu.map(m => m.crop_year))
   const years = [...new Set([cy, ...menu.map(m => m.crop_year), ...orders.flatMap(o => o.order_lines.map(l => l.crop_year ?? cy))])]
   const ps = await Promise.all(years.map(y => safe(backend.myTermsFor(y), null).then(t => [y, t?.price_per_lb ?? null] as const)))
+  const qbo = await safe(backend.qboInvoiceLines((st?.invoices ?? []).map(i => i.qbo_id).filter((x): x is string => !!x)), {} as Record<string, QboLine[]>)
   const prices: Record<number, number | null> = {}
   for (const [y, p] of ps) prices[y] = p != null ? Number(p) : (terms?.price_per_lb != null ? Number(terms.price_per_lb) : null)
-  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, prices }
+  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, prices, qbo }
 }
 
 /* ---------- the portal ---------- */
@@ -279,19 +296,20 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const orows: ORow[] = useMemo(() => {
     if (!d) return []
     const invs = d.st?.invoices ?? []
-    const used = new Set<number>()
+    const used = new Set<StatementInvoice>()
     const rows: ORow[] = []
     for (const o of d.orders) {
       if (o.status === 'draft' || o.status === 'cancelled') continue
-      const lines = o.order_lines.map(l => ({ s: l.strain, y: l.crop_year ?? cy, lbs: Number(l.lbs), price: l.price_per_lb != null ? Number(l.price_per_lb) : null }))
-      const sum = lines.some(l => l.price == null) ? null : lines.reduce((a, l) => a + l.lbs * (l.price ?? 0), 0)
+      const lines: OLineView[] = o.order_lines.map(l => ({ s: l.strain, y: l.crop_year ?? cy, lbs: Number(l.lbs), price: l.price_per_lb != null ? Number(l.price_per_lb) : null, amount: null }))
+      const sum = lines.some(l => l.price == null) ? null : lines.reduce((a, l) => a + (l.lbs ?? 0) * (l.price ?? 0), 0)
       const holdLbs = o.order_lines.reduce((a, l) => a + (l.is_sample ? Number(l.hold_lbs ?? 0) : 0), 0)
       if (o.status === 'shipped') {
         const inv = o.so_number ? invs.find(i => i.so_number === o.so_number && i.kind !== 'CreditMemo') ?? null : null
-        if (inv) used.add(inv.id)
+        if (inv) used.add(inv)
         const paid = inv ? inv.status === 'paid' || Number(inv.balance) <= 0 : null
+        const ql = inv?.qbo_id ? d.qbo[inv.qbo_id] : undefined   // what was actually invoiced (shipped weights) when QuickBooks has it
         rows.push({ key: 'o' + o.id, label: inv?.inv_number ?? soLabel(o), status: 'shipped', paid, date: o.shipped_date ?? inv?.invoice_date ?? o.order_date, due: inv?.due_date ?? null,
-          wanted: null, lines, amount: inv ? Number(paid ? inv.total : inv.balance) : sum, po: o.po_number ?? inv?.po_number ?? null, so: o.so_number, order: o, inv, holdLbs, rank: 2 })
+          wanted: null, lines: ql?.length ? qboLines(ql) : lines, amount: inv ? Number(paid ? inv.total : inv.balance) : sum, po: o.po_number ?? inv?.po_number ?? null, so: o.so_number, order: o, inv, holdLbs, rank: 2 })
       } else {
         const ful = d.flags.includes(o.id)
         rows.push({ key: 'o' + o.id, label: soLabel(o), status: ful ? 'fulfillment' : 'submitted', paid: null, date: o.order_date, due: null, wanted: o.wanted_date ?? null,
@@ -299,9 +317,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       }
     }
     for (const i of invs) {
-      if (used.has(i.id) || i.kind === 'CreditMemo' || i.status === 'void') continue
+      if (used.has(i) || i.kind === 'CreditMemo' || i.status === 'void') continue
       const paid = i.status === 'paid' || Number(i.balance) <= 0
-      rows.push({ key: 'i' + i.id, label: i.inv_number, status: 'shipped', paid, date: i.invoice_date, due: i.due_date, wanted: null, lines: [], amount: Number(paid ? i.total : i.balance),
+      // invoices from QuickBooks can share id 0 (not made in the app), so key them by QuickBooks' id or number
+      rows.push({ key: 'i' + (i.qbo_id ?? i.inv_number ?? i.id), label: i.inv_number, status: 'shipped', paid, date: i.invoice_date, due: i.due_date, wanted: null,
+        lines: i.qbo_id && d.qbo[i.qbo_id] ? qboLines(d.qbo[i.qbo_id]) : [], amount: Number(paid ? i.total : i.balance),
         po: i.po_number, so: i.so_number, order: null, inv: i, holdLbs: 0, rank: 2 })
     }
     return rows.sort((a, b) => a.rank - b.rank || String(b.date ?? '').localeCompare(String(a.date ?? '')))
@@ -728,13 +748,13 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       <div className={c('screen')}>
         <header className={c('hdr')}>{back('home', 'Home')}<h1>Orders &amp; Statement</h1></header>
         <main className={c('main')}>
-          {d?.st && <button className={c('tile row')} style={{ gap: 12 }} disabled={stBusy} onClick={async () => { setStBusy(true); try { await downloadStatement(d.st!) } catch (e) { toast(String((e as Error).message ?? e)) } finally { setStBusy(false) } }}>
+          {d?.st && <button className={c('tile row')} style={{ gap: 12 }} disabled={stBusy} onClick={async () => { setStBusy(true); try { await downloadStatement(d.st!, false) } catch (e) { toast(String((e as Error).message ?? e)) } finally { setStBusy(false) } }}>
             <span style={{ color: 'var(--teal-dk)' }}>{I.doc}</span><div className={c('grow')}><p className={c('name')} style={{ fontSize: 16 }}>Current statement</p>
               <p className={c('meta')}>{money2(d.st.balance.amount)} balance · {plural(openInvoices.length, 'open invoice')}</p></div>
             <span className={c('pillbtn')} style={{ background: 'none', padding: 0 }}>{stBusy ? 'Making…' : 'PDF'}</span></button>}
           <div className={c('filters')} role="group" aria-label="Filter orders">{fb('all', 'All')}{fb('submitted', 'Submitted')}{fb('fulfillment', 'In fulfillment')}{fb('shipped', 'Shipped')}{fb('unpaid', 'Unpaid')}{fb('paid', 'Paid')}</div>
           <section className={c('card')}>{list.length ? list.map(o => {
-            const lbs = o.lines.reduce((a, l) => a + l.lbs, 0), isOpen = openRow === o.key
+            const lbs = o.lines.reduce((a, l) => a + (l.lbs ?? 0), 0), isOpen = openRow === o.key
             const tags = o.status === 'submitted' ? <span className={c('chip c-sub')}>Submitted</span> : o.status === 'fulfillment' ? <span className={c('chip c-ful')}>In fulfillment</span>
               : <><span className={c('chip c-ship')}>Shipped</span>{o.paid != null && <> <span className={c(`chip ${o.paid ? 'c-paid' : 'c-unpaid'}`)}>{o.paid ? 'Paid' : 'Unpaid'}</span></>}</>
             const sub = o.status !== 'shipped'
@@ -744,11 +764,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <button className={c('li btnrow')} onClick={() => setOpenRow(isOpen ? null : o.key)} aria-expanded={isOpen}>
                 <div className={c('grow')}><p className={c('name')}>{o.label} {tags}</p><p className={c('meta')}>{sub}</p>
                   {o.holdLbs > 0 && o.status !== 'shipped' && <p className={c('meta')} style={{ color: 'var(--gold)', fontWeight: 600 }}>Sample · {fmt(o.holdLbs)} lbs to hold</p>}</div>
-                <div className={c('r')}><b className={c('num')} style={o.paid ? { color: 'var(--muted)' } : undefined}>{o.amount != null ? money2(o.amount) : ''}</b>{lbs > 0 && <p className={c('meta')}>{fmt(lbs)} lbs</p>}</div>{isOpen ? I.up : I.down}</button>
+                <div className={c('r')}><b className={c('num')} style={o.paid ? { color: 'var(--muted)' } : undefined}>{o.amount != null ? money(o.amount) : ''}</b>{lbs > 0 && <p className={c('meta')}>{fmt(lbs)} lbs</p>}</div>{isOpen ? I.up : I.down}</button>
               {isOpen && <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, color: 'var(--muted)' }}>
-                {o.lines.map((l, i) => <div key={i} className={c('row')}><span className={c('grow')}>{l.s} {yrTag(l.y)}</span><span className={c('num')} style={{ width: 64, textAlign: 'right' }}>{fmt(l.lbs)} lbs</span>
-                  <span className={c('num')} style={{ width: 72, textAlign: 'right' }}>{l.price != null ? `$${l.price % 1 ? l.price.toFixed(2) : l.price}/lb` : ''}</span></div>)}
-                {o.status === 'shipped' && o.paid === false && o.inv && Number(o.inv.balance) < Number(o.inv.total) && <p className={c('meta')}>{money2(Number(o.inv.total) - Number(o.inv.balance))} of {money2(Number(o.inv.total))} paid</p>}
+                {o.lines.map((l, i) => <div key={i} className={c('row')}><span className={c('grow')}>{l.s} {l.y != null && yrTag(l.y)}</span>
+                  {l.lbs != null ? <><span className={c('num')} style={{ width: 64, textAlign: 'right' }}>{lbsFmt(l.lbs)} lbs</span>
+                    <span className={c('num')} style={{ width: 72, textAlign: 'right' }}>{l.price != null ? priceFmt(l.price) : ''}</span></>
+                    : <span className={c('num')} style={{ width: 136, textAlign: 'right' }}>{l.amount != null ? (l.amount < 0 ? '−' : '') + money2(Math.abs(l.amount)) : ''}</span>}</div>)}
+                {o.lines.length === 0 && o.status === 'shipped' && <p className={c('meta')}>Open the invoice for the details.</p>}
+                {o.status === 'shipped' && o.paid === false && o.inv && Number(o.inv.balance) < Number(o.inv.total) && <p className={c('meta')}>{money(Number(o.inv.total) - Number(o.inv.balance))} of {money(Number(o.inv.total))} paid · {money(Number(o.inv.balance))} open</p>}
                 {(o.po || (o.status === 'shipped' && o.so && o.so !== o.label)) && <p className={c('meta')}>{[o.status === 'shipped' && o.so && o.so !== o.label ? `Order ${o.so}` : '', o.po ? `PO ${o.po}` : ''].filter(Boolean).join(' · ')}</p>}
                 {o.status === 'submitted' && o.order ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => modify(o.order!)}>Modify order</button>
@@ -761,8 +784,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         {cx && <><div className={c('scrim')} onClick={() => setConfirmCancel(null)} />
           <div className={c('sheet')} role="alertdialog" aria-modal="true" aria-labelledby="cp-cx-t">
             <h2 id="cp-cx-t" style={{ margin: 0, fontSize: 22 }}>Cancel {cx.label}?</h2>
-            <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>{fmt(cx.lines.reduce((a, l) => a + l.lbs, 0))} lbs{cx.amount != null ? ` · ${money(cx.amount)}` : ''}, placed {shortDate(cx.date)}{cx.wanted ? `, wanted by ${niceDate(cx.wanted)}` : ''}. Any reserve lbs on this order go back to your reserve. This can't be undone.</p>
-            <div className={c('card')} style={{ background: '#f7f9f6' }}>{cx.lines.map((l, i) => <div key={i} className={c('li')}><span className={c('grow')}>{l.s} {yrTag(l.y)}</span><b className={c('num')}>{fmt(l.lbs)} lbs</b></div>)}</div>
+            <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>{fmt(cx.lines.reduce((a, l) => a + (l.lbs ?? 0), 0))} lbs{cx.amount != null ? ` · ${money(cx.amount)}` : ''}, placed {shortDate(cx.date)}{cx.wanted ? `, wanted by ${niceDate(cx.wanted)}` : ''}. Any reserve lbs on this order go back to your reserve. This can't be undone.</p>
+            <div className={c('card')} style={{ background: '#f7f9f6' }}>{cx.lines.map((l, i) => <div key={i} className={c('li')}><span className={c('grow')}>{l.s} {l.y != null && yrTag(l.y)}</span><b className={c('num')}>{fmt(l.lbs)} lbs</b></div>)}</div>
             <button className={c('btn full')} style={{ background: 'var(--red)' }} disabled={busy} onClick={async () => {
               const ok = await run(() => backend.cancelMyOrder(cx.order!.id).then(() => true)); setConfirmCancel(null)
               if (ok) { toast(`${cx.label} cancelled`); reload() } }}>Yes, cancel order</button>

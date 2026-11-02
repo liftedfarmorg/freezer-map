@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { accessFromRole } from './types'
 import type { SalesDoc } from './docs'
-import type { MyContract, ReserveLineInput, Item, HarvestLot, LotImpact, Invoice, NewOrderLine, PaymentTerm, FOrder, Prefs, ModKey, Level, ReserveYears, CustomerTerms, UnmatchedTag, ShippedCheck, StopManifest, OrderInput, Terms, Statement, SampleHold, MenuNumbers, MenuRow, ReserveRequest, Balance, ImportResult, Order, RoshiRow, Reserve, LinkInfo, AppUser, Customer, Me, Role, Freezer, FreezerStatus, InvEvent, ListName, ListRow, Load, LoadItem, LoadStop, MixLine, Pallet, Settings, SingleInput, Slot, Snapshot, StopInput, Strain, Vehicle } from './types'
+import type { MyContract, QboLine, ReserveLineInput, Item, HarvestLot, LotImpact, Invoice, NewOrderLine, PaymentTerm, FOrder, Prefs, ModKey, Level, ReserveYears, CustomerTerms, UnmatchedTag, ShippedCheck, StopManifest, OrderInput, Terms, Statement, SampleHold, MenuNumbers, MenuRow, ReserveRequest, Balance, ImportResult, Order, RoshiRow, Reserve, LinkInfo, AppUser, Customer, Me, Role, Freezer, FreezerStatus, InvEvent, ListName, ListRow, Load, LoadItem, LoadStop, MixLine, Pallet, Settings, SingleInput, Slot, Snapshot, StopInput, Strain, Vehicle } from './types'
 
 export interface SaveUser { email: string; name: string; kind: 'staff' | 'customer' | 'none'; customerId: number | null; access: Partial<Record<ModKey, Level>>; owner?: boolean; login?: 'microsoft' | 'email' | null }
 export interface Overview {
@@ -58,6 +58,8 @@ export interface Backend {
   /** portal (150): ids of my open orders that already have pallets assigned (In fulfillment) */
   myOrderFlags(): Promise<number[]>
   myContract(): Promise<MyContract | null>
+  /** QuickBooks' lines for invoices (149 copies), by qbo_id; customers read their own */
+  qboInvoiceLines(qboIds: string[]): Promise<Record<string, QboLine[]>>
   reserveStrains(): Promise<string[]>
   setReserveDeadline(year: number, date: string | null): Promise<void>
   listTerms(): Promise<CustomerTerms[]>
@@ -494,6 +496,15 @@ class SupaBackend implements Backend {
   async releaseMyHold(lineId: number) { const { error } = await this.sb.rpc('release_my_hold', { p_line: lineId }); fail(error) }
   async myOrderFlags() { const { data, error } = await this.sb.rpc('my_order_flags'); if (error) return []; return (data ?? []) as number[] }
   async myContract() { const { data, error } = await this.sb.rpc('my_contract'); if (error) return null; return data as MyContract | null }
+  async qboInvoiceLines(qboIds: string[]) {
+    const out: Record<string, QboLine[]> = {}
+    if (!qboIds.length) return out
+    const { data, error } = await this.sb.from('acct_qbo_docs').select('env,qbo_id,lines').eq('kind', 'Invoice').in('qbo_id', qboIds.slice(0, 300))
+    if (error) return out
+    // production wins if the same id is also in the sandbox
+    for (const r of (data ?? []) as { env: string; qbo_id: string; lines: QboLine[] }[]) if (!out[r.qbo_id] || r.env === 'production') out[r.qbo_id] = r.lines ?? []
+    return out
+  }
   async reserveYears(): Promise<ReserveYears> {
     const { data, error } = await this.sb.rpc('reserve_years')
     if (error) return { current: new Date().getFullYear(), years: [] }   // before 020 is run
@@ -1157,6 +1168,7 @@ class DemoBackend implements Backend {
   async releaseMyHold() {}
   async myOrderFlags() { return [] as number[] }
   async myContract() { return null }
+  async qboInvoiceLines() { return {} }
   async setReserveDeadline() {}
   async listTerms() { return [] }
   async setTerms() {}

@@ -122,7 +122,8 @@ export function CustomerDashboard({ backend, customerId, staff, rev = 0 }: { bac
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
-export async function statementPdf(s: Statement): Promise<Blob> {
+/** history: false leaves off the list of invoices since a year ago (the customer portal's statement is just what's open) */
+export async function statementPdf(s: Statement, history = true): Promise<Blob> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const pdf = new jsPDF({ unit: 'pt', format: 'letter' })
   const W = pdf.internal.pageSize.getWidth(), M = 40
@@ -149,12 +150,14 @@ export async function statementPdf(s: Statement): Promise<Blob> {
       columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } },
     })
     y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18
-    pdf.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(`Invoices since ${dfmt(s.from)}`, M, y); y += 6
+    if (history) { pdf.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(`Invoices since ${dfmt(s.from)}`, M, y); y += 6 }
   }
-  autoTable(pdf, {
+  const openOnly = !(s.balance.source === 'quickbooks' && s.open_items.length)
+  const invs = history ? s.invoices : openOnly ? s.invoices.filter(i => i.status !== 'paid' && Number(i.balance) > 0) : []
+  if (invs.length || history) autoTable(pdf, {
     startY: y, margin: { left: M, right: M }, styles: style, headStyles: head,
     head: [['Date', 'Invoice', 'Order', 'Due', 'Total', 'Open', '']],
-    body: s.invoices.map(i => [dfmt(i.invoice_date), i.inv_number, i.so_number ?? '', dfmt(i.due_date), money(i.total), i.balance ? money(i.balance) : '',
+    body: invs.map(i => [dfmt(i.invoice_date), i.inv_number, i.so_number ?? '', dfmt(i.due_date), money(i.total), i.balance ? money(i.balance) : '',
       i.status === 'paid' || !i.balance ? 'Paid' : i.past_due ? 'Past due' : 'Open']),
     columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
     didParseCell: h => { if (h.section === 'body' && h.column.index === 6 && h.cell.raw === 'Past due') h.cell.styles.textColor = [176, 30, 30] },
@@ -165,8 +168,8 @@ export async function statementPdf(s: Statement): Promise<Blob> {
   return pdf.output('blob')
 }
 
-export async function downloadStatement(s: Statement) {
-  const b = await statementPdf(s)
+export async function downloadStatement(s: Statement, history = true) {
+  const b = await statementPdf(s, history)
   const u = URL.createObjectURL(b)
   const a = document.createElement('a'); a.href = u; a.download = `Statement ${today()} - ${s.customer.name}.pdf`.replace(/[\\/:*?"<>|]/g, '')
   document.body.appendChild(a); a.click(); a.remove()

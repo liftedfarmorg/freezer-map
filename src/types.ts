@@ -253,3 +253,5 @@ export interface MyContract { year: number; price_per_lb: number | null; contrac
   payment_terms: string | null; reserves_enabled: boolean; months: { month: string; lbs: number; early: number }[] }
 /** one line of a reserve request from the portal (150): total lbs wanted for a strain and crop year */
 export interface ReserveLineInput { strain: string; crop_year: number; lbs: number; hold_line?: number | null }
+/** a line on QuickBooks' copy of an invoice (149) */
+export interface QboLine { item: string | null; description: string | null; qty: number | null; price: number | null; amount: number | null }
