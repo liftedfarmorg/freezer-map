@@ -1178,3 +1178,6 @@ html:has(.app.shell), html:has(.app.shell) body { height: 100%; overflow: hidden
 .sb-split { background: #d97706; color: #111; }
 .sb-harvest { background: #3b82f6; color: #fff; }
 .sb-processor { background: #a855f7; color: #fff; }
+
+/* 159 returns: selects and notes in a .field */
+.field > select, .field > textarea { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: inherit; font-size: 16px; width: 100%; font-family: inherit; }

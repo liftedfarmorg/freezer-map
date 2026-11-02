@@ -134,15 +134,15 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
     } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
   }
   return <div className="scrim" onClick={onClose}>
-    <div className="sheet" onClick={e => e.stopPropagation()}>
-      <div className="row between"><h3>New return</h3><button className="ghost small" onClick={onClose}>✕</button></div>
-      <label>Customer
+    <div className="sheet form wide" onClick={e => e.stopPropagation()}>
+      <div className="sheet-h"><h3>New return</h3><button className="ghost" aria-label="Close" onClick={onClose}>✕</button></div>
+      <div className="field"><label>Customer</label>
         <Select value={cust === '' ? '' : String(cust)} onChange={e => setCust(e.target.value ? Number(e.target.value) : '')}>
-          <option value="">Pick a customer</option>{ext.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>
-      {cust !== '' && <label>Shipped order
+          <option value="">Pick a customer</option>{ext.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></div>
+      {cust !== '' && <div className="field"><label>Shipped order</label>
         <Select value={order === '' ? '' : String(order)} onChange={e => setOrder(e.target.value ? Number(e.target.value) : '')}>
           <option value="">{orders === null ? 'Loading…' : orders.length ? 'Pick the order it shipped on' : 'No shipped orders in the last 2 years'}</option>
-          {(orders ?? []).map(o => <option key={o.id} value={o.id}>{o.so ?? `#${o.id}`} · {day(o.shipped)} · {n2(o.lbs)} lbs · {o.strains}</option>)}</Select></label>}
+          {(orders ?? []).map(o => <option key={o.id} value={o.id}>{o.so ?? `#${o.id}`} · {day(o.shipped)} · {n2(o.lbs)} lbs · {o.strains}</option>)}</Select></div>}
       {lines && <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th className="num">Shipped</th><th className="num">Can return</th><th className="num">$/lb</th><th className="num">Lbs back</th></tr></thead>
         <tbody>{lines.map(l => { const can = Math.max(Number(l.shipped_lbs) - Number(l.returned_lbs), 0); const bad = Number(lbs[l.id] || 0) > can + 0.001
           return <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td>{l.site ?? <span className="warn-t">?</span>}</td><td className="num">{n2(l.shipped_lbs)}</td><td className="num">{n2(can)}</td>
@@ -151,9 +151,9 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
               onChange={e => setLbs(m => ({ ...m, [l.id]: e.target.value }))} /></td></tr> })}</tbody></table></div>}
       {lines && !lines.length && <p className="muted">Nothing on this order can come back.</p>}
       {over.length > 0 && <p className="neg small">{over.map(l => l.strain).join(', ')}: more than can come back.</p>}
-      <label>Reason
-        <select value={reason} onChange={e => setReason(e.target.value)}><option value="">Pick a reason</option>{Object.entries(REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-      <label>Notes <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="What happened (optional)" /></label>
+      <div className="field"><label>Reason</label>
+        <select value={reason} onChange={e => setReason(e.target.value)}><option value="">Pick a reason</option>{Object.entries(REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+      <div className="field"><label>Notes</label><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="What happened (optional)" /></div>
       {picked.length > 0 && <p className="small">Credit if all of it comes back: <b>{money(total)}</b> <span className="muted">(the credit memo uses the weight we actually receive)</span></p>}
       <div className="row between"><button className="ghost" onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy || !order || !reason || !picked.length || over.length > 0} onClick={save}>{busy ? 'Saving…' : 'Start return'}</button></div>
