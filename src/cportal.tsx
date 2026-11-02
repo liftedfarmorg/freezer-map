@@ -108,6 +108,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const reload = () => loadAll(backend).then(x => { setD(x); setLoadErr(null) }).catch(e => setLoadErr(String(e?.message ?? e)))
   useEffect(() => { reload() }, [])
+  // keep numbers current: changes Lifted makes (approving, cancelling, shipping) show when the customer comes back to the portal
+  const lastLoad = useRef(Date.now())
+  const refresh = () => { if (Date.now() - lastLoad.current < 10000) return; lastLoad.current = Date.now(); reload() }
+  useEffect(() => {
+    const vis = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', vis); addEventListener('focus', refresh)
+    const t = setInterval(() => { if (document.visibilityState === 'visible') refresh() }, 120000)
+    return () => { document.removeEventListener('visibilitychange', vis); removeEventListener('focus', refresh); clearInterval(t) }
+  }, [])
 
   const [screen, setScreen] = useState<Screen>('home')
   useEffect(() => {
@@ -115,7 +124,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const pop = (e: PopStateEvent) => { setScreen((e.state?.cp as Screen) ?? 'home'); window.scrollTo({ top: 0 }) }
     addEventListener('popstate', pop); return () => removeEventListener('popstate', pop)
   }, [])
-  const go = (s: Screen) => { setScreen(s); history.pushState({ cp: s }, ''); window.scrollTo({ top: 0 }) }
+  const go = (s: Screen) => { setScreen(s); history.pushState({ cp: s }, ''); window.scrollTo({ top: 0 }); if (s === 'home' || s === 'orders' || s === 'reserves' || s === 'menu') refresh() }
 
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const toastT = useRef<number>()
