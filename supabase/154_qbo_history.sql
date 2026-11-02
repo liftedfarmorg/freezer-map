@@ -1,5 +1,6 @@
 -- 154: Sales orders + invoices history from QuickBooks (production), matched to METRC manifests. Msg FULFILL-QBO-1/4 (renamed from 153, which another session used), 11/1/2026.
--- v2 11/1 (Aziz's answers: history from Nov 2025 is enough; deposits/storage later; Dry Biomass is its own category). NOT RUN. Read-only analysis was done first; Aziz to say go.
+-- v2 11/1 (history from Nov 2025; deposits/storage later; Dry Biomass its own category). RUN LIVE by Claude 11/1 after Aziz's go: 223 new orders, 18 existing orders invoiced, 241 invoices, 1,804 order lines, 0 able to push.
+-- (variable "code" renamed v_code: the live strains table has a code column)
 --
 -- QuickBooks is NOT touched. Everything comes from acct_qbo_docs (the app's hourly read-only copy of production QuickBooks:
 -- every invoice for a matched customer, last 12 months + anything still open).
@@ -64,7 +65,7 @@ delete from qh_docs q using qh_skipped s where s.qbo_id = q.qbo_id;
 do $$
 declare
   d qh_docs; x jsonb; k int; o_id int; ol_id int; inv_id int; inv_no text; so_no text;
-  it text; ds text; first text; code text; strain_name text; cy int; prod text; is_prod boolean; is_bio boolean;
+  it text; ds text; first text; v_code text; strain_name text; cy int; prod text; is_prod boolean; is_bio boolean;
   qty numeric; price numeric; amt numeric; farm text;
   n_orders int := 0; n_linked_orders int := 0; n_invoices int := 0; n_lines int := 0;
 begin
@@ -112,16 +113,16 @@ begin
 
       if is_prod then
         first := split_part(ds, E'\n', 1);
-        code := substring(ds from '(?:FL|SU)\d\d-[A-Z]+-[A-Z]+-[A-Z]+-([^\s]+)');
+        v_code := substring(ds from '(?:FL|SU)\d\d-[A-Z]+-[A-Z]+-[A-Z]+-([^\s]+)');
         -- strain: "Name - Fresh Frozen" first line, else the batch code matched to a strain, else the text
         if first ~ ' - (Fresh Frozen|Dry|Standards|Smalls|Trim)' then strain_name := split_part(first, ' - ', 1);
-        elsif code is not null then
+        elsif v_code is not null then
           select s.name into strain_name from strains s
-           where regexp_replace(lower(s.name), '[^a-z0-9]', '', 'g') = regexp_replace(lower(code), '[^a-z0-9]', '', 'g')
+           where regexp_replace(lower(s.name), '[^a-z0-9]', '', 'g') = regexp_replace(lower(v_code), '[^a-z0-9]', '', 'g')
               or exists (select 1 from unnest(coalesce(s.aliases, '{}'::text[])) a
-                          where regexp_replace(lower(a), '[^a-z0-9]', '', 'g') = regexp_replace(lower(code), '[^a-z0-9]', '', 'g'))
+                          where regexp_replace(lower(a), '[^a-z0-9]', '', 'g') = regexp_replace(lower(v_code), '[^a-z0-9]', '', 'g'))
            order by s.active desc nulls last limit 1;
-          strain_name := coalesce(strain_name, code);
+          strain_name := coalesce(strain_name, v_code);
         else strain_name := nullif(trim(first), '');
         end if;
         strain_name := coalesce(strain_name, it);
