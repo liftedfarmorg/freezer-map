@@ -27,7 +27,6 @@ const daysUntil = (v: string | null | undefined) => { const d = day(v); if (!d) 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 const snap = (v: number, d: number) => Math.max(0, d > 0 ? Math.floor(v / 10) * 10 + 10 : Math.ceil(v / 10) * 10 - 10)
 const soLabel = (o: Order) => o.so_number || `Order #${o.id}`
-const lbsFmt = (n: number) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })
 const priceFmt = (p: number) => `$${p % 1 ? p.toFixed(2) : p}/lb`
 /** QuickBooks' invoice lines as the portal shows them: fresh frozen lines are lbs of a strain; other lines (shipping, discounts, deposits) keep their amount */
 function qboLines(lines: QboLine[]): OLineView[] {
@@ -769,7 +768,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 <div className={c('r')}><b className={c('num')} style={o.paid ? { color: 'var(--muted)' } : undefined}>{o.amount != null ? money(o.amount) : ''}</b>{lbs > 0 && <p className={c('meta')}>{fmt(lbs)} lbs</p>}</div>{isOpen ? I.up : I.down}</button>
               {isOpen && <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, color: 'var(--muted)' }}>
                 {o.lines.map((l, i) => <div key={i} className={c('row')}><span className={c('grow')}>{l.s} {l.y != null && yrTag(l.y)}</span>
-                  {l.lbs != null ? <><span className={c('num')} style={{ width: 64, textAlign: 'right' }}>{lbsFmt(l.lbs)} lbs</span>
+                  {l.lbs != null ? <><span className={c('num')} style={{ width: 64, textAlign: 'right' }}>{fmt(l.lbs)} lbs</span>
                     <span className={c('num')} style={{ width: 72, textAlign: 'right' }}>{l.price != null ? priceFmt(l.price) : ''}</span></>
                     : <span className={c('num')} style={{ width: 136, textAlign: 'right' }}>{l.amount != null ? (l.amount < 0 ? '−' : '') + money2(Math.abs(l.amount)) : ''}</span>}</div>)}
                 {o.lines.length === 0 && o.status === 'shipped' && <p className={c('meta')}>Open the invoice for the details.</p>}
