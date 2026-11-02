@@ -69,7 +69,7 @@ function Stepper({ val, on, bad, label, onChange, autoFocus }: { val: number; on
 const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ margin: '2px 0 0' }}>{msg}</p>
 
 /* ---------- data ---------- */
-type Screen = 'home' | 'contract' | 'reserves' | 'edit' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
+type Screen = 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
   st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>; qbo: Record<string, QboLine[]>
@@ -532,7 +532,32 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <label className={c('field')} style={{ marginTop: 4 }}>Note to Lifted (optional)<input type="text" value={reqNote} onChange={e => setReqNote(e.target.value)} /></label>
         </main>
         <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={cancel}>Cancel</button>
-          <button className={c('btn')} style={{ flex: 2 }} disabled={busy || !changes.length || anyResErr} onClick={sendReq}>{anyResErr ? 'Fix the red lines' : busy ? 'Sending…' : changes.length ? `Send ${plural(changes.length, 'change')}` : 'No changes yet'}</button></div>
+          <button className={c('btn')} style={{ flex: 2 }} disabled={busy || !changes.length || anyResErr} onClick={() => go('reqReview')}>{anyResErr ? 'Fix the red lines' : changes.length ? 'Review changes' : 'No changes yet'}</button></div>
+      </div>
+    )
+  }
+
+  function ReqReviewScreen() {
+    if (!changes.length) return <div className={c('screen')}><header className={c('hdr')}>{back('edit', 'Keep editing')}<h1>Review your request</h1></header><p className={c('loading')}>No changes yet.</p></div>
+    const net = changes.reduce((a, ch) => a + ch.to - ch.from, 0), sorted = [...changes].sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
+    const sign = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n))
+    return (
+      <div className={c('screen')}>
+        <header className={c('hdr')}>{back('edit', 'Keep editing')}<h1>Review your request</h1><p className={c('sub')}>Nothing is sent until you tap Send request.</p></header>
+        <main className={c('main')}>
+          <section className={c('card')}>
+            {sorted.map(ch => <div key={ch.s + ch.y} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}><p className={c('name')}>{ch.s} {yrTag(ch.y)} {ch.isNew && <span className={c('chip c-ship')}>New</span>}</p>
+              <p className={c('meta num')}>{ch.isNew ? `Reserve ${fmt(ch.to)} lbs` : `${fmt(ch.from)} → ${fmt(ch.to)} lbs`}</p></div>
+              <b className={c('num')} style={{ color: ch.to >= ch.from ? 'var(--teal-ink)' : 'var(--red)' }}>{sign(ch.to - ch.from)} lbs</b></div>)}
+            <div className={c('li')} style={{ background: '#f7f9f6', alignItems: 'flex-start' }}><div className={c('grow')}><b>Total change</b>
+              <p className={c('meta')}>{plural(changes.length, 'strain')} · reserves go from {fmt(totals.res)} to {fmt(totals.res + net)} lbs</p></div>
+              <b className={c('num')} style={{ fontSize: 18 }}>{sign(net)} lbs</b></div>
+          </section>
+          {reqNote && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14 }}><span className={c('meta')} style={{ display: 'inline' }}>Note</span> {reqNote}</section>}
+          <div className={c('note gold')}>Lifted reviews each change and we'll email you when it's decided. Until then they show as <b>waiting</b>, and the lbs stay open on the menu for everyone.</div>
+        </main>
+        <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => go('edit')}>Keep editing</button>
+          <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || anyResErr} onClick={sendReq}>{busy ? 'Sending…' : 'Send request'}</button></div>
       </div>
     )
   }
@@ -883,11 +908,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   // the order form screens need a loaded menu; send people home if a reload drops them somewhere odd
-  useEffect(() => { if (d && !contract && (screen === 'reserves' || screen === 'edit' || screen === 'sent' || screen === 'contract')) setScreen('home') }, [d, contract, screen])
+  useEffect(() => { if (d && !contract && (screen === 'reserves' || screen === 'edit' || screen === 'reqReview' || screen === 'sent' || screen === 'contract')) setScreen('home') }, [d, contract, screen])
   useEffect(() => { if (focusK) { const t = setTimeout(() => setFocusK(null), 500); return () => clearTimeout(t) } }, [focusK])
 
   const SCREENS: Record<Screen, () => React.ReactElement> = {
-    home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, sent: SentScreen, menu: MenuScreen,
+    home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, reqReview: ReqReviewScreen, sent: SentScreen, menu: MenuScreen,
     order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen,
   }
   return (
