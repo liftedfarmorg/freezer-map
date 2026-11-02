@@ -586,8 +586,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const list = shown.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear)).sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const total = menuItems.reduce((a, m) => a + m.open, 0)
     const years = [...new Set(shown.map(m => m.y))].sort((a, b) => b - a)
+    // strains just picked with no lbs yet aren't errors here (their red line only shows once a number is typed)
+    const menuBad = editNew.some(n => n.lbs > 0 && !!newErr(n)) || reserves.some(r => !!resErr(r))
     const nNew = editNew.length, nChg = changes.filter(x => !x.isNew).length
-    const parts = [nNew ? plural(nNew, 'new strain') : '', nChg ? plural(nChg, 'change') : ''].filter(Boolean).join(' · ')
     const toggleTray = (m: MenuItem) => {
       if (editNew.some(t => t.k === m.k)) setEditNew(editNew.filter(t => t.k !== m.k))
       else { setEditNew([...editNew, { k: m.k, s: m.s, y: m.y, lbs: 0 }]); setFocusK('tray' + m.k) }
@@ -633,8 +634,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             })}
           </section>
         </main>
-        {contract ? ((nNew || nChg) ? <button className={c('tray')} disabled={anyResErr} onClick={() => { setReviewFrom('menu'); go('reqReview') }}>
-          <span className={c('grow')}><b style={{ fontSize: 16 }}>Reserve request</b><small>{parts || 'Set lbs'}</small></span><span className={c('go')}>{anyResErr ? 'Fix red lines' : 'Review'}</span></button> : null)
+        {contract ? ((nNew || nChg) ? <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={clearEdit}>Cancel</button>
+          <button className={c('btn')} style={{ flex: 2 }} disabled={!changes.length || anyResErr} onClick={() => { setReviewFrom('menu'); go('reqReview') }}>{menuBad ? 'Fix the red lines' : changes.length && !anyResErr ? 'Review changes' : 'Set the lbs'}</button></div> : null)
           : <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>}
       </div>
     )
