@@ -1,5 +1,5 @@
--- 154: Sales orders + invoices history from QuickBooks (production), matched to METRC manifests. Msg FULFILL-QBO-1 (renamed from 153, which another session used), 11/1/2026.
--- DRAFT. NOT RUN. Read-only analysis was done first; Aziz to say go.
+-- 154: Sales orders + invoices history from QuickBooks (production), matched to METRC manifests. Msg FULFILL-QBO-1/4 (renamed from 153, which another session used), 11/1/2026.
+-- v2 11/1 (Aziz's answers: history from Nov 2025 is enough; deposits/storage later; Dry Biomass is its own category). NOT RUN. Read-only analysis was done first; Aziz to say go.
 --
 -- QuickBooks is NOT touched. Everything comes from acct_qbo_docs (the app's hourly read-only copy of production QuickBooks:
 -- every invoice for a matched customer, last 12 months + anything still open).
@@ -7,9 +7,11 @@
 -- What it does
 --  1. Existing app orders whose QuickBooks invoice has the same SO number (17 Roshi orders) + SO-26100801 (QuickBooks SO-26102704,
 --     same 7 x 10 lb samples on manifest 0011666365) get an app invoice copied from QuickBooks and linked to it.
---  2. Every other QuickBooks product invoice (fresh frozen, dry, biomass) gets a shipped sales order (source 'qbo', same SO number)
---     with its lines, plus a linked app invoice. Ship date = METRC manifest date when one was matched, else the invoice date.
---  3. QuickBooks invoices with no product (deposits, storage fees, shipping only) get a linked app invoice only (no sales order).
+--  2. Every other QuickBooks product invoice (fresh frozen, standards, smalls, trim) gets a shipped sales order (source 'qbo',
+--     same SO number) with its lines, plus a linked app invoice. Ship date = METRC manifest date when one was matched, else the invoice date.
+--  3. NOT in this run (Aziz 11/1, later): deposits, storage fees, shipping-only invoices, and the 7 Dry Biomass-only invoices
+--     (Dry Biomass is its own product category, not in the app yet). SO-26030601 (TSL, fresh frozen + biomass) comes in:
+--     its biomass lines stay on the invoice copy but get no order line.
 --  4. App invoices already linked to QuickBooks with a $0 balance there are marked paid (SO-26102501 Jetty, SO-26102202 Jetty).
 --  5. MAR SR SO-26102205: shipped date 10/28 and manifest 0011779258 filled in.
 --
@@ -41,14 +43,17 @@ select d.qbo_id, d.doc_number, d.customer_id, d.txn_date, d.due_date, coalesce(d
        (select coalesce(t.departed_at, t.created_at, t.received_at)::date from metrc_transfers t where t.manifest = m.manifest
          order by t.departed_at nulls last limit 1) as ship_on,
        exists (select 1 from jsonb_array_elements(d.lines) x
-                where coalesce(x ->> 'item', '') ~* 'fresh frozen|dry biomass|dry flower|standards|smalls|trim|untrimmed'
-                  and coalesce(x ->> 'item', '') !~* 'storage') as has_product,
+                where coalesce(x ->> 'item', '') ~* 'fresh frozen|dry flower|standards|smalls|trim'
+                  and coalesce(x ->> 'item', '') !~* 'storage|biomass') as has_product,
        (select o.id from orders o where o.so_number = d.doc_number
            or (d.qbo_id = '36644' and o.so_number = 'SO-26100801')    -- Frozen California samples: QuickBooks numbered it SO-26102704
          order by o.id limit 1) as order_id
   from acct_qbo_docs d left join qh_map m on m.qbo_id = d.qbo_id
  where d.env = 'production' and d.kind = 'Invoice' and d.customer_id is not null and d.invoice_id is null
    and not exists (select 1 from acct_pushes p where p.env = 'production' and p.status = 'sent' and p.qbo_id = d.qbo_id);
+
+-- later (Aziz 11/1): no-product invoices (deposits, storage, shipping only, Dry Biomass only) unless they belong to an existing order
+delete from qh_docs where order_id is null and not has_product;
 
 -- an existing order that already has its own app invoice: left alone, listed at the end for a look
 create temp table qh_skipped on commit drop as
@@ -59,7 +64,7 @@ delete from qh_docs q using qh_skipped s where s.qbo_id = q.qbo_id;
 do $$
 declare
   d qh_docs; x jsonb; k int; o_id int; ol_id int; inv_id int; inv_no text; so_no text;
-  it text; ds text; first text; code text; strain_name text; cy int; prod text; is_prod boolean;
+  it text; ds text; first text; code text; strain_name text; cy int; prod text; is_prod boolean; is_bio boolean;
   qty numeric; price numeric; amt numeric; farm text;
   n_orders int := 0; n_linked_orders int := 0; n_invoices int := 0; n_lines int := 0;
 begin
@@ -101,7 +106,8 @@ begin
       it := coalesce(x ->> 'item', ''); ds := coalesce(x ->> 'description', '');
       qty := coalesce((x ->> 'qty')::numeric, 1); amt := coalesce((x ->> 'amount')::numeric, 0);
       price := coalesce((x ->> 'price')::numeric, case when qty <> 0 then round(amt / qty, 4) else amt end);
-      is_prod := it ~* 'fresh frozen|dry biomass|dry flower|standards|smalls|trim|untrimmed' and it !~* 'storage';
+      is_bio := it ~* 'biomass';                       -- Dry Biomass: its own category, invoice line only
+      is_prod := it ~* 'fresh frozen|dry flower|standards|smalls|trim' and it !~* 'storage|biomass';
       ol_id := null; strain_name := null; cy := null; prod := null; farm := null;
 
       if is_prod then
@@ -126,8 +132,7 @@ begin
         prod := case when it ~* 'fresh frozen' then 'fresh_frozen'
                      when it ~* 'standards' then 'standards'
                      when it ~* 'smalls' then 'smalls'
-                     when it ~* 'trim' and it !~* 'untrimmed' then 'trim'
-                     when it ~* 'untrimmed|dry biomass' then 'unbucked'
+                     when it ~* 'trim' then 'trim'
                      else 'fresh_frozen' end;
         if o_id is not null and d.order_id is null then
           insert into order_lines (order_id, strain, product, lbs, ordered_lbs, price_per_lb, price_override, farm, crop_year)
@@ -143,8 +148,8 @@ begin
       end if;
 
       insert into invoice_lines (invoice_id, sort, kind, item, description, strain, crop_year, qty, uom, price, amount, order_line_id)
-      values (inv_id, k, case when is_prod then 'product' else 'charge' end, it, ds, strain_name, cy, qty,
-              case when is_prod then 'lb' else 'ea' end, price, amt, ol_id);
+      values (inv_id, k, case when is_prod or is_bio then 'product' else 'charge' end, it, ds, strain_name, cy, qty,
+              case when is_prod or is_bio then 'lb' else 'ea' end, price, amt, ol_id);
     end loop;
 
     -- recorded as already in QuickBooks (never pushed, prices never pulled back)
