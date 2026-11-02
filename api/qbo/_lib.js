@@ -362,6 +362,58 @@ async function pushInvoice_(c, invoiceId, by) {
   return { qbo_id: inv.Id, doc_number: inv.DocNumber, total: inv.TotalAmt, balance: inv.Balance, mode, note }
 }
 
+// ---------- credit memos (returns, 159) ----------
+/** send one credit memo (Product Return lines); one at a time per credit memo, never two in QuickBooks */
+export async function pushCreditMemo(c, cmId, by) {
+  const got = await rpc('cm_claim_push', { p_id: cmId })
+  if (got === false) throw new Busy('This credit memo is being sent right now. Check again in a minute.')
+  try { return await pushCreditMemo_(c, cmId, by) }
+  finally { await rpc('cm_release_push', { p_id: cmId }).catch(() => {}) }
+}
+async function pushCreditMemo_(c, cmId, by) {
+  const p = await rpc('cm_payload', { p_id: cmId })
+  if (p.acct_status === 'sent' && p.qbo_id) return { qbo_id: p.qbo_id, doc_number: p.doc_number, total: p.total, mode: 'already sent' }
+  if (p.problems && p.problems.length) throw new Error(p.problems.join(' '))
+  const custId = await customerId(c, p.customer)
+  const lines = []
+  for (const l of p.lines) {
+    const qty = Number(l.qty), price = Number(l.price), amount = r2(l.amount)
+    const detail = { ItemRef: { value: await itemId(c, l.product, l.item) }, ClassRef: { value: await classId(c, l.class) } }
+    if (qty && Math.abs(r2(qty * price) - amount) < 0.005) { detail.Qty = qty; detail.UnitPrice = price } else { detail.Qty = 1; detail.UnitPrice = amount }
+    lines.push({ DetailType: 'SalesItemLineDetail', Amount: amount, Description: String(l.description || '').slice(0, 4000), SalesItemLineDetail: detail })
+  }
+  const body = { DocNumber: String(p.doc_number).slice(0, 21), TxnDate: p.date, CustomerRef: { value: custId }, Line: lines,
+    PrivateNote: ['From the Lifted Farms app', p.memo].filter(Boolean).join(' · ').slice(0, 4000) }
+  if (p.memo) body.CustomerMemo = { value: String(p.memo).slice(0, 1000) }
+  // already there? (sent before, or typed in by hand with the same number): link it, never make a second one
+  const existing = (await query(c, `select * from CreditMemo where DocNumber = '${esc(body.DocNumber)}'`)).CreditMemo?.[0]
+  let cm, mode = 'created', note = null
+  if (existing) {
+    cm = existing; mode = 'linked'
+    note = r2(existing.TotalAmt) !== r2(p.total) ? `${body.DocNumber} was already in QuickBooks with a different total ($${existing.TotalAmt}). Linked it without changing it.` : `${body.DocNumber} was already in QuickBooks. Linked it.`
+  } else {
+    cm = (await qbo(c, 'POST', 'creditmemo', body)).CreditMemo
+  }
+  await rpc('cm_record_push', { p_id: cmId, p_env: ENV, p_qbo_id: String(cm.Id), p_doc: cm.DocNumber || body.DocNumber, p_total: Number(cm.TotalAmt), p_error: null, p_by: by })
+  return { qbo_id: cm.Id, doc_number: cm.DocNumber, total: cm.TotalAmt, mode, note }
+}
+/** the credit was already made in QuickBooks by hand under another number: link it (nothing changes in QuickBooks) */
+export async function linkCreditMemo(c, cmId, docNumber, by) {
+  const num = String(docNumber || '').trim()
+  if (!num) throw new Error('Which QuickBooks credit memo number?')
+  const p = await rpc('cm_payload', { p_id: cmId })
+  if (p.acct_status === 'sent') throw new Error(`${p.doc_number} is already in QuickBooks.`)
+  const found = (await query(c, `select * from CreditMemo where DocNumber = '${esc(num)}'`)).CreditMemo || []
+  if (!found.length) throw new Error(`QuickBooks${ENV === 'sandbox' ? ' (sandbox)' : ''} has no credit memo numbered ${num}.`)
+  if (found.length > 1) throw new Error(`QuickBooks has ${found.length} credit memos numbered ${num}.`)
+  const q = found[0]
+  const taken = await table(`credit_memos?qbo_env=eq.${ENV}&qbo_id=eq.${encodeURIComponent(q.Id)}&id=neq.${cmId}&select=cm_number`)
+  if (taken && taken.length) throw new Error(`QuickBooks credit memo ${num} is already linked to ${taken[0].cm_number}.`)
+  await rpc('cm_record_push', { p_id: cmId, p_env: ENV, p_qbo_id: String(q.Id), p_doc: q.DocNumber, p_total: Number(q.TotalAmt), p_error: null, p_by: `${by || 'someone'} (linked to QuickBooks #${q.DocNumber})` })
+  const warn = r2(q.TotalAmt) !== r2(p.total) ? `Totals differ: QuickBooks $${r2(q.TotalAmt).toFixed(2)}, app $${r2(p.total).toFixed(2)}.` : null
+  return { linked: true, qbo: { qbo_id: String(q.Id), doc_number: q.DocNumber, total: Number(q.TotalAmt), customer: q.CustomerRef?.name ?? null }, warning: warn }
+}
+
 // ---------- payments: balances back from QuickBooks ----------
 export async function syncBalances(c) {
   const since = new Date(Date.now() - 120 * 86400000).toISOString()
@@ -676,5 +728,18 @@ export async function autoPush(c, budgetMs = 50000) {
       if (e.status === 401) break   // QuickBooks refused the login: stop here, don't try the rest with it
     }
   }
-  return { due: (due ?? []).length, sent, failed, busy }
+  // credit memos from returns (159), same 30 minutes and the same on / off switch
+  let cmSent = 0, cmFailed = 0
+  const cmDue = await rpc('cm_autopush_due', {}).catch(() => [])
+  for (const id of cmDue ?? []) {
+    if (Date.now() - t0 > budgetMs) break
+    try { await pushCreditMemo(c, Number(id), 'auto (30 min after it was made)'); cmSent++ }
+    catch (e) {
+      if (e instanceof Busy) continue
+      cmFailed++
+      await rpc('cm_record_push', { p_id: Number(id), p_env: ENV, p_qbo_id: null, p_doc: null, p_total: null, p_error: String(e.message || e) + (e.tid ? ` (QuickBooks ref ${e.tid})` : ''), p_by: 'auto' }).catch(() => {})
+      if (e.status === 401) break
+    }
+  }
+  return { due: (due ?? []).length, sent, failed, busy, credit_memos: { due: (cmDue ?? []).length, sent: cmSent, failed: cmFailed } }
 }

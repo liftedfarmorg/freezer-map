@@ -8,7 +8,7 @@
 //   { action: 'nursery_ship', ref }         the nursery's Ship: the METRC transfer now (taken back if METRC refuses)
 //   { action: 'manifest_pdf', license, manifest } the METRC manifest PDF (base64)
 //   { action: 'incoming', license?, module? } incoming METRC deliveries for our licenses (Inbound / Receiving per module)
-//   { action: 'inbound_receive', license, delivery_id }  receive a delivery in METRC (Live) and bring it into the app
+//   { action: 'inbound_receive', license, delivery_id, return_id? }  receive a delivery in METRC (Live) and bring it into the app (a return: its credit memo too)
 //   { action: 'proc_returns' }               processor returns waiting (Processing > Inbound): incoming deliveries from processors,
 //                                            each package linked to its wet lot when METRC's source package is one of ours
 //   { action: 'proc_return_receive', license, delivery_id, lines: [{ tag, slot_id, our_tag, reweigh }] }
@@ -153,6 +153,15 @@ export default async function handler(req, res) {
         const m = pal.find(x => up(x.package_tag) === up(p.tag))
         if (m) p.app = { id: m.id, code: m.code, status: m.status, lbs: m.current_weight, site: m.received_site }
       }
+      // returns (159): packages we shipped on an open return (or made from one), or from that customer's license
+      const rrows = out.flatMap(d => (d.items ?? []).map(p => ({ tag: p.tag, source_labels: p.source_labels ?? [], from_license: d.from_license ?? null })))
+      const rm = rrows.length ? await rpc('returns_match', { p_rows: rrows }).catch(() => []) : []
+      for (const d of out) {
+        const hits = (d.items ?? []).map(p => { const h = (rm ?? []).find(x => x.tag === p.tag); if (h) p.return = h; return h }).filter(Boolean)
+        const firm = hits.filter(h => h.how !== 'customer')
+        const pick = firm[0] ?? hits[0]
+        if (pick) d.return = { id: pick.return_id, rma: pick.rma, customer: pick.customer, sure: firm.length > 0 }
+      }
       const isPlants = d => (d.items ?? []).length > 0 && (d.items ?? []).every(p => !/^(lb|lbs|pound|g|gram|kg|oz)/i.test(p.uom ?? '') || /clone|immature|seed|plant/i.test(p.item ?? ''))
       const keep = out.filter(d => d.error || !mod || (mod === 'nursery' ? d.site === '1PN'
         : mod === 'cultivation' ? d.site !== '1PN' && isPlants(d) : d.site !== '1PN' && !isPlants(d)))
@@ -177,14 +186,21 @@ export default async function handler(req, res) {
       const left = (await incoming({}, lic, false)).some(x => Number(x.delivery_id) === Number(d.delivery_id))
       if (left) return send(res, 200, { live, ok: false, info: 'Sent, but METRC still shows the delivery as incoming. Check it in METRC.' })
       const LBS = /^(lb|lbs|pound)/i
-      const rows = d.items.map(p => ({ tag: p.tag, item: p.item, strain: p.strain, lbs: LBS.test(p.uom ?? '') ? Number(p.qty) : null }))
+      const rows = d.items.map(p => ({ tag: p.tag, item: p.item, strain: p.strain, lbs: LBS.test(p.uom ?? '') ? Number(p.qty) : null, source_labels: p.source_labels ?? [] }))
       const app = await rpc('inbound_apply', { p_site: l.site, p_license: lic, p_manifest: d.manifest, p_from: d.from, p_rows: rows, p_by: me.email })
+      // a return (159): the packages go on its lines (kept as returned, never harvest) and its credit memo is made now
+      let ret = null
+      if (Number(body.return_id) > 0) {
+        try { ret = await rpc('return_receive', { p_return: Number(body.return_id), p_manifest: d.manifest, p_rows: rows, p_by: me.email }) }
+        catch (e) { ret = { error: String(e.message || e).slice(0, 300) } }
+      }
       await db(`metrc_app_transfers?delivery_id=eq.${Number(d.delivery_id)}`, { method: 'PATCH', body: JSON.stringify({ state: 'received', received_at: new Date().toISOString(), received_by: me.email }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
       const sibs = await db(`comp_metrc_actions?select=id&kind=eq.receive&status=in.(todo,error)&tag=in.(${d.items.map(p => enc(p.tag)).join(',')})`)
       if (sibs.length) await rpc('metrc_close_siblings', { p_ids: sibs.map(x => x.id), p_by: me.email, p_note: `Received manifest ${d.manifest} (Inbound)` })
       await db('events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_email: me.email, type: 'inbound_delivery',
         note: `Manifest ${d.manifest} from ${d.from}`, details: { license: lic, site: l.site, manifest: d.manifest, from: d.from, packages: d.items.length, request, app } }) }).catch(() => {})
-      return send(res, 200, { live, ok: true, info: `Received manifest ${d.manifest} in METRC. App: ${app.in} back in, ${app.new} new, ${app.skipped} not pallets.`, app })
+      const retInfo = ret ? (ret.error ? ` Return: ${ret.error}` : ` Return ${ret.rma}: ${ret.received} packages${ret.credit_memo ? `, credit memo ${ret.credit_memo} ($${Number(ret.total).toFixed(2)}) goes to QuickBooks in 30 minutes` : ''}.`) : ''
+      return send(res, 200, { live, ok: true, info: `Received manifest ${d.manifest} in METRC. App: ${app.in} back in, ${app.new} new, ${app.skipped} not pallets.${retInfo}`, app, return: ret })
     }
     if (body.action === 'proc_returns') {
       // product deliveries to OHR / GVR from a processor (its license on Processors), or with a package that came from one

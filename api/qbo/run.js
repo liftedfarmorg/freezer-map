@@ -1,5 +1,5 @@
-// Accounting actions: { action: 'status' | 'push' | 'link' | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
-import { Busy, ENV, caller, classId, companyName, connection, itemId, linkInvoice, missingSetup, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
+// Accounting actions: { action: 'status' | 'push' | 'link' | 'push_cm' | 'link_cm' (credit_memo_id) | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
+import { Busy, ENV, caller, classId, companyName, connection, itemId, linkCreditMemo, linkInvoice, missingSetup, pushCreditMemo, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
 
 export const config = { maxDuration: 60 }
 
@@ -34,6 +34,21 @@ export default async function handler(req, res) {
         if (e instanceof Busy) return send(res, 409, { error: e.message })
         const msg = String(e.message || e) + (e.tid ? ` (QuickBooks ref ${e.tid})` : '')
         await rpc('acct_record_push', { p_inv: id, p_env: ENV, p_qbo_id: null, p_doc: null, p_total: null, p_balance: null, p_error: msg, p_by: me.email }).catch(() => {})
+        return send(res, 400, { error: msg })
+      }
+    }
+    if (action === 'push_cm' || action === 'link_cm') {
+      // credit memos from returns (159): Send now, or link one already made in QuickBooks by hand
+      if (!edit) return send(res, 403, { error: 'You can only view Accounting' })
+      const id = Number(body.credit_memo_id)
+      if (!id) return send(res, 400, { error: 'Which credit memo?' })
+      const c = await connection()
+      if (action === 'link_cm') return send(res, 200, { env: ENV, ...(await linkCreditMemo(c, id, body.qbo_doc, me.email)) })
+      try { return send(res, 200, { env: ENV, ...(await pushCreditMemo(c, id, me.email)) }) }
+      catch (e) {
+        if (e instanceof Busy) return send(res, 409, { error: e.message })
+        const msg = String(e.message || e) + (e.tid ? ` (QuickBooks ref ${e.tid})` : '')
+        await rpc('cm_record_push', { p_id: id, p_env: ENV, p_qbo_id: null, p_doc: null, p_total: null, p_error: msg, p_by: me.email }).catch(() => {})
         return send(res, 400, { error: msg })
       }
     }

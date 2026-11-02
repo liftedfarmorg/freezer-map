@@ -7,9 +7,11 @@ import { metrcRun } from './metrcCall'
 // knows come back into inventory at the site (Needs a spot), new ones are added and flagged to check strain and product.
 
 interface Item { id: number; tag: string; item: string | null; strain: string | null; qty: number; uom: string; state: string | null
-  app?: { id: number; code: string; status: string; lbs: number | null; site: string | null } }
+  app?: { id: number; code: string; status: string; lbs: number | null; site: string | null }
+  return?: { return_id: number; rma: string; how: string } }
 interface Delivery { license: string; site: string; transfer_id?: number; delivery_id?: number; manifest?: string; from_license?: string; from?: string; type?: string
-  departed?: string; arrival?: string; driver?: string; vehicle?: string; packages?: number; items?: Item[]; error?: string }
+  departed?: string; arrival?: string; driver?: string; vehicle?: string; packages?: number; items?: Item[]; error?: string
+  return?: { id: number; rma: string; customer: string; sure: boolean } }
 
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
 const STATUS: Record<string, string> = { in_transit: 'on a load', at_processor: 'at processor', shipped: 'shipped', unslotted: 'needs a spot', in_freezer: 'in a freezer', depleted: 'used up', merged: 'merged', archived: 'archived' }
@@ -20,6 +22,9 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
   const [live, setLive] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
+  // returns (159): which return a delivery is received against (0 = not a return)
+  const [retFor, setRetFor] = useState<Record<string, number>>({})
+  const retOf = (d: Delivery) => retFor[`${d.license}${d.delivery_id}`] ?? (d.return?.id ?? 0)
   const load = async () => {
     if (!sb) return
     setBusy('Asking METRC…')
@@ -29,11 +34,12 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
   useEffect(() => { load() }, [])
   async function receive(d: Delivery) {
     if (!sb || !d.delivery_id) return
-    if (!confirm(live ? `Receive manifest ${d.manifest} from ${d.from} in METRC (${d.items?.length ?? d.packages} packages) and bring it into the app?`
+    const rid = retOf(d)
+    if (!confirm(live ? `Receive manifest ${d.manifest} from ${d.from} in METRC (${d.items?.length ?? d.packages} packages) and bring it into the app?${rid && d.return ? `\n\nAs return ${d.return.rma}: the packages go back into inventory as returned and a credit memo is made for ${d.return.customer}.` : ''}`
       : `Dry run: check that METRC would take manifest ${d.manifest}? (Nothing changes until Compliance goes Live.)`)) return
     setBusy(`Receiving ${d.manifest}…`)
     try {
-      const r = await metrcRun<{ ok: boolean; info: string }>(sb, { action: 'inbound_receive', license: d.license, delivery_id: d.delivery_id, module })
+      const r = await metrcRun<{ ok: boolean; info: string }>(sb, { action: 'inbound_receive', license: d.license, delivery_id: d.delivery_id, module, ...(rid ? { return_id: rid } : {}) })
       flash(r.info, !r.ok)
       if (live && r.ok) { onChanged(); await load() }
     } catch (e) { flash(e instanceof Error ? e.message : String(e), true) } finally { setBusy(null) }
@@ -53,7 +59,11 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
         <div className="row between wrap">
           <div><b>{d.manifest}</b> <span className="muted">from</span> <b>{d.from}</b> <span className="muted small">{d.from_license}</span>
             <div className="muted small">to {d.site} {d.license} · {d.type ?? ''} · left {when(d.departed)}{d.arrival ? ` · due ${when(d.arrival)}` : ''}{d.driver ? ` · ${d.driver}` : ''}{d.vehicle ? ` · ${d.vehicle}` : ''}</div>
-            <div className="small">{d.items?.length ?? d.packages} packages{known ? ` · ${known} the app knows` : ''}</div></div>
+            <div className="small">{d.items?.length ?? d.packages} packages{known ? ` · ${known} the app knows` : ''}</div>
+            {d.return && <div className="row small" style={{ gap: 6, marginTop: 4 }}><span className="pill m-warn">Return {d.return.rma}</span>
+              <span className="muted">{d.return.customer}{d.return.sure ? ' · our tags' : ' · from their license'}</span>
+              <select value={retOf(d)} onChange={e => setRetFor(m => ({ ...m, [`${d.license}${d.delivery_id}`]: Number(e.target.value) }))}>
+                <option value={d.return.id}>Receive as {d.return.rma}</option><option value={0}>Not a return</option></select></div>}</div>
           <div className="row">
             <button className="ghost small" onClick={() => setOpen(o => o === d.delivery_id ? null : d.delivery_id ?? null)}>{open === d.delivery_id ? 'Hide' : 'Packages'}</button>
             <button className="primary small" disabled={!!busy} onClick={() => receive(d)}>{live ? 'Receive' : 'Check'}</button>
@@ -61,7 +71,7 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
         </div>
         {open === d.delivery_id && <div className="tablewrap"><table className="ct"><thead><tr><th>Tag</th><th>Item</th><th>Qty</th><th>In the app</th></tr></thead>
           <tbody>{(d.items ?? []).map(i => <tr key={i.tag}><td className="mono small">{i.tag}</td><td>{i.item}</td><td>{i.qty} {i.uom}</td>
-            <td className="small">{i.app ? <>{i.app.code} <span className="muted">({STATUS[i.app.status] ?? i.app.status})</span></> : /^(lb|lbs)/i.test(i.uom) ? <span className="muted">new: added on receive</span> : <span className="muted">plant package (METRC only)</span>}</td></tr>)}</tbody></table></div>}
+            <td className="small">{i.return && <span className="pill m-warn">{i.return.rma}</span>} {i.app ? <>{i.app.code} <span className="muted">({STATUS[i.app.status] ?? i.app.status})</span></> : /^(lb|lbs)/i.test(i.uom) ? <span className="muted">new: added on receive</span> : <span className="muted">plant package (METRC only)</span>}</td></tr>)}</tbody></table></div>}
       </div>
     })}
   </div>
