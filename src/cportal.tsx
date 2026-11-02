@@ -135,6 +135,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [editNew, setEditNew] = useState<{ k: string; s: string; y: number; lbs: number }[]>([])
   const [menuOpen, setMenuOpen] = useState<string[]>([])
   const [editFrom, setEditFrom] = useState<Screen>('reserves')
+  const [reviewFrom, setReviewFrom] = useState<'menu' | 'edit'>('edit')
   const [reqNote, setReqNote] = useState('')
   const [lastReq, setLastReq] = useState<Change[]>([])
   const [q, setQ] = useState('')
@@ -529,21 +530,21 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {items.map(x => x.el)}
           {items.length === 0 && <p className={c('meta')} style={{ margin: '0 4px' }}>No reserves match "{editQ}".</p>}
           <button className={c('btn ghost')} style={{ height: 48, border: '1.5px dashed #9aa69e', background: 'transparent', color: 'var(--teal-dk)', fontSize: 15 }} onClick={() => go('menu')}>+ Add a strain from the open menu</button>
-          <label className={c('field')} style={{ marginTop: 4 }}>Note to Lifted (optional)<input type="text" value={reqNote} onChange={e => setReqNote(e.target.value)} /></label>
         </main>
         <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={cancel}>Cancel</button>
-          <button className={c('btn')} style={{ flex: 2 }} disabled={busy || !changes.length || anyResErr} onClick={() => go('reqReview')}>{anyResErr ? 'Fix the red lines' : changes.length ? 'Review changes' : 'No changes yet'}</button></div>
+          <button className={c('btn')} style={{ flex: 2 }} disabled={busy || !changes.length || anyResErr} onClick={() => { setReviewFrom('edit'); go('reqReview') }}>{anyResErr ? 'Fix the red lines' : changes.length ? 'Review changes' : 'No changes yet'}</button></div>
       </div>
     )
   }
 
   function ReqReviewScreen() {
-    if (!changes.length) return <div className={c('screen')}><header className={c('hdr')}>{back('edit', 'Keep editing')}<h1>Review your request</h1></header><p className={c('loading')}>No changes yet.</p></div>
+    const backTo: Screen = reviewFrom
+    if (!changes.length) return <div className={c('screen')}><header className={c('hdr')}>{back(backTo, 'Keep editing')}<h1>Review your request</h1></header><p className={c('loading')}>No changes yet.</p></div>
     const net = changes.reduce((a, ch) => a + ch.to - ch.from, 0), sorted = [...changes].sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const sign = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n))
     return (
       <div className={c('screen')}>
-        <header className={c('hdr')}>{back('edit', 'Keep editing')}<h1>Review your request</h1><p className={c('sub')}>Nothing is sent until you tap Send request.</p></header>
+        <header className={c('hdr')}>{back(backTo, 'Keep editing')}<h1>Review your request</h1><p className={c('sub')}>Nothing is sent until you tap Send request.</p></header>
         <main className={c('main')}>
           <section className={c('card')}>
             {sorted.map(ch => <div key={ch.s + ch.y} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}><p className={c('name')}>{ch.s} {yrTag(ch.y)} {ch.isNew && <span className={c('chip c-ship')}>New</span>}</p>
@@ -553,10 +554,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <p className={c('meta')}>{plural(changes.length, 'strain')} · reserves go from {fmt(totals.res)} to {fmt(totals.res + net)} lbs</p></div>
               <b className={c('num')} style={{ fontSize: 18 }}>{sign(net)} lbs</b></div>
           </section>
-          {reqNote && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14 }}><span className={c('meta')} style={{ display: 'inline' }}>Note</span> {reqNote}</section>}
+          <label className={c('field')}>Note to Lifted (optional)<input type="text" value={reqNote} onChange={e => setReqNote(e.target.value)} /></label>
           <div className={c('note gold')}>Lifted reviews each change and we'll email you when it's decided. Until then they show as <b>waiting</b>, and the lbs stay open on the menu for everyone.</div>
         </main>
-        <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => go('edit')}>Keep editing</button>
+        <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => go(backTo)}>Keep editing</button>
           <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || anyResErr} onClick={sendReq}>{busy ? 'Sending…' : 'Send request'}</button></div>
       </div>
     )
@@ -632,7 +633,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             })}
           </section>
         </main>
-        {contract ? ((nNew || nChg) ? <button className={c('tray')} disabled={anyResErr} onClick={() => { setEditFrom('menu'); go('edit') }}>
+        {contract ? ((nNew || nChg) ? <button className={c('tray')} disabled={anyResErr} onClick={() => { setReviewFrom('menu'); go('reqReview') }}>
           <span className={c('grow')}><b style={{ fontSize: 16 }}>Reserve request</b><small>{parts || 'Set lbs'}</small></span><span className={c('go')}>{anyResErr ? 'Fix red lines' : 'Review'}</span></button> : null)
           : <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>}
       </div>
