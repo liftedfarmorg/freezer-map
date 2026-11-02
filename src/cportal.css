@@ -161,3 +161,5 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-loading { padding: 40px 20px; color: var(--muted); text-align: center; }
 .cp .cp-tray[disabled] { opacity: .6; }
 @media (min-width: 600px) { .cp .cp-hdr { border-radius: 0 0 24px 24px; } }
+.cp .cp-cust { margin: 22px 0 0; font-size: 24px; font-weight: 700; color: #fff; line-height: 1.2; letter-spacing: -.2px; text-wrap: balance; }
+.cp .cp-cust + .cp-bal { margin-top: 10px; }

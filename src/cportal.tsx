@@ -391,7 +391,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       <div className={c('screen')}>
         <header className={c('hdr home-hdr')}>
           <div className={c('top')}><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /><button className={c('iconbtn')} onClick={() => setAcct(true)} aria-label="Account settings">{I.user}</button></div>
-          <p className={c('sub')} style={{ marginTop: 22, fontSize: 15 }}>{me.customer_name}</p>
+          <p className={c('cust')}>{me.customer_name}</p>
           <p className={c('bal')}>{balance ? money2(balance.amount) : '—'}</p>
           {balance && balance.past_due > 0
             ? <p className={c('sub')} style={{ color: '#f9a8b8' }}>Balance · {money2(balance.past_due)} past due</p>
@@ -921,7 +921,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     <div className="cp">
       <div className={c('col')}>
         {!d ? <div className={c('screen')}><header className={c('hdr home-hdr')}><div className={c('top')}><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></div>
-          <p className={c('sub')} style={{ marginTop: 22, fontSize: 15 }}>{me.customer_name}</p></header>
+          <p className={c('cust')}>{me.customer_name}</p></header>
           <p className={c('loading')}>{loadErr ? <>Couldn't load your account: {loadErr} <button className={c('linkish')} onClick={reload}>Try again</button></> : 'Loading…'}</p></div>
           : SCREENS[screen]()}
       </div>
