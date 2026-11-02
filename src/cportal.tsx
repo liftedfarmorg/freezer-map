@@ -142,6 +142,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [editQ, setEditQ] = useState('')
   const [orderQ, setOrderQ] = useState('')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
+  const [notRes, setNotRes] = useState(false)
 
   // order form
   const [ord, setOrd] = useState<Record<string, number>>({})
@@ -583,7 +584,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   function MenuScreen() {
     const ql = q.toLowerCase()
     const shown = menuItems.filter(m => m.open > 0 || (contract && !!resRow(m.k)))
-    const list = shown.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear)).sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
+    const list = shown.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear) && (!notRes || !resRow(m.k))).sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const total = menuItems.reduce((a, m) => a + m.open, 0)
     const years = [...new Set(shown.map(m => m.y))].sort((a, b) => b - a)
     // strains just picked with no lbs yet aren't errors here (their red line only shows once a number is typed)
@@ -601,8 +602,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
         </header>
         <main className={c('main')} style={{ paddingTop: 12 }}>
-          {years.length > 1 && <div className={c('filters')} role="group" aria-label="Filter by harvest year">
-            {(['all', ...years] as ('all' | number)[]).map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(y)}>{y === 'all' ? 'All' : String(y)}</button>)}</div>}
+          {(years.length > 1 || contract) && <div className={c('filters')} role="group" aria-label="Filter the menu">
+            <button aria-pressed={menuYear === 'all' && !notRes} onClick={() => { setMenuYear('all'); setNotRes(false) }}>All</button>
+            {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
+            {contract && <button aria-pressed={notRes} onClick={() => setNotRes(!notRes)}>Not reserved</button>}</div>}
           <section className={c('card')}>
             <div className={c(`mg mg-head ${contract ? '' : 'nc'}`)}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span>{contract && <span style={{ textAlign: 'right' }}>Your reserve</span>}</div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 14 }}>{menuItems.length ? 'Nothing matches.' : 'Nothing on the menu right now.'}</p>}
