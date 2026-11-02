@@ -174,8 +174,10 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
           <section key={l.id} className="dcard fline">
             <div className="dcard-h">
               <h3>{l.strain}{l.product && l.product !== 'fresh_frozen' ? <span className="pill prod">{PRODUCT_LABEL[l.product]}</span> : null}{l.crop_year && l.crop_year !== new Date().getFullYear() ? <span className="pill old">{l.crop_year}</span> : null}</h3>
-              <span className={g === 0 ? 'muted' : diff === 0 ? 'ok-t' : 'warn-t'}><b>{n0(g)}</b> of {n0(Number(l.lbs))} lbs{l.ordered_lbs != null ? <span className="muted"> (ordered {n0(Number(l.ordered_lbs))})</span> : null}
-                {g > 0 && diff !== 0 ? <span> · {diff > 0 ? `${n0(diff)} over` : `${n0(-diff)} short`}</span> : g > 0 ? ' ✓' : ''}</span>
+              {o.state === 'shipped' && !l.picks.length
+                ? <span className="ok-t"><b>{n0(Number(l.lbs))}</b> lbs shipped</span>   /* history (Roshi / QuickBooks): no pallets were assigned in the app */
+                : <span className={g === 0 ? 'muted' : diff === 0 ? 'ok-t' : 'warn-t'}><b>{n0(g)}</b> of {n0(Number(l.lbs))} lbs{l.ordered_lbs != null ? <span className="muted"> (ordered {n0(Number(l.ordered_lbs))})</span> : null}
+                {g > 0 && diff !== 0 ? <span> · {diff > 0 ? `${n0(diff)} over` : `${n0(-diff)} short`}</span> : g > 0 ? ' ✓' : ''}</span>}
             </div>
             <div className="dlist">
               {l.picks.map(pk => {
