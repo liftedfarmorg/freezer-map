@@ -35,6 +35,7 @@ export function FulfillView(props: FulfillProps) {
   const openId = props.setOpenId ? (props.openId ?? null) : ownId
   const setOpenId = props.setOpenId ?? setOwnId
   const [q, setQ] = useState('')
+  const [allShipped, setAllShipped] = useState(false)
   useBack(openId != null, () => setOpenId(null))
   if (props.err) return <div className="list fulfill"><h2>Fulfillment</h2><div className="warnbox">{props.err}</div></div>
   if (!orders) return <p className="muted">Loading…</p>
@@ -49,20 +50,24 @@ export function FulfillView(props: FulfillProps) {
       <div className="row toolbar"><input className="search" type="search" placeholder="Customer, SO # or strain" value={q} onChange={e => setQ(e.target.value)} /></div>
       {!shown.length && <p className="muted">No open orders.</p>}
       {GROUPS.map(g => {
-        const os = shown.filter(o => o.state === g)
-        if (!os.length) return null
+        const all = shown.filter(o => o.state === g)
+        if (!all.length) return null
+        // shipped: newest first; 10 unless searching or "Show all"
+        if (g === 'shipped') all.sort((a, b) => (b.shipped_date ?? b.order_date ?? '').localeCompare(a.shipped_date ?? a.order_date ?? '') || b.id - a.id)
+        const cut = g === 'shipped' && !ql && !allShipped && all.length > 10
+        const os = cut ? all.slice(0, 10) : all
         return (
           <section key={g}>
-            <h3 className="grouph">{STATE_LABEL[g]} <span className="muted">{os.length}</span></h3>
+            <h3 className="grouph">{STATE_LABEL[g]} <span className="muted">{all.length}</span></h3>
             {os.map(o => {
               const want = orderLbs(o), have = orderGot(o)
               const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
               return (
                 <button key={o.id} className="li setrow forder" onClick={() => { setOpenId(o.id); scrollTop() }}>
                   <div className="grow">
-                    <div><b>{o.customer}</b> <span className="muted">{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? ' · portal' : o.source === 'roshi' ? ' · Roshi' : ''}</span></div>
+                    <div><b>{o.customer}</b> <span className="muted">{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? ' · portal' : o.source === 'roshi' ? ' · Roshi' : o.source === 'qbo' ? ' · QuickBooks' : ''}</span></div>
                     <div className="muted">{o.lines.length} strains · {n0(want)} lbs{o.wanted_date ? <> · <span className={late ? 'bad-t' : ''}>wanted {fmt(o.wanted_date)}</span></> : o.order_date ? ` · ordered ${fmt(o.order_date)}` : ''}
-                      {o.stop ? ` · ${o.stop.load} ${fmt(o.stop.load_date)}` : ''}</div>
+                      {o.stop ? ` · ${o.stop.load} ${fmt(o.stop.load_date)}` : g === 'shipped' && o.shipped_date ? ` · shipped ${fmt(o.shipped_date)}` : ''}</div>
                     {(g === 'open' || g === 'needs_ok') && <Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} />}
                   </div>
                   <span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
@@ -71,6 +76,7 @@ export function FulfillView(props: FulfillProps) {
                 </button>
               )
             })}
+            {cut && <button className="ghost small" onClick={() => setAllShipped(true)}>Show all {all.length} shipped</button>}
           </section>
         )
       })}
@@ -140,7 +146,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
       <h2>{o.customer} <span className="muted">{o.so ?? `Order #${o.id}`}</span></h2>
       <div className="row wrap">
         <span className={`pill fs-${o.state}`}>{STATE_LABEL[o.state]}</span>
-        <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `wanted ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : ''].filter(Boolean).join(' · ')}</span>
+        <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `wanted ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : o.source === 'qbo' ? 'from QuickBooks' : ''].filter(Boolean).join(' · ')}</span>
       </div>
       {o.notes && <p className="muted">"{o.notes}"</p>}
       {editable && <p className="muted small-note scanhint">Tap Scan and scan a pallet's tag to assign it to the line it matches.</p>}
@@ -263,7 +269,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
         {o.state === 'loaded' && o.stop && <div className="row between wrap"><span>On <b>{o.stop.load}</b> <span className="muted">· {fmt(o.stop.load_date)} · {o.stop.load_status.replace('_', ' ')}</span></span>
           <div className="row"><button className="ghost small" onClick={() => openLoad(o.stop!.load_id)}>Open load</button>
             {(o.stop.load_status === 'planning' || o.stop.load_status === 'loading' || o.stop.load_status === 'cancelled') && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.orderOffLoad(o.id), 'Taken off the load')}>Take off load</button>}</div></div>}
-        {o.state === 'shipped' && <span>Shipped {fmt(o.shipped_date)}{o.stop ? ` on ${o.stop.load}` : ''}{o.stop?.stop_status === 'delivered' ? ' · Delivered' : ''}{o.stop?.manifest ? ` · manifest ${o.stop.manifest}` : ''}.</span>}
+        {o.state === 'shipped' && <span>Shipped {fmt(o.shipped_date)}{o.stop ? ` on ${o.stop.load}` : ''}{o.stop?.stop_status === 'delivered' ? ' · Delivered' : ''}{(o.stop?.manifest || o.inv_manifest) ? ` · METRC manifest ${o.stop?.manifest || o.inv_manifest}` : ''}{o.inv ? ` · invoice ${o.inv}` : ''}.</span>}
         {combine && <Combine o={o} line={combine} pallets={pallets} heldBy={heldBy} onLoad={onLoad} inRun={inRun} where={where} rank={rank} canon={canon} busy={busy}
           close={() => setCombine(null)}
           submit={(src, tag) => run(() => backend.combineForLine(combine.id, src, tag), `Combined into one ${combine.strain} package${tag ? '' : ' (tag pending)'}`).then(() => setCombine(null))} />}

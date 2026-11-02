@@ -195,6 +195,8 @@ export interface FOrder {
   lines: FLine[]
   /** 089: how complete it is even while on a load (open / needs_ok / ready); shipping on the order */
   fill?: 'open' | 'needs_ok' | 'ready'; shipping?: number | null; shipping_quoted?: boolean
+  /** 156: invoice number and the METRC manifest on it (history orders have no load) */
+  inv?: string | null; inv_manifest?: string | null
 }
 
 /** Sales documents (027) */
