@@ -155,7 +155,8 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   const locked = done && !editing
   const pl = h.planting_id ? c.planting.get(h.planting_id) : undefined
   const trial = !!pl?.trial || c.field.get(h.field_id ?? -1)?.kind === 'trials'
-  const prefix = trial ? 'T' : c.site.get(h.site)?.pallet_prefix ?? 'P'
+  // 158: combine harvests make Dry Biomass pallets, numbered B1, B2...
+  const prefix = h.kind === 'combine' ? 'B' : trial ? 'T' : c.site.get(h.site)?.pallet_prefix ?? 'P'
   // plants still standing in the planting (before this harvest)
   const leftBefore = pl ? Math.max((pl.plants ?? 0) - (pl.plant_loss ?? 0) - sum(d.harvests.filter(x => x.planting_id === pl.id && x.id !== h.id && x.status === 'done' && x.kind === h.kind).map(x => x.plants_harvested ?? 0)), 0) : null
   const rawLbs = sum(raw.map(w => w.lbs)) || sum(h.raw_bins)
@@ -172,7 +173,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
       {metrc && metrc.open > 0 && <p className="cnote">Waiting on METRC: {metrc.open} step{metrc.open === 1 ? '' : 's'} on the Compliance to-do list{metrc.due ? `, next due ${new Date(metrc.due).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}.</p>}
       {!locked && (h.kind === 'ff' || h.kind === 'dry') && <Rename h={h} d={d} api={api} busy={busy} run={run} />}
 
-      {(h.kind === 'ff' || h.kind === 'dry') && <Plants h={h} api={api} busy={busy} done={locked} run={run} leftBefore={leftBefore} />}
+      {(h.kind === 'ff' || h.kind === 'dry' || h.kind === 'combine') && <Plants h={h} api={api} busy={busy} done={locked} run={run} leftBefore={leftBefore} />}
 
       {h.kind === 'ff' && <>
         {(h.stage === 'harvesting' || done) && <HarvestDayCard site={h.site} day={h.stage === 'harvesting' ? today() : h.harvested_on ?? today()} api={api} flash={flash} />}
@@ -198,15 +199,19 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
       </>}
 
       {h.kind === 'combine' && <>
-        <div className="ckpis hk"><div><b>{n0(sum(totes.map(w => w.lbs)))}</b><span>lbs dry{k.estBiomass ? ` of ~${n0(k.estBiomass)}` : ''}</span></div><div><b>{totes.length}</b><span>totes</span></div></div>
-        <Weights title="Totes" kind="tote" rows={totes} busy={busy} done={locked} unit="tote" site={h.site} withTag
-          onAdd={(lbs, tag) => run(() => api.logWeight(h.id, 'tote', lbs, tag), `Tote ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')} />
+        <div className="ckpis hk"><div><b>{n0(sum(pallets.map(p => p.og_weight)) + sum(totes.map(w => w.lbs)))}</b><span>lbs Dry Biomass{k.estBiomass ? ` of ~${n0(k.estBiomass)}` : ''}</span></div>
+          <div><b>{pallets.length}</b><span>pallets ({pallets.filter(p => p.pushed !== false).length} pushed)</span></div></div>
+        <PalletLog h={h} api={api} busy={busy} done={locked} pallets={pallets} run={run} prefix={prefix} />
+        {!locked && <BulkPallets h={h} api={api} busy={busy} run={run} prefix={prefix} pallets={pallets} />}
+        <p className="cnote">Dry Biomass pallets (B numbers) go to the freezers or reefers like fresh frozen. Pushing sends the plants and the pallet weight to METRC as the harvest, and each pallet becomes a Dry Biomass package (SU before Sept 1, FL after).</p>
+        {totes.length > 0 && <Weights title="Totes (logged before Dry Biomass pallets)" kind="tote" rows={totes} busy={busy} done={true} unit="tote" site={h.site} withTag
+          onAdd={(lbs, tag) => run(() => api.logWeight(h.id, 'tote', lbs, tag), `Tote ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')} />}
       </>}
 
       {h.kind === 'strip' && <StripLog h={h} api={api} busy={busy} done={locked} dry={dry} run={run} estDry={k.estBiomass} />}
 
       {!done && (h.kind !== 'strip' || h.stage === 'drying') && <Finish h={h} busy={busy} run={run} api={api} back={back} raw={raw} pallets={pallets}
-        ready={h.kind === 'ff' ? pallets.length > 0 : h.kind === 'dry' ? raw.length > 0 || h.raw_bins.length > 0 : h.kind === 'combine' ? totes.length > 0 : dry.length > 0} />}
+        ready={h.kind === 'ff' ? pallets.length > 0 : h.kind === 'dry' ? raw.length > 0 || h.raw_bins.length > 0 : h.kind === 'combine' ? pallets.length > 0 || totes.length > 0 : dry.length > 0} />}
       {done && !canFix && <p className="cnote">Finished. Only a Production Admin can change a finished harvest.</p>}
       {done && canFix && !editing && <div className="row hfin"><button className="ghost" onClick={() => setEditing(true)}>Edit finished harvest…</button>
         <span className="muted">Fix totals, add a forgotten bin or pallet, or remove one logged by mistake.</span></div>}

@@ -23,11 +23,11 @@ export interface Slot {
 
 export type PalletStatus = 'in_freezer' | 'unslotted' | 'in_transit' | 'at_processor' | 'shipped' | 'depleted' | 'archived' | 'merged'
 /** what's in the package: fresh frozen, or a dry flower stage (047) */
-export type Product = 'fresh_frozen' | 'wet' | 'unbucked' | 'bucked' | 'bucked_standards' | 'standards' | 'smalls' | 'trim'
-export const PRODUCT_LABEL: Record<Product, string> = { fresh_frozen: 'Fresh Frozen', wet: 'Wet (raw)', unbucked: 'Unbucked', bucked: 'Bucked', bucked_standards: 'Bucked Standards', standards: 'Standards', smalls: 'Smalls', trim: 'Trim' }
-export const PRODUCT_SHORT: Record<Product, string> = { fresh_frozen: 'FF', wet: 'Wet', unbucked: 'Unbk', bucked: 'Bkd', bucked_standards: 'BkStd', standards: 'Std', smalls: 'Sml', trim: 'Trim' }
+export type Product = 'fresh_frozen' | 'wet' | 'unbucked' | 'bucked' | 'bucked_standards' | 'standards' | 'smalls' | 'trim' | 'dry_biomass'
+export const PRODUCT_LABEL: Record<Product, string> = { fresh_frozen: 'Fresh Frozen', wet: 'Wet (raw)', unbucked: 'Unbucked', bucked: 'Bucked', bucked_standards: 'Bucked Standards', standards: 'Standards', smalls: 'Smalls', trim: 'Trim', dry_biomass: 'Dry Biomass' }
+export const PRODUCT_SHORT: Record<Product, string> = { fresh_frozen: 'FF', wet: 'Wet', unbucked: 'Unbk', bucked: 'Bkd', bucked_standards: 'BkStd', standards: 'Std', smalls: 'Sml', trim: 'Trim', dry_biomass: 'Bio' }
 /** products Sales can put on an order line */
-export const SALE_PRODUCTS: Product[] = ['fresh_frozen', 'standards', 'smalls', 'trim', 'bucked', 'unbucked']
+export const SALE_PRODUCTS: Product[] = ['fresh_frozen', 'standards', 'smalls', 'trim', 'bucked', 'unbucked', 'dry_biomass']
 
 export interface Pallet {
   id: number
