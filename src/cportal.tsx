@@ -304,7 +304,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       const sum = lines.some(l => l.price == null) ? null : lines.reduce((a, l) => a + (l.lbs ?? 0) * (l.price ?? 0), 0)
       const holdLbs = o.order_lines.reduce((a, l) => a + (l.is_sample ? Number(l.hold_lbs ?? 0) : 0), 0)
       if (o.status === 'shipped') {
-        const inv = o.so_number ? invs.find(i => i.so_number === o.so_number && i.kind !== 'CreditMemo') ?? null : null
+        // the invoice for this order: linked through the app, or (orders from before the app) QuickBooks' invoice numbered with the SO
+        const inv = o.so_number ? invs.find(i => i.kind !== 'CreditMemo' && i.so_number === o.so_number)
+          ?? invs.find(i => i.kind !== 'CreditMemo' && !used.has(i) && i.inv_number === o.so_number) ?? null : null
         if (inv) used.add(inv)
         const paid = inv ? inv.status === 'paid' || Number(inv.balance) <= 0 : null
         const ql = inv?.qbo_id ? d.qbo[inv.qbo_id] : undefined   // what was actually invoiced (shipped weights) when QuickBooks has it
@@ -401,7 +403,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <p className={c('foot')}>{plural(menuN, 'strain')} · updates live as orders and reserves change</p></button>
           <div className={contract ? c('grid2') : ''}>
             <button className={c('tile small')} onClick={() => { setFilter('all'); go('orders') }}><p className={c('lbl')}>Orders &amp; Statement</p><p className={c('big')}>{open.length} in progress</p>
-              <p className={c('foot')} style={{ color: 'var(--blue)', marginTop: 4 }}>{open.length ? [nSub ? `${nSub} submitted` : '', nFul ? `${nFul} in fulfillment` : ''].filter(Boolean).join(' · ') : 'Nothing open'}</p></button>
+              {open.length > 0 && <p className={c('foot')} style={{ color: 'var(--blue)', marginTop: 4 }}>{[nSub ? `${nSub} submitted` : '', nFul ? `${nFul} in fulfillment` : ''].filter(Boolean).join(' · ')}</p>}</button>
             {contract && <button className={c('tile small tint')} onClick={() => go('contract')}><p className={c('lbl')}>My Contract · {mon}</p>
               <p className={c('big')}>{fmt(thisMonth)} lbs <span style={{ fontSize: 13, fontWeight: 500 }}>picked up</span></p>
               <p className={c('foot')} style={{ marginTop: 4 }}>{min == null ? 'No monthly minimum' : leftMin ? <><b style={{ color: 'var(--blue)' }}>{fmt(leftMin)} to go</b> · {fmt(min)} lb min</> : <b>✓ {fmt(min)} lb min met</b>}</p></button>}

@@ -144,9 +144,9 @@ export async function statementPdf(s: Statement, history = true): Promise<Blob> 
   if (s.balance.source === 'quickbooks' && s.open_items.length) {
     autoTable(pdf, {
       startY: y, margin: { left: M, right: M }, styles: style, headStyles: head,
-      head: [['Date', 'Type', '#', 'Due', 'Amount', 'Open']],
+      head: [['Date', 'Type', '#', 'Due', { content: 'Amount', styles: { halign: 'right' as const } }, { content: 'Open', styles: { halign: 'right' as const } }]],
       body: s.open_items.map(x => [dfmt(x.date), TYPE_L[x.type] ?? x.type, x.doc ?? '', dfmt(x.due), money(x.total), money(x.balance)]),
-      foot: [['', '', '', '', 'Balance', money(s.balance.amount)]], footStyles: { fillColor: [245, 247, 245], textColor: ink, fontStyle: 'bold' },
+      foot: [['', '', '', '', { content: 'Balance', styles: { halign: 'right' } }, { content: money(s.balance.amount), styles: { halign: 'right' } }]], footStyles: { fillColor: [245, 247, 245], textColor: ink, fontStyle: 'bold' },
       columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } },
     })
     y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18
@@ -156,7 +156,7 @@ export async function statementPdf(s: Statement, history = true): Promise<Blob> 
   const invs = history ? s.invoices : openOnly ? s.invoices.filter(i => i.status !== 'paid' && Number(i.balance) > 0) : []
   if (invs.length || history) autoTable(pdf, {
     startY: y, margin: { left: M, right: M }, styles: style, headStyles: head,
-    head: [['Date', 'Invoice', 'Order', 'Due', 'Total', 'Open', '']],
+    head: [['Date', 'Invoice', 'Order', 'Due', { content: 'Total', styles: { halign: 'right' as const } }, { content: 'Open', styles: { halign: 'right' as const } }, '']],
     body: invs.map(i => [dfmt(i.invoice_date), i.inv_number, i.so_number ?? '', dfmt(i.due_date), money(i.total), i.balance ? money(i.balance) : '',
       i.status === 'paid' || !i.balance ? 'Paid' : i.past_due ? 'Past due' : 'Open']),
     columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
