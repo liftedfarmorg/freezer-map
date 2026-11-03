@@ -15,6 +15,8 @@ const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
 const money2 = (n: number) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const f10 = (n: number | null | undefined) => Math.max(0, Math.floor(Number(n ?? 0) / 10) * 10)
 const not10 = (v: number) => v % 10 !== 0
+/** typed lbs snap to the nearest 10 when the box is left (34 → 30, 35 → 40) */
+const round10 = (v: number) => Math.sign(v) * Math.round(Math.abs(v) / 10) * 10
 const TEN = 'Use steps of 10 lbs, like 120 or 130'
 const lc = (s: string) => s.toLowerCase()
 const kOf = (s: string, y: number) => lc(s) + '|' + y
@@ -61,6 +63,7 @@ function Stepper({ val, on, bad, label, onChange, autoFocus }: { val: number; on
       <button type="button" onClick={() => onChange(snap(val, -10))} aria-label={`Less ${label}`}>−</button>
       <input type="text" inputMode="numeric" pattern="[0-9]*" value={val ? String(val) : ''} placeholder="0" aria-label={`${label} lbs`} aria-invalid={bad ? 'true' : 'false'} autoFocus={autoFocus}
         onChange={e => { const d = e.target.value.replace(/[^0-9]/g, '').slice(0, 6); onChange(d ? Number(d) : 0) }}
+        onBlur={() => { if (not10(val)) onChange(round10(val)) }}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
       <button type="button" onClick={() => onChange(snap(val, 10))} aria-label={`More ${label}`}>+</button>
     </span>
@@ -77,7 +80,10 @@ function AdjStepper({ val, step, min, max, bad, label, onChange, plain, what = '
       <button type="button" disabled={val <= min} onClick={() => { setTxt(null); onChange(clamp(val - step)) }} aria-label={`${step} lbs less ${label}`}>−</button>
       <input type="text" inputMode="numeric" value={shown} placeholder={plain ? '0' : '±0'} aria-label={plain ? `${label} ${what}, lbs` : `Change to ${label} reserve, lbs`} aria-invalid={bad ? 'true' : 'false'}
         onChange={e => { const t = e.target.value.replace(/[−–]/g, '-').replace(/[^0-9+-]/g, ''); setTxt(t); const n = Number(t.replace('+', '')); if (t === '' || t === '-' || t === '+') onChange(0); else if (!isNaN(n)) onChange(n) }}
-        onBlur={() => setTxt(null)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+        onBlur={() => { setTxt(null); if (not10(val)) { let r = round10(val)
+          // rounding up never pushes a typed amount past the limit it was inside (e.g. 345 with 340 available → 340)
+          if (val <= max && r > max) r = Math.floor(max / 10) * 10; if (val >= min && r < min) r = Math.ceil(min / 10) * 10
+          onChange(r) } }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
       <button type="button" disabled={val >= max} onClick={() => { setTxt(null); onChange(clamp(val + step)) }} aria-label={`${step} lbs more ${label}`}>+</button>
     </span>
   )
