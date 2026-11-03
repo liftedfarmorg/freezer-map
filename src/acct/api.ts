@@ -26,6 +26,10 @@ export const GRP_LABEL: Record<Product['grp'], string> = { flower: 'Flower (fres
 
 export interface CreditToSend { id: number; number: string; total: number; date: string; status: string; acct_status: 'pending' | 'sent' | 'error' | 'skip'; error: string | null; created_at: string; rma?: string; customer?: string }
 
+export interface CmPayload { id: number; doc_number: string; date: string; total: number; memo: string | null; rma: string | null; acct_status: string; problems: string[]
+  customer: { name: string; legal_name: string; qbo_name: string | null; email: string | null; billing_address: string | null; license: string | null }
+  lines: { line_id: number; product: string; item: string | null; class: string | null; description: string; qty: number; price: number; amount: number }[] }
+
 export class AcctApi {
   constructor(private sb: SupabaseClient) {}
   private async rpc<T>(fn: string, args?: object): Promise<T> { const { data, error } = await this.sb.rpc(fn, args ?? {}); fail(error); return data as T }
@@ -38,6 +42,8 @@ export class AcctApi {
     return j as T
   }
   overview() { return this.rpc<Overview>('acct_overview') }
+  /** what will go to QuickBooks for one credit memo (lines, customer, problems) */
+  cmPayload(id: number) { return this.rpc<CmPayload>('cm_payload', { p_id: id }) }
   /** credit memos from returns (159) that aren't in QuickBooks yet */
   async creditMemosToSend() {
     const rs = await this.rpc<{ rma: string; customer: string; credits: CreditToSend[] }[]>('returns_list').catch(() => [])

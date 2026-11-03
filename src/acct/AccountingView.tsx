@@ -2,7 +2,7 @@ import { Select } from '../combo'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Backend } from '../api'
 import { AcctApi, GRP_LABEL } from './api'
-import type { AClass, AInvoice, Conn, CreditToSend, Env, Overview, Payload, Product, QLine, Ref, Rule } from './api'
+import type { AClass, AInvoice, CmPayload, Conn, CreditToSend, Env, Overview, Payload, Product, QLine, Ref, Rule } from './api'
 import type { ATab } from './tabs'
 import { Card, Cards, DashHead, Empty, Tile, Tiles } from '../dash'
 import { DocSheet } from '../invoices'
@@ -61,7 +61,7 @@ export default function AccountingView({ backend, flash, tab, go, isAdmin, canEd
 
   return (
     <div className="acct">
-      {tab === 'dashboard' && <Dashboard ov={ov} rows={rows} conn={conn} env={env} go={go} open={setOpen} banner={banner} />}
+      {tab === 'dashboard' && <Dashboard api={api} ov={ov} rows={rows} conn={conn} env={env} go={go} open={setOpen} banner={banner} />}
       {tab === 'send' && <SendList api={api} rows={rows} env={env} canEdit={canEdit && !!conn?.connected} flash={flash} open={setOpen} reload={load} banner={banner} />}
       {tab === 'sent' && <SentList api={api} rows={rows} env={env} flash={flash} open={setOpen} reload={load} lastSync={ov.last_sync} connected={!!conn?.connected} banner={banner} />}
       {tab === 'payroll' && sb && <PayrollTab sb={sb} flash={flash} canEdit={canEdit} isAdmin={isAdmin} />}
@@ -74,25 +74,30 @@ export default function AccountingView({ backend, flash, tab, go, isAdmin, canEd
 }
 
 // ---------- Dashboard ----------
-function Dashboard({ ov, rows, conn, env, go, open, banner }: { ov: Overview; rows: AInvoice[]; conn: { env: Env; connected: boolean; company?: string; error?: string } | null; env: Env; go: (t: ATab) => void; open: (id: number) => void; banner: React.ReactNode }) {
+function Dashboard({ api, ov, rows, conn, env, go, open, banner }: { api: AcctApi; ov: Overview; rows: AInvoice[]; conn: { env: Env; connected: boolean; company?: string; error?: string } | null; env: Env; go: (t: ATab) => void; open: (id: number) => void; banner: React.ReactNode }) {
   const errs = rows.filter(i => i.push?.status === 'error' && i.status !== 'void')
   const oldest = rows.filter(toSend).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
   const od = rows.filter(i => unpaid(i) && i.due && i.due < today()).sort((a, b) => (a.due ?? '').localeCompare(b.due ?? '')).slice(0, 8)
+  // credit memos from returns (159) waiting for QuickBooks count on the To send tile too
+  const [cms, setCms] = useState<CreditToSend[]>([])
+  useEffect(() => { api.creditMemosToSend().then(setCms).catch(() => {}) }, [api])
+  const toSendN = ov.to_send + cms.length
   return (
     <div className="dash">
       <DashHead title="Accounting" sub={<>{ENV_LABEL[env]} <EnvPill env={env} />{conn?.company ? ` · ${conn.company}` : ''}</>} />
       {banner}
       <Tiles>
-        <Tile label="To send" value={ov.to_send} sub={money(ov.to_send_amt)} tone={ov.to_send ? 'info' : 'ok'} onClick={() => go('send')} />
+        <Tile label="To send" value={toSendN} sub={cms.length ? `${money(ov.to_send_amt)} invoices · -${money(cms.reduce((t, c) => t + c.total, 0))} in ${cms.length} credit memo${cms.length === 1 ? '' : 's'}` : money(ov.to_send_amt)} tone={toSendN ? 'info' : 'ok'} onClick={() => go('send')} />
         <Tile label="Couldn't send" value={ov.errors} sub="need a fix" tone={ov.errors ? 'warn' : 'ok'} onClick={() => go('review')} />
         <Tile label="Unpaid in QuickBooks" value={dollars(ov.unpaid_amt)} sub={`${ov.unpaid} invoices`} onClick={() => go('sent')} />
         <Tile label="Overdue" value={dollars(ov.overdue_amt)} sub={`${ov.overdue} invoices`} tone={ov.overdue ? 'warn' : 'ok'} onClick={() => go('sent')} />
         <Tile label="Sent this month" value={ov.sent_month} sub={money(ov.sent_month_amt)} />
       </Tiles>
       <Cards>
-        <Card title="Oldest waiting to send" badge={ov.to_send} action="To send" onAction={() => go('send')}>
+        <Card title="Oldest waiting to send" badge={toSendN} action="To send" onAction={() => go('send')}>
+          {cms.map(c => <button key={`cm${c.id}`} className="drow click" onClick={() => go('send')}><span><b>{c.number}</b> <span className="pill">Credit memo</span> <span className="muted">{c.customer} · {dfmt(c.date)}</span></span><b>-{money(c.total)}</b></button>)}
           {oldest.length ? oldest.map(i => <button key={i.id} className="drow click" onClick={() => open(i.id)}><span><b>{i.inv}</b> <span className="muted">{i.customer} · {dfmt(i.date)}</span></span><b>{money(i.total)}</b></button>)
-            : <Empty>Nothing waiting. Every outside invoice is in QuickBooks.</Empty>}
+            : !cms.length && <Empty>Nothing waiting. Every outside invoice is in QuickBooks.</Empty>}
         </Card>
         <Card title="Couldn't send" badge={errs.length} action="Review" onAction={() => go('review')}>
           {errs.length ? errs.slice(0, 8).map(i => <button key={i.id} className="drow click" onClick={() => open(i.id)}><span><b>{i.inv}</b> <span className="muted">{i.push?.error}</span></span></button>)
@@ -170,6 +175,7 @@ function CreditMemosToSend({ api, env, canEdit, flash }: { api: AcctApi; env: En
   const [rows, setRows] = useState<CreditToSend[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => setRows(await api.creditMemosToSend()), [api])
+  const [view, setView] = useState<CreditToSend | null>(null)
   useEffect(() => { load() }, [load])
   if (!rows || !rows.length) return null
   async function send(c: CreditToSend) {
@@ -191,12 +197,12 @@ function CreditMemosToSend({ api, env, canEdit, flash }: { api: AcctApi; env: En
     {rows.map(c => {
       const at = new Date(new Date(c.created_at).getTime() + 30 * 60000)
       return <div key={c.id} className="li setrow acctrow">
-        <div className="grow">
+        <button className="grow plain" onClick={() => setView(c)}>
           <div><b>{c.number}</b> <span className="pill">Credit memo</span> {c.acct_status === 'error' && <span className="pill acct-error">Couldn't send</span>}</div>
           <div className="muted">{c.customer} · {dfmt(c.date)} · return {c.rma}</div>
           {c.error && <div className="bad-t small">{c.error}</div>}
           {c.acct_status === 'pending' && <div className="small muted">{at > new Date() ? `Goes automatically at ${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Goes with the next automatic send (if auto-send is on)'}</div>}
-        </div>
+        </button>
         <b className="num">-{money(c.total)}</b>
         {canEdit && <div className="row">
           <button className="ghost small" disabled={!!busy} onClick={() => link(c)}>Already in QuickBooks?</button>
@@ -204,7 +210,39 @@ function CreditMemosToSend({ api, env, canEdit, flash }: { api: AcctApi; env: En
       </div>
     })}
     <h3>Invoices</h3>
+    {view && <CmPreview api={api} c={view} env={env} canEdit={canEdit} busy={!!busy} onClose={() => setView(null)} onSend={async () => { const c = view; setView(null); await send(c) }} />}
   </>
+}
+
+/** what the credit memo will look like in QuickBooks, before it's sent */
+function CmPreview({ api, c, env, canEdit, busy, onClose, onSend }: { api: AcctApi; c: CreditToSend; env: Env; canEdit: boolean; busy: boolean; onClose: () => void; onSend: () => void }) {
+  const [p, setP] = useState<CmPayload | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => { api.cmPayload(c.id).then(setP).catch(e => setErr(msg(e))) }, [c.id])
+  return <div className="scrim" onClick={onClose}>
+    <div className="sheet form wide" onClick={e => e.stopPropagation()}>
+      <div className="sheet-h"><h3>Credit memo {c.number}</h3><button className="ghost" aria-label="Close" onClick={onClose}>✕</button></div>
+      {err && <p className="bad-t">{err}</p>}
+      {!p && !err && <p className="muted">Loading…</p>}
+      {p && <>
+        <dl>
+          <dt>Customer</dt><dd><b>{p.customer.qbo_name || p.customer.legal_name}</b>{p.customer.qbo_name && p.customer.qbo_name !== p.customer.name ? <span className="muted"> ({p.customer.name} in the app)</span> : null}</dd>
+          <dt>Date</dt><dd>{dfmt(p.date)}</dd>
+          <dt>Number</dt><dd>{p.doc_number}</dd>
+          <dt>Return</dt><dd>{p.rma}</dd>
+          {p.memo && <><dt>Message</dt><dd>{p.memo}</dd></>}
+        </dl>
+        <div className="tablewrap"><table className="ct"><thead><tr><th>Product / service</th><th>Description</th><th>Class</th><th className="num">Qty (lbs)</th><th className="num">Rate</th><th className="num">Amount</th></tr></thead>
+          <tbody>{p.lines.map(l => <tr key={l.line_id}><td>{l.item ?? <span className="bad-t">{l.product}</span>}</td><td>{l.description}</td><td>{l.class ?? <span className="bad-t">none</span>}</td>
+            <td className="num">{Number(l.qty).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td><td className="num">{money(l.price)}</td><td className="num">{money(l.amount)}</td></tr>)}</tbody>
+          <tfoot><tr><td colSpan={5}><b>Total credit</b></td><td className="num"><b>{money(p.total)}</b></td></tr></tfoot></table></div>
+        {p.problems.length > 0 && <div className="warnbox small">{p.problems.map(x => <div key={x}>{x}</div>)}</div>}
+        <p className="muted small">This is what goes to {env === 'sandbox' ? 'the sandbox' : 'QuickBooks'}: one line per strain, the customer as matched in QuickBooks, the class from the farm and crop year.</p>
+      </>}
+      <div className="row between"><button className="ghost" onClick={onClose}>Close</button>
+        {canEdit && <button className="primary" disabled={busy || !p || p.problems.length > 0} onClick={onSend}>Send now</button>}</div>
+    </div>
+  </div>
 }
 
 // ---------- In QuickBooks ----------
