@@ -980,11 +980,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {Array.from({ length: lead }, (_, i) => <span key={'l' + i} />)}
           {Array.from({ length: days }, (_, i) => {
             const dt = new Date(y, m, i + 1), v = iso(dt), past = dt < t0, sel = wanted === v, isToday = v === iso(t0)
-            return <button key={v} type="button" className={c(`day ${sel ? 'sel' : ''} ${isToday ? 'today' : ''}`)} disabled={past} aria-pressed={sel} onClick={() => setWanted(v)}
+            return <button key={v} type="button" className={c(`day ${sel ? 'sel' : ''} ${isToday ? 'today' : ''}`)} disabled={past} aria-pressed={sel} onClick={() => { setWanted(v); setCal(null) }}
               aria-label={dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}>{i + 1}</button>
           })}</div>
-        <div className={c('row')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => setWanted('')}>Clear</button>
-          <button className={c('btn')} style={{ flex: 1.4 }} onClick={() => setCal(null)}>{wanted ? `Done · ${niceDate(wanted)}` : 'Done'}</button></div>
+        {wanted && <div className={c('row')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => { setWanted(''); setCal(null) }}>Clear date</button></div>}
       </div></>
   }
 
