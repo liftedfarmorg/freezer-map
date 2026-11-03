@@ -192,6 +192,19 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [editQ, setEditQ] = useState('')
   const [orderQ, setOrderQ] = useState('')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
+  // desktop tables: click a column header to sort; default is strain A–Z
+  const [sorts, setSorts] = useState<Record<string, { col: string; dir: number }>>({})
+  const sortOf = (t: string) => sorts[t] ?? { col: 's', dir: 1 }
+  function sortRows<T extends { s: string; y: number }>(t: string, list: T[], get: Record<string, (x: T) => number>): T[] {
+    const { col, dir } = sortOf(t), g = get[col]
+    const byName = (a: T, b: T) => a.s.localeCompare(b.s) || b.y - a.y
+    return [...list].sort((a, b) => col === 's' || !g ? dir * byName(a, b) : dir * (g(a) - g(b)) || byName(a, b))
+  }
+  const sh = (t: string, col: string, label: React.ReactNode) => {
+    const { col: c0, dir } = sortOf(t), on = c0 === col
+    return <button key={col} type="button" className={c(`sorth ${on ? 'on' : ''}`)} aria-sort={on ? (dir > 0 ? 'ascending' : 'descending') : undefined}
+      onClick={() => setSorts({ ...sorts, [t]: { col, dir: on ? -dir : col === 's' ? 1 : -1 } })}>{label}<i aria-hidden="true">{on ? (dir > 0 ? '▲' : '▼') : '↕'}</i></button>
+  }
   const [notRes, setNotRes] = useState(false)
   const [rmRes, setRmRes] = useState<'all' | 'res' | 'not'>('all')
   const [stepCustom, setStepCustom] = useState(false)
@@ -518,8 +531,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {contract ? <section className={c('card')}>
             <div className={c('dcard-h')}><h2>Contract Reserves</h2><button className={c('pillbtn')} style={{ border: 0 }} onClick={() => go('resmenu')}>Open Reserves &amp; Menu</button></div>
             {reserves.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0 }}>No reserves yet. Add strains from the open menu.</p> : <div className={c('hscroll')}>
-              <div className={c('htb head')}><span>Strain</span><span>Reserved</span><span>Fulfilled</span><span>Open SO</span><span>Remaining</span><span>Open menu<br />available</span></div>
-              {reserves.map(r => <div key={r.k} className={c('htb')}><span className={c('rmname')}>{r.s} {yrTag(r.y)} {r.asked != null && <span className={c('chip c-wait')}>{r.res ? `Asked ${fmt(r.asked)}` : `New · asked ${fmt(r.asked)}`} · waiting</span>}</span>
+              <div className={c('htb head')}>{sh('home', 's', 'Strain')}{sh('home', 'res', 'Reserved')}{sh('home', 'ful', 'Fulfilled')}{sh('home', 'so', 'Open SO')}{sh('home', 'rem', 'Remaining')}{sh('home', 'open', <>Open menu<br />available</>)}</div>
+              {sortRows('home', reserves, { res: r => r.res, ful: r => r.ful, so: r => r.so, rem: r => r.rem, open: r => menuRow(r.k)?.open ?? 0 }).map(r => <div key={r.k} className={c('htb')}><span className={c('rmname')}>{r.s} {yrTag(r.y)} {r.asked != null && <span className={c('chip c-wait')}>{r.res ? `Asked ${fmt(r.asked)}` : `New · asked ${fmt(r.asked)}`} · waiting</span>}</span>
                 <span>{r.res ? fmt(r.res) : '–'}</span><span className={c('dim')}>{fmt(r.ful)}</span><span className={c('dim')}>{fmt(r.so)}</span><b>{fmt(r.rem)}</b><span className={c('dim')}>{fmt(menuRow(r.k)?.open ?? 0)}</span></div>)}
               <div className={c('htb total')}><b>Total · {plural(reserves.length, 'strain')}</b><b>{fmt(totals.res)}</b><span className={c('dim')}>{fmt(dt.ful)}</span><span className={c('dim')}>{fmt(dt.so)}</span><b style={{ color: 'var(--teal-ink)' }}>{fmt(dt.rem)}</b><span /></div>
             </div>}
@@ -527,15 +540,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           </section> : <section className={c('card')}>
             <div className={c('dcard-h')}><h2>Open Menu</h2><button className={c('pillbtn')} style={{ border: 0 }} onClick={() => newOrder()}>Place an order</button></div>
             {(() => { const all = menuItems.filter(m => m.open > 0), ql = q.toLowerCase(), years = [...new Set(all.map(m => m.y))].sort((a, b) => b - a)
-              const om = all.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear)).sort((a, b) => b.open - a.open)
+              const om = all.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear))
               return <>{all.length > 0 && <div className={c('rmbar')} style={{ borderTop: '1px solid var(--line)' }}>
                 <div className={c('filters')} role="group" aria-label="Filter the menu">
                   <button aria-pressed={menuYear === 'all'} onClick={() => setMenuYear('all')}>All</button>
                   {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}</div>
                 <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label></div>}
               {all.length > 0 && om.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0, borderTop: '1px solid var(--line)' }}>No strains match.</p> : om.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0 }}>Nothing on the open menu right now.</p> : <div className={c('hscroll tall')}>
-                <div className={c('htb head two')}><span>Strain</span><span>Open menu available</span></div>
-                {om.map(m => <div key={m.k} className={c('htb two')}><span className={c('rmname')}>{m.s} {yrTag(m.y)} {m.hold > 0 && <span className={c('chip c-wait')}>{fmt(m.hold)} held for you</span>}</span><b>{fmt(m.open)}</b></div>)}
+                <div className={c('htb head two')}>{sh('homenc', 's', 'Strain')}{sh('homenc', 'open', 'Open menu available')}</div>
+                {sortRows('homenc', om, { open: m => m.open }).map(m => <div key={m.k} className={c('htb two')}><span className={c('rmname')}>{m.s} {yrTag(m.y)} {m.hold > 0 && <span className={c('chip c-wait')}>{fmt(m.hold)} held for you</span>}</span><b>{fmt(m.open)}</b></div>)}
                 <div className={c('htb total two')}><b>Total · {plural(om.length, 'strain')}</b><b style={{ color: 'var(--teal-ink)' }}>{fmt(om.reduce((t, m) => t + m.open, 0))}</b></div>
               </div>}</> })()}
           </section>}
@@ -576,8 +589,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const all = keys.map(k => { const r = resRow(k), m = menuRow(k); return { k, s: r?.s ?? m!.s, y: r?.y ?? m!.y, r, m, t: editNew.find(x => x.k === k) } })
       .sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const years = [...new Set(all.map(x => x.y))].sort((a, b) => b - a)
-    const list = all.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear)
-      && (rmRes === 'all' || (rmRes === 'res' ? !!x.r : !x.r)))
+    const list = sortRows('rm', all.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear)
+      && (rmRes === 'all' || (rmRes === 'res' ? !!x.r : !x.r))), { res: x => x.r?.res ?? 0, ful: x => x.r?.ful ?? 0, so: x => x.r?.so ?? 0, rem: x => x.r?.res ? x.r.rem : 0, open: x => x.m?.open ?? 0 })
     const menuBad = editNew.some(n => n.lbs > 0 && !!newErr(n)) || reserves.some(r => !!resErr(r))
     const menuTotal = menuItems.reduce((a, m) => a + m.open, 0)
     const fb = (on: boolean, label: string, f: () => void) => <button key={label} aria-pressed={on} onClick={f}>{label}</button>
@@ -607,7 +620,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           </div>
           {/* freeze pane: the title, totals, filters and column headers stay put; only the rows scroll */}
           <div className={c('rmscroll')}><div style={{ minWidth: 860 }}>
-            <div className={c('rmt head')}><span>Strain</span><span>Reserved</span><span>Fulfilled</span><span>Open SO</span><span>Remaining</span><span>Open menu<br />available</span><span>Change reserve</span></div>
+            <div className={c('rmt head')}>{sh('rm', 's', 'Strain')}{sh('rm', 'res', 'Reserved')}{sh('rm', 'ful', 'Fulfilled')}{sh('rm', 'so', 'Open SO')}{sh('rm', 'rem', 'Remaining')}{sh('rm', 'open', <>Open menu<br />available</>)}<span>Change reserve</span></div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 18, margin: 0 }}>Nothing matches.</p>}
             {list.map(x => {
               const { k, r, m, t } = x, open = m?.open ?? 0
@@ -974,12 +987,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const oq = orderQ.toLowerCase()
     const show = (l: OLine) => (!oq || l.s.toLowerCase().includes(oq) || l.k in ord) && (menuYear === 'all' || l.y === menuYear)
     const years = [...new Set(allLines.map(l => l.y))].sort((a, b) => b - a)
-    const resd = orderable.resd.filter(show), others = orderable.others.filter(show)
+    const rg = (l: OLine) => resRow(l.k)
+    const resd = sortRows('ores', orderable.resd.filter(show), { res: l => rg(l)?.res ?? 0, ful: l => rg(l)?.ful ?? 0, so: l => rg(l)?.so ?? 0, rem: l => rg(l)?.rem ?? 0, open: l => l.open })
+    const others = sortRows('oom', orderable.others.filter(show), { open: l => l.open })
     const clearLine = (k: string) => { const o = { ...ord }; delete o[k]; setOrd(o); const s0 = { ...smp }; delete s0[k]; setSmp(s0); const h = { ...holdAsk }; delete h[k]; setHoldAsk(h) }
     const setQ0 = (k: string, n: number) => { if (n > 0) setOrd({ ...ord, [k]: n }); else clearLine(k) }
     const money0 = (l: OLine, qv: number) => { const p0 = priceOf(l.y); return qv > 0 && p0 != null ? money(qv * p0) : '' }
     const label = oTot.bad ? 'Fix the red lines' : editing ? 'Review changes' : 'Review order'
-    const head = (last: string) => <div className={c('odt head')}><span>Strain</span><span>Reserved</span><span>Fulfilled</span><span>Open SO</span><span>Remaining</span><span>Open menu<br />available</span><span>{last}</span><span>Amount</span></div>
+    const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
     const line = (l: OLine) => {
       const r = resRow(l.k), qv = ord[l.k] ?? 0, sp = lineSplit(l, qv), isSmp = !!smp[l.k], e = qv && !isSmp ? lineError(l, qv) : ''
       const split = qv > 0 && !e && !not10(qv) ? <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} open menu</span>}</> : null
@@ -1032,7 +1047,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </section>}
             <section className={c('card')}>
               <div className={c('dcard-h')}><h2>From the open menu</h2><span className={c('meta')} style={{ margin: 0 }}>Tick Sample to try a strain first. If you like it, we hold it for you for {d?.holdDays ?? 10} days after the sample ships.</span></div>
-              <div className={c('oom head')}><span>Strain</span><span>Open menu<br />available</span><span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
+              <div className={c('oom head')}>{sh('oom', 's', 'Strain')}{sh('oom', 'open', <>Open menu<br />available</>)}<span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
               {others.length ? others.map(openLine) : <p className={c('meta')} style={{ padding: '12px 18px', margin: 0 }}>{oq ? 'Nothing on the open menu matches.' : 'Nothing open on the menu right now.'}</p>}
             </section>
           </div>

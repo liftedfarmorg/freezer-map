@@ -390,3 +390,12 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk button.cp-kpi { cursor: pointer; }
 .cp-desk .cp-htb.cp-two { grid-template-columns: minmax(0, 1fr) 160px; }
 .cp-desk .cp-hscroll.cp-tall { max-height: max(360px, calc(100vh - 410px)); }
+/* sortable column headers */
+.cp-desk .cp-sorth { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; cursor: pointer; font: inherit; color: inherit; line-height: inherit; text-align: right; border-radius: 6px; }
+.cp-desk .cp-head > .cp-sorth:first-child { justify-content: flex-start; text-align: left; }
+.cp-desk .cp-sorth i { font-style: normal; font-size: 10px; opacity: .35; flex: 0 0 auto; }
+.cp-desk .cp-sorth:hover { color: var(--ink); }
+.cp-desk .cp-sorth:hover i { opacity: .7; }
+.cp-desk .cp-sorth.cp-on { color: var(--ink); }
+.cp-desk .cp-sorth.cp-on i { opacity: 1; color: var(--teal-dk); }
+.cp-desk .cp-sorth:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
