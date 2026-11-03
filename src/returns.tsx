@@ -198,12 +198,14 @@ function ReceiveSheet({ sb, ret, creditOnly, flash, onClose, onDone }: { sb: Sup
   const shown = (cands ?? []).filter(c => all || c.ours || (c.strain && ret.lines.some(l => l.strain.toLowerCase() === c.strain!.toLowerCase())) || pick[c.id]?.on)
   const chosen = (cands ?? []).filter(c => pick[c.id]?.on)
   const bad = chosen.filter(c => !pick[c.id].line || !(Number(pick[c.id].lbs) > 0))
+  // two packages on one line can't take in more than the line has left (e.g. the package we shipped from and the customer's repackaged one)
+  const overLines = ret.lines.filter(l => chosen.filter(c => Number(pick[c.id].line) === l.id).reduce((t, c) => t + Number(pick[c.id].lbs || 0), 0) > left(l) + 0.001)
   const items = creditOnly
     ? ret.lines.filter(l => Number(credit[l.id] || 0) > 0).map(l => ({ line_id: l.id, lbs: Number(credit[l.id]) }))
     : chosen.map(c => ({ pallet_id: c.id, line_id: Number(pick[c.id].line), lbs: Number(pick[c.id].lbs) }))
   const amount = items.reduce((s, i) => s + i.lbs * Number(ret.lines.find(l => l.id === i.line_id)?.price ?? 0), 0)
   async function save() {
-    if (!items.length || bad.length) return
+    if (!items.length || bad.length || overLines.length) return
     if (!confirm(`${creditOnly ? 'Credit' : 'Receive'} ${items.length} line(s) on ${ret.rma} for ${ret.customer}? This makes a ${money(amount)} credit memo that goes to QuickBooks in 30 minutes.`)) return
     setBusy(true)
     try {
@@ -236,10 +238,11 @@ function ReceiveSheet({ sb, ret, creditOnly, flash, onClose, onDone }: { sb: Sup
               <td className="num"><input type="number" min={0} step="0.01" style={{ width: 90 }} value={pk.lbs} onChange={e => set({ lbs: e.target.value })} /></td></tr> })}</tbody></table></div>}
         {cands && cands.length > shown.length && <button className="ghost small" onClick={() => setAll(true)}>Show all {cands.length} recent packages</button>}
         {bad.length > 0 && <p className="neg small">Pick a return line and lbs for every ticked package.</p>}
+        {overLines.length > 0 && <p className="neg small">More lbs ticked than are left on: {overLines.map(l => `${l.strain} (${n2(left(l))} left)`).join(', ')}. Untick the extra package.</p>}
       </>}
       {items.length > 0 && <p className="small">Credit memo: <b>{money(amount)}</b> ({items.length} line{items.length === 1 ? '' : 's'})</p>}
       <div className="row between"><button className="ghost" onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || !items.length || bad.length > 0} onClick={save}>{busy ? 'Saving…' : creditOnly ? 'Credit' : 'Receive'}</button></div>
+        <button className="primary" disabled={busy || !items.length || bad.length > 0 || overLines.length > 0} onClick={save}>{busy ? 'Saving…' : creditOnly ? 'Credit' : 'Receive'}</button></div>
     </div>
   </div>
 }
