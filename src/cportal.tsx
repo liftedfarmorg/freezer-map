@@ -472,7 +472,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     return (
       <div className={c('screen')}>
         <header className={c('hdr home-hdr')}>
-          <div className={c('top')}><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /><button className={c('iconbtn')} onClick={() => setAcct(true)} aria-label="Account settings">{I.user}</button></div>
+          <div className={c('top')}><a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a><button className={c('iconbtn')} onClick={() => setAcct(true)} aria-label="Account settings">{I.user}</button></div>
           <p className={c('cust')}>{me.customer_name}</p>
           <p className={c('bal')}>{balance ? money2(balance.amount) : '—'}</p>
           {balance && balance.past_due > 0
@@ -677,7 +677,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const on = group[screen] ?? screen
     return (
       <aside className={c('side')}>
-        <img className={c('logo')} src="/logo-dark.svg" alt="Lifted" />
+        <a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a>
         <nav aria-label="Portal">{nav.filter(n => n[2]).map(([s0, label]) => <button key={s0} className={c(`nav ${on === s0 ? 'on' : ''}`)} aria-current={on === s0 ? 'page' : undefined} onClick={() => { if (s0 === 'orders') setFilter('all'); go(s0) }}>
           {label}{s0 === 'holds' && <span className={c('chip c-wait')}>{liveHolds.length}</span>}</button>)}</nav>
         <button className={c(`btn full ${on === 'order' ? 'on' : ''}`)} style={{ marginTop: 18 }} onClick={() => on === 'order' ? undefined : newOrder()}>Place an order</button>
@@ -1354,7 +1354,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     <div className={['cp', typing ? 'cp-typing' : '', desk ? 'cp-desk' : ''].filter(Boolean).join(' ')}>
       {desk && d && sidebar()}
       <div className={c('col')}>
-        {!d ? <div className={c('screen')}><header className={c('hdr home-hdr')}><div className={c('top')}><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></div>
+        {!d ? <div className={c('screen')}><header className={c('hdr home-hdr')}><div className={c('top')}><a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a></div>
           <p className={c('cust')}>{me.customer_name}</p></header>
           <p className={c('loading')}>{loadErr ? <>Couldn't load your account: {loadErr} <button className={c('linkish')} onClick={reload}>Try again</button></> : 'Loading…'}</p></div>
           : desk && screen === 'home' ? DeskHome() : desk && screen === 'order' ? DeskOrderScreen() : SCREENS[screen]()}

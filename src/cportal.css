@@ -399,3 +399,6 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-sorth.cp-on { color: var(--ink); }
 .cp-desk .cp-sorth.cp-on i { opacity: 1; color: var(--teal-dk); }
 .cp-desk .cp-sorth:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+/* logo links to liftedfarms.com */
+.cp .cp-logolink { display: inline-flex; align-self: flex-start; line-height: 0; border-radius: 8px; }
+.cp .cp-logolink:focus-visible { outline: 2px solid var(--teal); outline-offset: 4px; }
