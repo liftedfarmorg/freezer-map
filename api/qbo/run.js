@@ -1,5 +1,5 @@
 // Accounting actions: { action: 'status' | 'push' | 'link' | 'push_cm' | 'link_cm' (credit_memo_id) | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
-import { Busy, ENV, caller, classId, companyName, connection, itemId, linkCreditMemo, linkInvoice, missingSetup, pushCreditMemo, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
+import { Busy, ENV, caller, classId, companyName, connection, creditMemoEmails, itemId, linkCreditMemo, linkInvoice, missingSetup, pushCreditMemo, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
 
 export const config = { maxDuration: 60 }
 
@@ -44,6 +44,7 @@ export default async function handler(req, res) {
       if (!id) return send(res, 400, { error: 'Which credit memo?' })
       const c = await connection()
       if (action === 'link_cm') return send(res, 200, { env: ENV, ...(await linkCreditMemo(c, id, body.qbo_doc, me.email)) })
+      if (body.emails_only) return send(res, 200, { env: ENV, ...(await creditMemoEmails(c, id)) })
       try { return send(res, 200, { env: ENV, ...(await pushCreditMemo(c, id, me.email)) }) }
       catch (e) {
         if (e instanceof Busy) return send(res, 409, { error: e.message })

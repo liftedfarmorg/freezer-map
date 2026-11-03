@@ -385,6 +385,10 @@ async function pushCreditMemo_(c, cmId, by) {
   const body = { DocNumber: String(p.doc_number).slice(0, 21), TxnDate: p.date, CustomerRef: { value: custId }, Line: lines,
     PrivateNote: ['From the Lifted Farms app', p.memo].filter(Boolean).join(' · ').slice(0, 4000) }
   if (p.memo) body.CustomerMemo = { value: String(p.memo).slice(0, 1000) }
+  // the customer's billing emails, same as invoices: To first, Cc for any that don't fit
+  const mail = invoiceEmails(p.customer.email)
+  if (mail.BillEmail) body.BillEmail = mail.BillEmail
+  if (mail.BillEmailCc) body.BillEmailCc = mail.BillEmailCc
   // already there? (sent before, or typed in by hand with the same number): link it, never make a second one
   const existing = (await query(c, `select * from CreditMemo where DocNumber = '${esc(body.DocNumber)}'`)).CreditMemo?.[0]
   let cm, mode = 'created', note = null
@@ -392,10 +396,23 @@ async function pushCreditMemo_(c, cmId, by) {
     cm = existing; mode = 'linked'
     note = r2(existing.TotalAmt) !== r2(p.total) ? `${body.DocNumber} was already in QuickBooks with a different total ($${existing.TotalAmt}). Linked it without changing it.` : `${body.DocNumber} was already in QuickBooks. Linked it.`
   } else {
-    cm = (await qbo(c, 'POST', 'creditmemo', body)).CreditMemo
+    cm = (await sendWithEmails(b => qbo(c, 'POST', 'creditmemo', b), body, p.customer.email)).CreditMemo
+    if (mail.left.length) note = `QuickBooks' email boxes are full. Not on the credit memo: ${mail.left.join(', ')}.`
   }
   await rpc('cm_record_push', { p_id: cmId, p_env: ENV, p_qbo_id: String(cm.Id), p_doc: cm.DocNumber || body.DocNumber, p_total: Number(cm.TotalAmt), p_error: null, p_by: by })
   return { qbo_id: cm.Id, doc_number: cm.DocNumber, total: cm.TotalAmt, mode, note }
+}
+/** put the customer's billing emails on a credit memo already in QuickBooks (only the emails change) */
+export async function creditMemoEmails(c, cmId) {
+  const p = await rpc('cm_payload', { p_id: cmId })
+  if (!p.qbo_id) throw new Error(`${p.doc_number} isn't in QuickBooks yet.`)
+  const mail = invoiceEmails(p.customer.email)
+  if (!mail.BillEmail) throw new Error(`${p.customer.name} has no billing email in the app (Sales > customer card).`)
+  const q = (await query(c, `select * from CreditMemo where Id = '${esc(p.qbo_id)}'`)).CreditMemo?.[0]
+  if (!q) throw new Error(`QuickBooks has no credit memo #${p.doc_number} any more.`)
+  const body = { Id: q.Id, SyncToken: q.SyncToken, sparse: true, BillEmail: mail.BillEmail, ...(mail.BillEmailCc ? { BillEmailCc: mail.BillEmailCc } : {}) }
+  const cm = (await sendWithEmails(b => qbo(c, 'POST', 'creditmemo', b), body, p.customer.email)).CreditMemo
+  return { doc_number: cm.DocNumber, to: cm.BillEmail?.Address ?? null, cc: cm.BillEmailCc?.Address ?? null, left: mail.left }
 }
 /** the credit was already made in QuickBooks by hand under another number: link it (nothing changes in QuickBooks) */
 export async function linkCreditMemo(c, cmId, docNumber, by) {

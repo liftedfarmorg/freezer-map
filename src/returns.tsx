@@ -54,6 +54,12 @@ export function ReturnsView({ sb, customers, flash, canEdit, canSend, isAdmin }:
     try { const r = await qboRun<{ doc_number: string; mode: string; note?: string }>(sb, { action: 'push_cm', credit_memo_id: c.id }); flash(r.note ?? `${c.number} is in QuickBooks (#${r.doc_number})`); await load() }
     catch (e) { flash((e as Error).message, true); await load() } finally { setBusy(null) }
   }
+  async function emailsCm(c: Credit) {
+    if (!sb) return
+    setBusy(c.number)
+    try { const r = await qboRun<{ to: string | null; cc: string | null; left: string[] }>(sb, { action: 'push_cm', emails_only: true, credit_memo_id: c.id }); flash(`${c.number} in QuickBooks now emails ${[r.to, r.cc].filter(Boolean).join(', ')}${r.left.length ? `. Didn't fit: ${r.left.join(', ')}` : ''}`) }
+    catch (e) { flash((e as Error).message, true) } finally { setBusy(null) }
+  }
   async function linkCm(c: Credit) {
     if (!sb) return
     const num = prompt(`Already made in QuickBooks by hand? Type that credit memo's number to link ${c.number} to it (nothing changes in QuickBooks):`, '')
@@ -95,6 +101,7 @@ export function ReturnsView({ sb, customers, flash, canEdit, canSend, isAdmin }:
         {r.credits.map(c => <div key={c.id} className="row between wrap small" style={{ marginTop: 6 }}>
           <span>Credit memo <b>{c.number}</b> {money(c.total)} · {c.acct_status === 'sent' ? <>in QuickBooks{c.qbo_doc && c.qbo_doc !== c.number ? ` as #${c.qbo_doc}` : ''}</> : <span className={c.acct_status === 'error' ? 'neg' : 'muted'}>{ACCT[c.acct_status]}</span>}
             {c.error && <span className="neg"> · {c.error}</span>}</span>
+          {canSend && c.acct_status === 'sent' && <button className="ghost small" disabled={!!busy} onClick={() => emailsCm(c)}>{busy === c.number ? '…' : 'Put billing emails on it in QuickBooks'}</button>}
           {canSend && c.acct_status !== 'sent' && <span className="row">
             <button className="ghost small" disabled={!!busy} onClick={() => linkCm(c)}>Already in QuickBooks?</button>
             <button className="primary small" disabled={!!busy} onClick={() => sendCm(c)}>{busy === c.number ? 'Sending…' : 'Send now'}</button></span>}
