@@ -2,7 +2,7 @@ import { Select } from '../combo'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Backend } from '../api'
 import { AcctApi, GRP_LABEL } from './api'
-import type { AClass, AInvoice, Conn, Env, Overview, Payload, Product, QLine, Ref, Rule } from './api'
+import type { AClass, AInvoice, Conn, CreditToSend, Env, Overview, Payload, Product, QLine, Ref, Rule } from './api'
 import type { ATab } from './tabs'
 import { Card, Cards, DashHead, Empty, Tile, Tiles } from '../dash'
 import { DocSheet } from '../invoices'
@@ -147,6 +147,7 @@ function SendList({ api, rows, env, canEdit, flash, open, reload, banner }: { ap
         </div>
       )}
       {results.length > 0 && <div className={`${results.every(r => r.ok) ? 'viewbanner' : 'warnbox'} small`}>{results.map(r => <div key={r.inv}><b>{r.inv}</b>: {r.ok ? '✓ ' : '✕ '}{r.text}</div>)}<button className="linkbtn" onClick={() => setResults([])}>Hide</button></div>}
+      {f === 'send' && <CreditMemosToSend api={api} env={env} canEdit={canEdit} flash={flash} />}
       {!shown.length && <Empty>{f === 'send' ? 'Nothing to send.' : 'None.'}</Empty>}
       {shown.map(i => (
         <div key={i.id} className="li setrow acctrow">
@@ -162,6 +163,48 @@ function SendList({ api, rows, env, canEdit, flash, open, reload, banner }: { ap
       ))}
     </div>
   )
+}
+
+// ---------- credit memos from returns (159), on To send ----------
+function CreditMemosToSend({ api, env, canEdit, flash }: { api: AcctApi; env: Env; canEdit: boolean; flash: Flash }) {
+  const [rows, setRows] = useState<CreditToSend[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const load = useCallback(async () => setRows(await api.creditMemosToSend()), [api])
+  useEffect(() => { load() }, [load])
+  if (!rows || !rows.length) return null
+  async function send(c: CreditToSend) {
+    if (!confirm(`Send credit memo ${c.number} (${money(c.total)}, ${c.customer}) to ${env === 'sandbox' ? 'the sandbox' : 'QuickBooks'} now?`)) return
+    setBusy(c.number)
+    try { const r = await api.server<{ doc_number: string; note?: string }>('run', { action: 'push_cm', credit_memo_id: c.id }); flash(r.note ?? `${c.number} is in QuickBooks (#${r.doc_number})`) }
+    catch (e) { flash(msg(e), true) } finally { setBusy(null); await load() }
+  }
+  async function link(c: CreditToSend) {
+    const num = prompt(`Already made in QuickBooks by hand? Type that credit memo's number to link ${c.number} to it (nothing changes in QuickBooks):`, '')
+    if (!num) return
+    setBusy(c.number)
+    try { const r = await api.server<{ warning?: string; qbo: { doc_number: string } }>('run', { action: 'link_cm', credit_memo_id: c.id, qbo_doc: num }); flash(`${c.number} linked to QuickBooks #${r.qbo.doc_number}${r.warning ? `. ${r.warning}` : ''}`) }
+    catch (e) { flash(msg(e), true) } finally { setBusy(null); await load() }
+  }
+  return <>
+    <h3>Credit memos ({rows.length})</h3>
+    <p className="muted small">From returns (Sales › Returns), made when the product was received in METRC. They go on their own 30 minutes after they're made while auto-send is on.</p>
+    {rows.map(c => {
+      const at = new Date(new Date(c.created_at).getTime() + 30 * 60000)
+      return <div key={c.id} className="li setrow acctrow">
+        <div className="grow">
+          <div><b>{c.number}</b> <span className="pill">Credit memo</span> {c.acct_status === 'error' && <span className="pill acct-error">Couldn't send</span>}</div>
+          <div className="muted">{c.customer} · {dfmt(c.date)} · return {c.rma}</div>
+          {c.error && <div className="bad-t small">{c.error}</div>}
+          {c.acct_status === 'pending' && <div className="small muted">{at > new Date() ? `Goes automatically at ${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Goes with the next automatic send (if auto-send is on)'}</div>}
+        </div>
+        <b className="num">-{money(c.total)}</b>
+        {canEdit && <div className="row">
+          <button className="ghost small" disabled={!!busy} onClick={() => link(c)}>Already in QuickBooks?</button>
+          <button className="primary small" disabled={!!busy} onClick={() => send(c)}>{busy === c.number ? 'Sending…' : 'Send now'}</button></div>}
+      </div>
+    })}
+    <h3>Invoices</h3>
+  </>
 }
 
 // ---------- In QuickBooks ----------

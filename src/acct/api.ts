@@ -24,6 +24,8 @@ export interface Ref { env: string; kind: string; key: string; qbo_id: string; n
 
 export const GRP_LABEL: Record<Product['grp'], string> = { flower: 'Flower (fresh frozen, standards, smalls, trim)', bio: 'Biomass', clones: 'Clones', shipping: 'Shipping', adjust: 'Discount / return / refund', other: 'Other' }
 
+export interface CreditToSend { id: number; number: string; total: number; date: string; status: string; acct_status: 'pending' | 'sent' | 'error' | 'skip'; error: string | null; created_at: string; rma?: string; customer?: string }
+
 export class AcctApi {
   constructor(private sb: SupabaseClient) {}
   private async rpc<T>(fn: string, args?: object): Promise<T> { const { data, error } = await this.sb.rpc(fn, args ?? {}); fail(error); return data as T }
@@ -36,6 +38,11 @@ export class AcctApi {
     return j as T
   }
   overview() { return this.rpc<Overview>('acct_overview') }
+  /** credit memos from returns (159) that aren't in QuickBooks yet */
+  async creditMemosToSend() {
+    const rs = await this.rpc<{ rma: string; customer: string; credits: CreditToSend[] }[]>('returns_list').catch(() => [])
+    return (rs ?? []).flatMap(r => r.credits.filter(c => c.status === 'open' && c.acct_status !== 'sent').map(c => ({ ...c, rma: r.rma, customer: r.customer, total: Number(c.total) })))
+  }
   invoices() { return this.rpc<AInvoice[]>('acct_invoices').then(r => (r ?? []).map(i => ({ ...i, total: Number(i.total) }))) }
   payload(id: number) { return this.rpc<Payload>('acct_invoice_payload', { p_inv: id }) }
   connection() { return this.rpc<{ env: Env; connections: Conn[] }>('acct_connection') }
