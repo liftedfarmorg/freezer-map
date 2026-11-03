@@ -32,10 +32,11 @@ async function qboRun<T>(sb: SupabaseClient, body: object): Promise<T> {
   return j as T
 }
 
-export function ReturnsView({ sb, customers, flash, canEdit, canSend }: { sb: SupabaseClient | null; customers: Customer[]; flash: Flash; canEdit: boolean; canSend: boolean }) {
+export function ReturnsView({ sb, customers, flash, canEdit, canSend, isAdmin }: { sb: SupabaseClient | null; customers: Customer[]; flash: Flash; canEdit: boolean; canSend: boolean; isAdmin: boolean }) {
   const [rows, setRows] = useState<Ret[] | null>(null)
   const [show, setShow] = useState<'open' | 'all'>('open')
   const [making, setMaking] = useState(false)
+  const [recv, setRecv] = useState<{ r: Ret; credit: boolean } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const load = async () => { try { setRows(await rpc<Ret[]>(sb, 'returns_list', {}, '159_returns')) } catch (e) { flash((e as Error).message, true); setRows([]) } }
   useEffect(() => { load() }, [])
@@ -82,6 +83,9 @@ export function ReturnsView({ sb, customers, flash, canEdit, canSend }: { sb: Su
             {r.notes && <div className="small">{r.notes}</div>}</div>
           <div className="row">
             <span className="small">{n2(got)} of {n2(want)} lbs back</span>
+            {canEdit && r.status !== 'cancelled' && got < want - 0.001 && <button className="ghost small" disabled={!!busy} onClick={() => setRecv({ r, credit: false })}>Already received in METRC</button>}
+            {isAdmin && r.status !== 'cancelled' && r.lines.some(l => l.reason === 'not_delivered' && Number(l.received_lbs) < Number(l.lbs) - 0.001) &&
+              <button className="ghost small" disabled={!!busy} onClick={() => setRecv({ r, credit: true })}>Credit without receiving</button>}
             {canEdit && r.status === 'open' && got === 0 && <button className="ghost small" disabled={!!busy} onClick={() => cancel(r)}>{busy === r.rma ? '…' : 'Cancel'}</button>}
           </div></div>
         <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th>Reason</th><th className="num">Lbs</th><th className="num">Received</th><th className="num">$/lb</th><th>Packages</th></tr></thead>
@@ -97,6 +101,7 @@ export function ReturnsView({ sb, customers, flash, canEdit, canSend }: { sb: Su
         </div>)}
       </div>
     })}
+    {recv && <ReceiveSheet sb={sb} ret={recv.r} creditOnly={recv.credit} flash={flash} onClose={() => setRecv(null)} onDone={async () => { setRecv(null); await load() }} />}
     {making && <NewReturn sb={sb} customers={customers} flash={flash} onClose={() => setMaking(false)} onMade={async () => { setMaking(false); await load() }} />}
   </div>
 }
@@ -108,6 +113,7 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
   const [lines, setLines] = useState<OLine[] | null>(null)
   const [lbs, setLbs] = useState<Record<number, string>>({})
   const [why, setWhy] = useState<Record<number, string>>({})
+  const [farm, setFarm] = useState<Record<number, string>>({})
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
@@ -118,7 +124,7 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
     rpc<ShippedOrder[]>(sb, 'returnable_orders', { p_customer: cust }, '159_returns').then(setOrders).catch(e => { flash((e as Error).message, true); setOrders([]) })
   }, [cust])
   useEffect(() => {
-    setLines(null); setLbs({}); setWhy({})
+    setLines(null); setLbs({}); setWhy({}); setFarm({})
     if (!order) return
     rpc<OLine[]>(sb, 'return_order_lines', { p_order: order }, '159_returns').then(setLines).catch(e => { flash((e as Error).message, true); setLines([]) })
   }, [order])
@@ -132,7 +138,7 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
     setBusy(true)
     try {
       const r = await rpc<{ rma: string }>(sb, 'create_return', { p_order: order, p_reason: reason, p_notes: notes,
-        p_lines: picked.map(l => ({ line_id: l.id, lbs: Number(lbs[l.id]), reason: whyOf(l.id) })) }, '159_returns')
+        p_lines: picked.map(l => ({ line_id: l.id, lbs: Number(lbs[l.id]), reason: whyOf(l.id), site: farm[l.id] || l.site || '' })) }, '159_returns')
       flash(`${r.rma} started. Ask the customer to put ${r.rma} on their METRC manifest back to us.`)
       onMade()
     } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
@@ -149,7 +155,8 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
           {(orders ?? []).map(o => <option key={o.id} value={o.id}>{o.so ?? `#${o.id}`} · {day(o.shipped)} · {n2(o.lbs)} lbs · {o.strains}</option>)}</Select></div>}
       {lines && <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th className="num">Shipped</th><th className="num">Can return</th><th className="num">$/lb</th><th className="num">Lbs back</th><th>Reason</th></tr></thead>
         <tbody>{lines.map(l => { const can = Math.max(Number(l.shipped_lbs) - Number(l.returned_lbs), 0); const bad = Number(lbs[l.id] || 0) > can + 0.001
-          return <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td>{l.site ?? <span className="warn-t">?</span>}</td><td className="num">{n2(l.shipped_lbs)}</td><td className="num">{n2(can)}</td>
+          return <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td><select value={farm[l.id] ?? l.site ?? ''} onChange={e => setFarm(m => ({ ...m, [l.id]: e.target.value }))}>
+              {!l.site && <option value="">?</option>}<option value="OHR">OHR</option><option value="GVR">GVR</option></select></td><td className="num">{n2(l.shipped_lbs)}</td><td className="num">{n2(can)}</td>
             <td className="num">{l.price == null ? <span className="warn-t">none</span> : money(l.price)}</td>
             <td className="num"><input type="number" min={0} step="0.01" max={can} disabled={can <= 0} style={{ width: 90 }} className={bad ? 'bad' : ''} value={lbs[l.id] ?? ''}
               onChange={e => setLbs(m => ({ ...m, [l.id]: e.target.value }))} /></td>
@@ -164,6 +171,75 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
       {picked.length > 0 && <p className="small">Credit if all of it comes back: <b>{money(total)}</b> <span className="muted">(the credit memo uses the weight we actually receive)</span></p>}
       <div className="row between"><button className="ghost" onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy || !order || noWhy.length > 0 || !picked.length || over.length > 0} onClick={save}>{busy ? 'Saving…' : 'Start return'}</button></div>
+    </div>
+  </div>
+}
+
+interface Cand { id: number; code: string; strain: string | null; status: string; tag: string | null; lbs_now: number | null; site: string | null; received_lbs: number | null
+  received_on: string | null; manifest: string | null; from_name: string | null; ours: boolean; line_id: number | null }
+
+/** "Already received in METRC": pick the packages already in the app; or (Sales Admins) credit Not delivered lines without any package */
+function ReceiveSheet({ sb, ret, creditOnly, flash, onClose, onDone }: { sb: SupabaseClient | null; ret: Ret; creditOnly: boolean; flash: Flash; onClose: () => void; onDone: () => void }) {
+  const [cands, setCands] = useState<Cand[] | null>(creditOnly ? [] : null)
+  const [pick, setPick] = useState<Record<number, { on: boolean; line: number | ''; lbs: string }>>({})
+  const [credit, setCredit] = useState<Record<number, string>>({})
+  const [manifest, setManifest] = useState(ret.manifest ?? '')
+  const [all, setAll] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (creditOnly) return
+    rpc<Cand[]>(sb, 'return_candidates', { p_return: ret.id }, '161_return_receive_manual').then(c => {
+      setCands(c)
+      setPick(Object.fromEntries(c.map(x => [x.id, { on: x.ours, line: x.line_id ?? '', lbs: String(x.received_lbs ?? x.lbs_now ?? '') }])))
+      const m = c.find(x => x.ours && x.manifest)?.manifest; if (m && !ret.manifest) setManifest(m)
+    }).catch(e => { flash((e as Error).message, true); setCands([]) })
+  }, [])
+  const left = (l: RLine) => Math.max(Number(l.lbs) - Number(l.received_lbs), 0)
+  const shown = (cands ?? []).filter(c => all || c.ours || (c.strain && ret.lines.some(l => l.strain.toLowerCase() === c.strain!.toLowerCase())) || pick[c.id]?.on)
+  const chosen = (cands ?? []).filter(c => pick[c.id]?.on)
+  const bad = chosen.filter(c => !pick[c.id].line || !(Number(pick[c.id].lbs) > 0))
+  const items = creditOnly
+    ? ret.lines.filter(l => Number(credit[l.id] || 0) > 0).map(l => ({ line_id: l.id, lbs: Number(credit[l.id]) }))
+    : chosen.map(c => ({ pallet_id: c.id, line_id: Number(pick[c.id].line), lbs: Number(pick[c.id].lbs) }))
+  const amount = items.reduce((s, i) => s + i.lbs * Number(ret.lines.find(l => l.id === i.line_id)?.price ?? 0), 0)
+  async function save() {
+    if (!items.length || bad.length) return
+    if (!confirm(`${creditOnly ? 'Credit' : 'Receive'} ${items.length} line(s) on ${ret.rma} for ${ret.customer}? This makes a ${money(amount)} credit memo that goes to QuickBooks in 30 minutes.`)) return
+    setBusy(true)
+    try {
+      const r = await rpc<{ credit_memo: string; total: number }>(sb, 'return_receive_manual', { p_return: ret.id, p_items: items, p_manifest: manifest || null, p_credit_only: creditOnly }, '161_return_receive_manual')
+      flash(`${ret.rma}: credit memo ${r.credit_memo} (${money(r.total)}) made. It goes to QuickBooks in 30 minutes.`)
+      onDone()
+    } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
+  }
+  return <div className="scrim" onClick={onClose}>
+    <div className="sheet form wide" onClick={e => e.stopPropagation()}>
+      <div className="sheet-h"><h3>{creditOnly ? 'Credit without receiving' : 'Already received in METRC'} · {ret.rma}</h3><button className="ghost" aria-label="Close" onClick={onClose}>✕</button></div>
+      {creditOnly ? <>
+        <p className="muted small">For Not delivered lines only, when nothing will come back on a METRC transfer. The credit is Product Refund.</p>
+        <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th className="num">Left</th><th className="num">$/lb</th><th className="num">Lbs to credit</th></tr></thead>
+          <tbody>{ret.lines.filter(l => l.reason === 'not_delivered' && left(l) > 0).map(l => <tr key={l.id}><td>{l.strain}</td><td className="num">{n2(left(l))}</td><td className="num">{money(l.price)}</td>
+            <td className="num"><input type="number" min={0} max={left(l)} step="0.01" style={{ width: 90 }} value={credit[l.id] ?? ''} onChange={e => setCredit(m => ({ ...m, [l.id]: e.target.value }))} /></td></tr>)}</tbody></table></div>
+      </> : <>
+        <p className="muted small">The packages came in before this return existed (or were received on Inbound without picking it). Tick the ones that belong to {ret.rma}, check the line and the lbs that came in. They're marked returned on that line (farm and crop year from the line), just like a receive on Inbound.</p>
+        <div className="field"><label>METRC manifest it came in on</label><input value={manifest} onChange={e => setManifest(e.target.value)} placeholder="e.g. 0011790727" /></div>
+        {cands === null && <p className="muted">Loading…</p>}
+        {cands && !cands.length && <p className="muted">No packages received on Inbound in the last 120 days that aren't on a return yet.</p>}
+        {cands && cands.length > 0 && <div className="tablewrap"><table className="ct"><thead><tr><th></th><th>Package</th><th>Strain</th><th>Received</th><th>Return line</th><th className="num">Lbs in</th></tr></thead>
+          <tbody>{shown.map(c => { const pk = pick[c.id] ?? { on: false, line: '', lbs: '' }; const set = (v: Partial<typeof pk>) => setPick(m => ({ ...m, [c.id]: { ...pk, ...v } }))
+            return <tr key={c.id}><td><input type="checkbox" checked={pk.on} onChange={e => set({ on: e.target.checked })} /></td>
+              <td>{c.code}{c.ours && <span className="pill m-ok" style={{ marginLeft: 4 }}>our tag</span>}<div className="muted small mono">{c.tag}</div></td>
+              <td>{c.strain}<div className="muted small">{c.status}</div></td>
+              <td className="small">{c.received_on ? day(c.received_on) : ''}{c.manifest ? ` · ${c.manifest}` : ''}<div className="muted">{c.from_name}</div></td>
+              <td><select value={pk.line} onChange={e => set({ line: e.target.value ? Number(e.target.value) : '' })}><option value="">Pick</option>
+                {ret.lines.map(l => <option key={l.id} value={l.id}>{l.strain} ({REASON_SHORT[l.reason ?? ret.reason] ?? l.reason}, {n2(left(l))} left)</option>)}</select></td>
+              <td className="num"><input type="number" min={0} step="0.01" style={{ width: 90 }} value={pk.lbs} onChange={e => set({ lbs: e.target.value })} /></td></tr> })}</tbody></table></div>}
+        {cands && cands.length > shown.length && <button className="ghost small" onClick={() => setAll(true)}>Show all {cands.length} recent packages</button>}
+        {bad.length > 0 && <p className="neg small">Pick a return line and lbs for every ticked package.</p>}
+      </>}
+      {items.length > 0 && <p className="small">Credit memo: <b>{money(amount)}</b> ({items.length} line{items.length === 1 ? '' : 's'})</p>}
+      <div className="row between"><button className="ghost" onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || !items.length || bad.length > 0} onClick={save}>{busy ? 'Saving…' : creditOnly ? 'Credit' : 'Receive'}</button></div>
     </div>
   </div>
 }

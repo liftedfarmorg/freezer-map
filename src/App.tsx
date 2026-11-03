@@ -1006,7 +1006,7 @@ export default function App() {
           if (salesTab === 'activity') return <ActivityView ix={ix} module="sales" />
           if (salesTab === 'inventory') return <SalesInventory c={invCtx} strains={snap.strains ?? []} sb={backend.client()} onNewOrder={isSales ? () => setNewOrder(true) : undefined} />
           if (salesTab === 'returns') return <ReturnsView sb={backend.client()} customers={snap.customers ?? []} flash={flash}
-            canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} />
+            canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} isAdmin={salesAdmin || !!me?.access?.owner} />
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />
           if (salesTab === 'invoices') return <InvoicesView backend={backend} customers={snap.customers ?? []} flash={flash} isAdmin={salesAdmin} sender={me?.display_name} />
           if (salesTab === 'settings') return salesSettings
