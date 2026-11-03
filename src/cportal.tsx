@@ -49,6 +49,7 @@ const I = {
   down: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>,
   up: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>,
   user: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6" /></svg>,
+  share: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Share" role="img" style={{ verticalAlign: '-2px' }}><path d="M12 3v12M8 7l4-4 4 4" /><path d="M6 11v9h12v-9" /></svg>,
   close: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>,
   search: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>,
   doc: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>,
@@ -198,6 +199,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [editQ, setEditQ] = useState('')
   const [orderQ, setOrderQ] = useState('')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
+  // phones: a one-time tip to add the portal to the home screen (an icon keeps them signed in and they never need the link again)
+  const [a2hs, setA2hs] = useState<'ios' | 'android' | null>(() => {
+    try {
+      const ua = navigator.userAgent, standalone = matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone
+      if (standalone || localStorage.getItem('cp-a2hs-done')) return null
+      return /iPhone|iPad|iPod/.test(ua) ? 'ios' : /Android/.test(ua) ? 'android' : null
+    } catch { return null }
+  })
+  const hideA2hs = () => { setA2hs(null); try { localStorage.setItem('cp-a2hs-done', '1') } catch { /* private mode */ } }
   // desktop tables: click a column header to sort; default is strain A–Z
   const [sorts, setSorts] = useState<Record<string, { col: string; dir: number }>>({})
   const sortOf = (t: string) => sorts[t] ?? { col: 's', dir: 1 }
@@ -480,6 +490,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             : <p className={c('sub mint')}>{balance ? 'Balance · nothing past due' : 'Balance'}</p>}
         </header>
         <main className={c('main lift')}>
+          {a2hs && !desk && <section className={c('card a2hs')}>
+            <div className={c('row')} style={{ alignItems: 'flex-start', gap: 10 }}><div className={c('grow')}>
+              <p className={c('name')} style={{ fontSize: 16 }}>Add Lifted to your home screen</p>
+              <p className={c('meta')} style={{ margin: '4px 0 0' }}>{a2hs === 'ios'
+                ? <>In Safari, tap the <b>Share</b> button {I.share}, then <b>Add to Home Screen</b>.</>
+                : <>Tap the <b>⋮</b> menu, then <b>Add to Home screen</b> (or <b>Install app</b>).</>}
+                {' '}Open the portal from that icon and you'll stay signed in. You'll sign in once more the first time.</p></div>
+              <button className={c('iconbtn')} style={{ color: 'var(--muted)', borderColor: 'var(--line)', flex: '0 0 auto' }} onClick={hideA2hs} aria-label="Hide this tip">{I.close}</button></div>
+          </section>}
           {contract && <button className={c('tile')} onClick={() => go('reserves')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Contract Reserves</p><p className={c('big')}>{fmt(totals.left)} lbs left</p></div><span className={c('pillbtn')}>View / Edit</span></div>
             <p className={c('foot')}>of {fmt(totals.res)} reserved · {fmt(totals.used)} picked up · {plural(reserves.filter(r => r.res > 0).length, 'strain')}</p></button>}

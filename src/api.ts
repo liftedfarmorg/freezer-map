@@ -412,9 +412,12 @@ class SupaBackend implements Backend {
     return portalUrl(`?${kind}=${data as string}`)
   }
   async checkLink(code: string) {
+    // 165: login_link_status also answers for used/expired links; fall back to check_login_link until it's run
+    const st = await this.sb.rpc('login_link_status', { p_code: code })
+    if (!st.error) return (st.data as LinkInfo | null) ?? null
     const { data, error } = await this.sb.rpc('check_login_link', { p_code: code })
     fail(error)
-    return (data as LinkInfo | null) ?? null
+    return data ? { ...(data as LinkInfo), status: 'ok' as const } : null
   }
   async claimInvite(code: string, email: string, password: string) {
     const up = await this.sb.auth.signUp({ email, password })
