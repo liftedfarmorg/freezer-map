@@ -234,6 +234,10 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   useEffect(() => { setLines(ls => ls.map(l => l.yearSet || !l.strain.trim() ? l : { ...l, year: pickYear(stock, l.strain, l.product) })) }, [stock])
   const [busy, setBusy] = useState(false)
   useEffect(() => { backend.paymentTerms().then(setTerms).catch(() => {}) }, [])
+  // market price per crop year (164): what a customer with no contract price pays
+  const [market, setMarket] = useState<Map<number, number>>(new Map())
+  useEffect(() => { backend.client()?.from('market_prices').select('crop_year,price_per_lb')
+    .then(r => setMarket(new Map(((r.data ?? []) as { crop_year: number; price_per_lb: number }[]).map(x => [Number(x.crop_year), Number(x.price_per_lb)]))), () => {}) }, [])
   const c = customers.find(x => x.id === cust)
   useEffect(() => { setTermsCode(c?.payment_terms ?? '') }, [cust])
   // what the load would charge them on a single-stop box truck run (the load works it out for real at Depart)
@@ -274,9 +278,9 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
             <option value="">Pick a customer…</option>
             {customers.filter(x => x.active && x.kind === 'external').sort((a, b) => a.name.localeCompare(b.name)).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
           </Select>
-          {c && <span className="muted">{c.price_per_lb != null ? `Contract price ${money(Number(c.price_per_lb))}/lb` : 'No contract price set'} · {terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}</span>}
+          {c && <span className="muted">{c.price_per_lb != null ? `Contract price ${money(Number(c.price_per_lb))}/lb` : `No contract price: market price ${[...new Set(lines.filter(l => l.product === 'fresh_frozen').map(l => l.year))].map(y => market.has(y) ? `${money(market.get(y)!)}/lb (${y} crop)` : `not set for ${y}`).join(', ') || 'applies'}`} · {terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}</span>}
           {c && licenseWarning(c) && <div className="warnbox">{licenseWarning(c)} Compliance keeps customer licenses in Compliance › Library › Customer licenses.</div>}</div>
-        <div className="field"><label>Lines <span className="muted">(price blank = their contract price for fresh frozen; dry products get priced on the invoice)</span></label>
+        <div className="field"><label>Lines <span className="muted">(price blank = their contract price for fresh frozen, or the market price if they have none; dry products get priced on the invoice)</span></label>
           <datalist id="no-strains">{strains.filter(s => s.active).map(s => <option key={s.id} value={s.name} />)}</datalist>
           {lines.map((l, i) => (<div key={i} className="nolinewrap">
             <div className="row noline">
@@ -368,6 +372,65 @@ export function TermsPanel({ backend, flash, canEdit }: { backend: Backend; flas
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Sales settings > Market price: $/lb per crop year for outside customers with no contract price (164) */
+type MarketPrice = { crop_year: number; price_per_lb: number; updated_by: string | null; updated_at: string }
+export function MarketPricePanel({ backend, flash, canEdit }: { backend: Backend; flash: Flash; canEdit: boolean }) {
+  const sb = backend.client()
+  const [rows, setRows] = useState<MarketPrice[] | null>(null)
+  const [missing, setMissing] = useState(false)
+  const [cur, setCur] = useState(CUR_YEAR)
+  const [ed, setEd] = useState<Record<number, string>>({})
+  const [busy, setBusy] = useState(false)
+  const load = async () => {
+    if (!sb) { setRows([]); return }
+    const { data, error } = await sb.from('market_prices').select('*').order('crop_year', { ascending: false })
+    setMissing(!!error && /market_prices/.test(error.message)); setRows(error ? [] : (data ?? []) as MarketPrice[])
+  }
+  useEffect(() => { load(); backend.reserveYears().then(y => setCur(y.current)).catch(() => {}) }, [])
+  if (!rows) return <p className="muted">Loading…</p>
+  if (missing) return <div className="warnbox">Market prices need 164_market_price.sql run in Supabase.</div>
+  const years = [...new Set([cur + 1, cur, cur - 1, ...rows.map(r => r.crop_year)])].sort((a, b) => b - a)
+  async function save(y: number, clear: boolean) {
+    if (!sb) return
+    const v = (ed[y] ?? '').trim()
+    if (!clear && !(Number(v) >= 0 && v !== '')) { flash('Enter a price in $/lb', true); return }
+    setBusy(true)
+    try {
+      const { error } = await sb.rpc('set_market_price', { p_year: y, p_price: clear ? null : Number(v) })
+      if (error) throw new Error(error.message)
+      setEd(e => { const n = { ...e }; delete n[y]; return n }); await load()
+      flash(clear ? `${y} market price cleared` : `${y} market price saved: ${money(Number(v))}/lb`)
+    } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
+  }
+  return (
+    <div className="dlist">
+      <p className="muted">Outside customers with no contract price pay the market price for the crop year they buy, on portal orders, Sales orders and invoices.
+        Contract customers always pay their contract price. Orders already placed keep their prices.</p>
+      {years.map(y => {
+        const r = rows.find(x => x.crop_year === y), editing = ed[y] !== undefined
+        return (
+          <div key={y} className="drow">
+            <span><b>{y} crop</b>{y === cur && <span className="muted"> · current</span>}<br />
+              <span className="muted">{r ? `${money(Number(r.price_per_lb))}/lb · set by ${r.updated_by ?? 'someone'} ${new Date(r.updated_at).toLocaleDateString()}` : 'Not set: customers without a contract price get no price for this crop'}</span></span>
+            {canEdit && (editing
+              ? <span className="row noline">
+                  <input type="number" min="0" step="0.01" inputMode="decimal" style={{ width: 110 }} placeholder="$/lb" value={ed[y]} autoFocus
+                    onChange={e => setEd({ ...ed, [y]: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') save(y, false) }} />
+                  <button className="primary small" disabled={busy} onClick={() => save(y, false)}>Save</button>
+                  <button className="ghost small" disabled={busy} onClick={() => setEd(e => { const n = { ...e }; delete n[y]; return n })}>Cancel</button>
+                </span>
+              : <span className="row noline">
+                  <button className="ghost small" disabled={busy} onClick={() => setEd({ ...ed, [y]: r ? String(r.price_per_lb) : '' })}>{r ? 'Change' : 'Set price'}</button>
+                  {r && <button className="ghost small" disabled={busy} onClick={() => { if (confirm(`Clear the ${y} market price?`)) save(y, true) }}>Clear</button>}
+                </span>)}
+          </div>
+        )
+      })}
+      {!canEdit && <p className="muted">Only a Sales Admin can change the market price.</p>}
     </div>
   )
 }
