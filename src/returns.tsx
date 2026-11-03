@@ -8,7 +8,7 @@ import { money, rpc } from './ship'
 // in METRC; that makes the credit memo (Product Return), which goes to QuickBooks 30 minutes later (or Send now in Accounting).
 
 type Flash = (t: string, bad?: boolean) => void
-interface RLine { id: number; strain: string; crop_year: number | null; site: string | null; lbs: number; received_lbs: number; price: number | null; tags: string[]
+interface RLine { id: number; strain: string; crop_year: number | null; site: string | null; lbs: number; received_lbs: number; price: number | null; tags: string[]; reason?: string
   packages: { tag: string; lbs: number; code: string | null; at: string }[] }
 interface Credit { id: number; number: string; total: number; date: string; status: string; acct_status: 'pending' | 'sent' | 'error' | 'skip'; qbo_doc: string | null; error: string | null; sent_at: string | null; created_at: string }
 interface Ret { id: number; rma: string; status: 'open' | 'received' | 'credited' | 'cancelled'; reason: string; notes: string | null; manifest: string | null
@@ -17,7 +17,8 @@ interface Ret { id: number; rma: string; status: 'open' | 'received' | 'credited
 interface ShippedOrder { id: number; so: string | null; customer_id: number; customer: string; shipped: string | null; lbs: number; strains: string | null }
 interface OLine { id: number; strain: string; crop_year: number | null; product: string; shipped_lbs: number; returned_lbs: number; price: number | null; invoice: string | null; tags: string[]; site: string | null }
 
-export const REASONS: Record<string, string> = { quality: 'Quality', wrong_strain: 'Wrong strain', overshipped: 'Overshipped', damaged: 'Damaged', yield: 'Yield', other: 'Other' }
+export const REASONS: Record<string, string> = { quality: 'Quality', yield: 'Yield', wrong_strain: 'Wrong strain', overshipped: 'Overshipped', damaged: 'Damaged', not_delivered: 'Not delivered (on manifest, not on truck)', other: 'Other' }
+const REASON_SHORT: Record<string, string> = { ...REASONS, not_delivered: 'Not delivered', mixed: 'Several reasons' }
 const STATUS: Record<Ret['status'], [string, string]> = { open: ['Waiting for the product', 'm-warn'], received: ['Received', 'm-ok'], credited: ['Credited', 'm-ok'], cancelled: ['Cancelled', 'm-off'] }
 const ACCT: Record<Credit['acct_status'], string> = { pending: 'goes to QuickBooks 30 min after it was made', sent: 'in QuickBooks', error: 'not sent', skip: 'not sent' }
 const n2 = (x: number | null | undefined) => Number(x ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
@@ -76,15 +77,15 @@ export function ReturnsView({ sb, customers, flash, canEdit, canSend }: { sb: Su
       return <div key={r.id} className="card">
         <div className="row between wrap">
           <div><b>{r.rma}</b> · <b>{r.customer}</b> <span className={`pill ${sc}`}>{sl}</span>
-            <div className="muted small">{REASONS[r.reason] ?? r.reason}{r.so ? ` · order ${r.so}` : r.order_id ? ` · order #${r.order_id}` : ''} · started {day(r.created_at)}{r.created_by ? ` by ${r.created_by}` : ''}
+            <div className="muted small">{REASON_SHORT[r.reason] ?? r.reason}{r.so ? ` · order ${r.so}` : r.order_id ? ` · order #${r.order_id}` : ''} · started {day(r.created_at)}{r.created_by ? ` by ${r.created_by}` : ''}
               {r.received_at ? ` · received ${day(r.received_at)}${r.manifest ? ` (manifest ${r.manifest})` : ''}` : ''}</div>
             {r.notes && <div className="small">{r.notes}</div>}</div>
           <div className="row">
             <span className="small">{n2(got)} of {n2(want)} lbs back</span>
             {canEdit && r.status === 'open' && got === 0 && <button className="ghost small" disabled={!!busy} onClick={() => cancel(r)}>{busy === r.rma ? '…' : 'Cancel'}</button>}
           </div></div>
-        <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th className="num">Lbs</th><th className="num">Received</th><th className="num">$/lb</th><th>Packages</th></tr></thead>
-          <tbody>{r.lines.map(l => <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td>{l.site ?? <span className="warn-t">?</span>}</td><td className="num">{n2(l.lbs)}</td>
+        <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th>Reason</th><th className="num">Lbs</th><th className="num">Received</th><th className="num">$/lb</th><th>Packages</th></tr></thead>
+          <tbody>{r.lines.map(l => <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td>{l.site ?? <span className="warn-t">?</span>}</td><td className="small">{REASON_SHORT[l.reason ?? r.reason] ?? l.reason}</td><td className="num">{n2(l.lbs)}</td>
             <td className="num">{n2(l.received_lbs)}</td><td className="num">{l.price == null ? <span className="warn-t">none</span> : money(l.price)}</td>
             <td className="small">{l.packages.length ? l.packages.map(p => `${p.code ?? p.tag} ${n2(p.lbs)}`).join(', ') : <span className="muted mono">{l.tags.join(', ') || 'tags we shipped: none on file'}</span>}</td></tr>)}</tbody></table></div>
         {r.credits.map(c => <div key={c.id} className="row between wrap small" style={{ marginTop: 6 }}>
@@ -106,6 +107,7 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
   const [order, setOrder] = useState<number | ''>('')
   const [lines, setLines] = useState<OLine[] | null>(null)
   const [lbs, setLbs] = useState<Record<number, string>>({})
+  const [why, setWhy] = useState<Record<number, string>>({})
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
@@ -116,19 +118,21 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
     rpc<ShippedOrder[]>(sb, 'returnable_orders', { p_customer: cust }, '159_returns').then(setOrders).catch(e => { flash((e as Error).message, true); setOrders([]) })
   }, [cust])
   useEffect(() => {
-    setLines(null); setLbs({})
+    setLines(null); setLbs({}); setWhy({})
     if (!order) return
     rpc<OLine[]>(sb, 'return_order_lines', { p_order: order }, '159_returns').then(setLines).catch(e => { flash((e as Error).message, true); setLines([]) })
   }, [order])
   const picked = (lines ?? []).filter(l => Number(lbs[l.id] || 0) > 0)
   const over = picked.filter(l => Number(lbs[l.id]) > Number(l.shipped_lbs) - Number(l.returned_lbs) + 0.001)
+  const whyOf = (id: number) => why[id] || reason
+  const noWhy = picked.filter(l => !whyOf(l.id))
   const total = picked.reduce((s, l) => s + Number(lbs[l.id]) * Number(l.price ?? 0), 0)
   async function save() {
-    if (!order || !reason || !picked.length || over.length) return
+    if (!order || noWhy.length || !picked.length || over.length) return
     setBusy(true)
     try {
       const r = await rpc<{ rma: string }>(sb, 'create_return', { p_order: order, p_reason: reason, p_notes: notes,
-        p_lines: picked.map(l => ({ line_id: l.id, lbs: Number(lbs[l.id]) })) }, '159_returns')
+        p_lines: picked.map(l => ({ line_id: l.id, lbs: Number(lbs[l.id]), reason: whyOf(l.id) })) }, '159_returns')
       flash(`${r.rma} started. Ask the customer to put ${r.rma} on their METRC manifest back to us.`)
       onMade()
     } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
@@ -143,20 +147,23 @@ function NewReturn({ sb, customers, flash, onClose, onMade }: { sb: SupabaseClie
         <Select value={order === '' ? '' : String(order)} onChange={e => setOrder(e.target.value ? Number(e.target.value) : '')}>
           <option value="">{orders === null ? 'Loading…' : orders.length ? 'Pick the order it shipped on' : 'No shipped orders in the last 2 years'}</option>
           {(orders ?? []).map(o => <option key={o.id} value={o.id}>{o.so ?? `#${o.id}`} · {day(o.shipped)} · {n2(o.lbs)} lbs · {o.strains}</option>)}</Select></div>}
-      {lines && <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th className="num">Shipped</th><th className="num">Can return</th><th className="num">$/lb</th><th className="num">Lbs back</th></tr></thead>
+      {lines && <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Crop</th><th>Farm</th><th className="num">Shipped</th><th className="num">Can return</th><th className="num">$/lb</th><th className="num">Lbs back</th><th>Reason</th></tr></thead>
         <tbody>{lines.map(l => { const can = Math.max(Number(l.shipped_lbs) - Number(l.returned_lbs), 0); const bad = Number(lbs[l.id] || 0) > can + 0.001
           return <tr key={l.id}><td>{l.strain}</td><td>{l.crop_year ?? ''}</td><td>{l.site ?? <span className="warn-t">?</span>}</td><td className="num">{n2(l.shipped_lbs)}</td><td className="num">{n2(can)}</td>
             <td className="num">{l.price == null ? <span className="warn-t">none</span> : money(l.price)}</td>
             <td className="num"><input type="number" min={0} step="0.01" max={can} disabled={can <= 0} style={{ width: 90 }} className={bad ? 'bad' : ''} value={lbs[l.id] ?? ''}
-              onChange={e => setLbs(m => ({ ...m, [l.id]: e.target.value }))} /></td></tr> })}</tbody></table></div>}
+              onChange={e => setLbs(m => ({ ...m, [l.id]: e.target.value }))} /></td>
+            <td><select value={why[l.id] ?? ''} disabled={can <= 0} onChange={e => setWhy(m => ({ ...m, [l.id]: e.target.value }))}>
+              <option value="">{reason ? `Same (${REASON_SHORT[reason]})` : 'Pick'}</option>{Object.entries(REASONS).map(([k, v]) => <option key={k} value={k}>{REASON_SHORT[k] ?? v}</option>)}</select></td></tr> })}</tbody></table></div>}
       {lines && !lines.length && <p className="muted">Nothing on this order can come back.</p>}
       {over.length > 0 && <p className="neg small">{over.map(l => l.strain).join(', ')}: more than can come back.</p>}
-      <div className="field"><label>Reason</label>
+      <div className="field"><label>Reason (for every line, unless a line says otherwise)</label>
         <select value={reason} onChange={e => setReason(e.target.value)}><option value="">Pick a reason</option>{Object.entries(REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
       <div className="field"><label>Notes</label><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="What happened (optional)" /></div>
+      <p className="muted small">Quality and Yield release the customer's reserve on that strain (they keep only what they kept). Not delivered is credited as Product Refund; everything else as Product Return.</p>
       {picked.length > 0 && <p className="small">Credit if all of it comes back: <b>{money(total)}</b> <span className="muted">(the credit memo uses the weight we actually receive)</span></p>}
       <div className="row between"><button className="ghost" onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || !order || !reason || !picked.length || over.length > 0} onClick={save}>{busy ? 'Saving…' : 'Start return'}</button></div>
+        <button className="primary" disabled={busy || !order || noWhy.length > 0 || !picked.length || over.length > 0} onClick={save}>{busy ? 'Saving…' : 'Start return'}</button></div>
     </div>
   </div>
 }
