@@ -495,7 +495,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <div className={c('row')} style={{ alignItems: 'flex-start', gap: 10 }}><div className={c('grow')}>
               <p className={c('name')} style={{ fontSize: 16 }}>Add Lifted to your home screen</p>
               <p className={c('meta')} style={{ margin: '4px 0 0' }}>{a2hs === 'ios'
-                ? <>In Safari, tap the <b>Share</b> button {I.share}, then <b>View More</b>, then <b>Add to Home Screen</b> {I.plusbox}.</>
+                ? <>In Safari, tap the <b>Share</b> button {I.share}, then <b>View More</b>, then {I.plusbox} <b>Add to Home Screen</b>.</>
                 : <>Tap the <b>⋮</b> menu, then <b>Add to Home screen</b> (or <b>Install app</b>).</>}
                 {' '}Open the portal from that icon and you'll stay signed in. You'll sign in once more the first time.</p></div>
               <button className={c('iconbtn')} style={{ color: 'var(--muted)', borderColor: 'var(--line)', flex: '0 0 auto' }} onClick={hideA2hs} aria-label="Hide this tip">{I.close}</button></div>
