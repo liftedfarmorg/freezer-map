@@ -72,7 +72,7 @@ const AccountingView = lazy(() => import('./acct/AccountingView'))
 const ProcessingView = lazy(() => import('./proc/ProcessingView'))
 const ComplianceView = lazy(() => import('./comp/ComplianceView'))
 
-type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'inbound' | 'archived'
+type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'inbound' | 'archived' | 'items'
 // modules: each person has a level (User / Admin) per module; Owners have all of them (Admin > Settings > Users)
 type Mod = 'dist' | 'sales' | 'cult' | 'nurs' | 'proc' | 'acct' | 'comp' | 'admin'
 const MOD_KEY: Record<Mod, ModKey> = { dist: 'distribution', sales: 'sales', cult: 'cultivation', nurs: 'nursery', proc: 'processing', acct: 'accounting', comp: 'compliance', admin: 'admin' }
@@ -82,7 +82,7 @@ const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distributio
 const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Production', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
-type SalesTab = 'dash' | 'inventory' | 'items' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
+type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
 type AdminTab = 'dash' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
@@ -809,10 +809,13 @@ export default function App() {
   // ---------- navigation: the same shape in every module ----------
   // main screens at the top (Dashboard first), then Review, Activity and Settings at the bottom
   const badge = (n: number, warn = false) => n > 0 ? <span className={`badge ${warn ? 'warn' : ''}`}>{n}</span> : null
+  // 171: Items is one screen, in every module's menu
+  const itemsNav: NavItem = { k: 'items', l: 'Items', on: view === 'items', go: () => go('items') }
   const distMain: NavItem[] = [
     { k: 'dash', l: 'Dashboard', on: view === 'dash', go: () => go('dash') },
     { k: 'map', l: 'Map', on: view === 'map' || view === 'freezer', go: () => go(view !== 'map' && view !== 'freezer' && freezerId != null ? 'freezer' : 'map') },
     { k: 'inventory', l: 'Inventory', on: view === 'inventory', go: () => go('inventory') },
+    itemsNav,
     { k: 'fulfill', l: <>Fulfillment{badge(toFulfill)}</>, s: t('Fulfill'), n: toFulfill, on: view === 'fulfill', go: () => go('fulfill') },
     { k: 'transit', l: <>Transit{badge(openLoads.length)}</>, s: 'Transit', n: openLoads.length, on: view === 'transit' || view === 'load', go: () => go('transit') },
     ...(staff ? [{ k: 'inbound', l: 'Inbound', on: view === 'inbound', go: () => go('inbound') }] : []),
@@ -824,26 +827,26 @@ export default function App() {
     ...(isAdminOf('dist') ? [{ k: 'settings', l: 'Settings', on: view === 'settings', go: () => go('settings') }] : []),
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
-  const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), sItem('items', 'Items'), sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
+  const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
     sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
-  const cultMain = CULT_TABS.map(x => cItem(x.t, t(x.l)))
+  const cultMain = [...CULT_TABS.map(x => cItem(x.t, t(x.l))), itemsNav]
   const cultTail = CULT_TAIL.filter(x => x.t !== 'setup' || isAdminOf('cult')).map(x => cItem(x.t, t(x.l)))
   const aItem = (t: AdminTab, l: string): NavItem => ({ k: t, l, on: view === 'admin' && adminTab === t, go: () => setAdminTab(t) })
   const adminMain = [aItem('dash', 'Dashboard')], adminTail = [aItem('review', 'Review'), aItem('activity', 'Activity'), aItem('settings', 'Settings')]
   const nItem = (t: NTab, l: string): NavItem => ({ k: t, l, on: view === 'nursery' && nurTab === t, go: () => setNurTab(t) })
-  const nurMain = NURSERY_TABS.map(x => nItem(x.t, t(x.l)))
+  const nurMain = [...NURSERY_TABS.map(x => nItem(x.t, t(x.l))), itemsNav]
   const nurTail = NURSERY_TAIL.filter(x => x.t !== 'settings' || isAdminOf('nurs')).map(x => nItem(x.t, t(x.l)))
   const prItem = (t: PTab, l: string): NavItem => ({ k: t, l, on: view === 'proc' && procTab === t, go: () => setProcTab(t) })
-  const procMain = PROC_TABS.map(x => prItem(x.t, t(x.l)))
+  const procMain = [...PROC_TABS.map(x => prItem(x.t, t(x.l))), itemsNav]
   const procTail = PROC_TAIL.filter(x => x.t !== 'settings' || isAdminOf('proc')).map(x => prItem(x.t, t(x.l)))
   const acItem = (t: ATab, l: string): NavItem => ({ k: t, l, on: view === 'acct' && acctTab === t, go: () => setAcctTab(t) })
-  const acctMain = ACCT_TABS.map(x => acItem(x.t, x.l))
+  const acctMain = [...ACCT_TABS.map(x => acItem(x.t, x.l)), itemsNav]
   const acctTail = ACCT_TAIL.filter(x => x.t !== 'settings' || isAdminOf('acct')).map(x => acItem(x.t, x.l))
   const coItem = (t: CTab, l: string): NavItem => ({ k: t, l, on: view === 'comp' && compTab === t, go: () => setCompTab(t) })
-  const compMain = COMP_TABS.map(x => coItem(x.t, x.l))
+  const compMain = [...COMP_TABS.map(x => coItem(x.t, x.l)), itemsNav]
   const compTail = COMP_TAIL.filter(x => x.t !== 'settings' || isAdminOf('comp')).map(x => coItem(x.t, x.l))
   const NAV: Record<Mod, { main: NavItem[]; tail: NavItem[] }> = {
     acct: { main: acctMain, tail: acctTail }, proc: { main: procMain, tail: procTail }, comp: { main: compMain, tail: compTail },
@@ -937,6 +940,7 @@ export default function App() {
       <main>
         {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
         {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} />}
+        {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} />}
         {view === 'mine' && <MySettings backend={backend} me={me!} flash={flash} onSaved={(p, name) => setMe(m => m && ({ ...m, display_name: name ?? m.display_name, access: { ...m.access, prefs: p } }))} />}
         {noMods && view !== 'mine' && view !== 'fleet' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}
         {view === 'dash' && cur === 'dist' && (
@@ -1007,7 +1011,6 @@ export default function App() {
           if (salesTab === 'review') return <SalesReview backend={backend} customers={snap.customers ?? []} isAdmin={salesAdmin} go={goS} fulfil={forders} onFulfil={refreshF} flash={flash} />
           if (salesTab === 'activity') return <ActivityView ix={ix} module="sales" />
           if (salesTab === 'inventory') return <SalesInventory c={invCtx} strains={snap.strains ?? []} sb={backend.client()} onNewOrder={isSales ? () => setNewOrder(true) : undefined} />
-          if (salesTab === 'items') return <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} />
           if (salesTab === 'returns') return <ReturnsView sb={backend.client()} customers={snap.customers ?? []} flash={flash}
             canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} isAdmin={salesAdmin || !!me?.access?.owner} />
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />

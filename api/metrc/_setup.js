@@ -33,6 +33,22 @@ export async function sendStrainCreate(job, ctx) {
   return { state: 'sent', request: body, response: resp, info: `Made the strain ${what} on ${lic}` }
 }
 
+// ---------- strain type change (172): update indica / sativa % on a strain METRC already has ----------
+export async function sendStrainUpdate(job, ctx) {
+  const d = job.details || {}, lic = job.license
+  if (!lic || !d.name) throw new Error('No license or strain name on this to-do')
+  const have = byName(await strainsOn(ctx, lic), d.name)
+  if (!have) throw new Skip(`METRC doesn't have the strain "${d.name}" on ${lic}, nothing to update`)
+  const indica = pct(d.indica ?? 50), sativa = pct(d.sativa ?? 50)
+  if (pct(have.indicaPercentage) === indica && pct(have.sativaPercentage) === sativa) throw new Skip(`METRC already has ${d.name} at ${indica}/${sativa} on ${lic}`)
+  const body = [{ id: have.id, name: unhtml(have.name), testingStatus: have.testingStatus || d.testing || 'None', thcLevel: pct(have.thcLevel ?? d.thc), cbdLevel: pct(have.cbdLevel ?? d.cbd),
+    indicaPercentage: indica, sativaPercentage: sativa }]
+  const resp = await write(ctx, '/v2/strains/update', lic, body)
+  const what = `${unhtml(have.name)} to ${indica}/${sativa} indica/sativa${d.kind ? ` (${d.kind})` : ''}`
+  if (!ctx.live) return { state: 'checked', request: body, response: resp, info: `Dry run OK: METRC would change ${what} on ${lic}` }
+  return { state: 'sent', request: body, response: resp, info: `Changed ${what} on ${lic}` }
+}
+
 // ---------- item ----------
 export async function sendItemCreate(job, ctx) {
   const d = job.details || {}, lic = job.license

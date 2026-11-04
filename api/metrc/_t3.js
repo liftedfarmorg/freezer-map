@@ -8,7 +8,7 @@ import {
   sendFlower, sendHarvestFinish, sendHarvestPackage, sendHarvestPlants, sendHarvestWaste, sendNurseryClones, sendNurseryLoss,
   sendNurseryMothers, sendPlantLoss, sendPlanting,
 } from './_plants.js'
-import { sendItemCreate, sendStrainCreate } from './_setup.js'
+import { sendItemCreate, sendStrainCreate, sendStrainUpdate } from './_setup.js'
 
 export { asUser, caller, db, isLive, missing, rpc, send, setting, t3, useSource } from './_core.js'
 export { testApi } from './_api.js'
@@ -60,7 +60,7 @@ const SENDERS = {
   nursery_clones: sendNurseryClones, nursery_mothers: sendNurseryMothers, nursery_loss: sendNurseryLoss,
   planting: sendPlanting, plant_loss: sendPlantLoss, flower: sendFlower,
   harvest_plants: sendHarvestPlants, harvest_package: sendHarvestPackage, harvest_waste: sendHarvestWaste, harvest_finish: sendHarvestFinish,
-  strain_create: sendStrainCreate, item_create: sendItemCreate,
+  strain_create: sendStrainCreate, item_create: sendItemCreate, strain_update: sendStrainUpdate,
 }
 // METRC API senders, one per kind, added as each is built and tested in the sandbox (then api_ready = true for that kind).
 // Same contract as the T3 senders: (job, ctx) => { state, info, request, response }, throw Skip / Wait / Held.

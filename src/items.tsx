@@ -53,7 +53,7 @@ export function ItemsView({ sb, flash, canEdit }: { sb: SupabaseClient | null; f
     catch (e) { flash((e as Error).message, true) }
   }
   const chip = (k: typeof show, l: string) => <button key={k} className={show === k ? 'primary small' : 'ghost small'} onClick={() => setShow(k)}>{l}</button>
-  return <div className="list">
+  return <div className="list inv">
     <div className="row between wrap toolbar"><h2>Items</h2>
       <div className="row"><button className="ghost small" onClick={load}>Refresh</button></div></div>
     <p className="muted">Every item card. One card is one METRC item, and it shows on every license where METRC has it. New cards are made from a strain card (tap a strain name › Items) and go to METRC on their own.</p>
@@ -143,7 +143,7 @@ export function StrainItems({ sb, strainId, strainType, flash, canEdit, onChange
     <h3>Type and items</h3>
     <div className="field"><label>Type</label>
       <select value={type} disabled={!canEdit} onChange={e => saveType(e.target.value)}><option value="">Not set</option>{STRAIN_TYPES.map(t => <option key={t}>{t}</option>)}</select>
-      <span className="muted small"> sets the METRC indica / sativa % for this strain</span></div>
+      <span className="muted small"> sets the indica / sativa % and sends the change to METRC (Compliance › METRC › To do)</span></div>
     {rows === null ? <p className="muted">Loading…</p> : !rows.length ? <p className="muted">No item cards yet.</p>
       : <div className="tablewrap"><table className="ct"><thead><tr><th>Product</th><th>Crop</th><th>Farm</th><th>In METRC on</th><th className="num">Lbs</th><th>Menu</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id} className="tap" onClick={() => setOpen(r)}><td>{r.product ?? r.finish}</td><td>{r.crop_year}</td><td>{r.site}</td>
