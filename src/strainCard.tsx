@@ -6,6 +6,7 @@ import { StrainProfileEdit, loadProfiles } from './strains'
 import type { StrainProfile } from './strains'
 import { isAnyAdmin } from './fold'
 import type { Strain } from './types'
+import { StrainItems } from './items'
 
 // The strain settings card, from anywhere: tap a strain name on a pallet, package, reserve, harvest or inventory row.
 // Same card as Settings > Strains. Any module Admin can change the name, color and other names;
@@ -47,7 +48,7 @@ export function StrainCardHost({ backend, strains, flash, onChanged }: { backend
   const p = profiles?.get(s.id)
   const profile = p ? <StrainProfileEdit key={s.id} sb={backend.client()} p={p} flash={flash} onSaved={reloadProfiles} /> : <p className="muted">{profiles ? '' : 'Loading…'}</p>
   if (isAnyAdmin()) return (
-    <EditForm key={s.id} list="strains" row={structuredClone(s) as Partial<ListRow>} busy={busy} onClose={close} extra={<>{s.code && <StrainCode code={s.code} flash={flash} />}{profile}</>}
+    <EditForm key={s.id} list="strains" row={structuredClone(s) as Partial<ListRow>} busy={busy} onClose={close} extra={<>{s.code && <StrainCode code={s.code} flash={flash} />}{profile}<StrainItems sb={backend.client()} strainId={s.id} strainType={s.strain_type ?? null} flash={flash} canEdit onChanged={onChanged} /></>}
       onSave={async row => {
         setBusy(true)
         try { await backend.saveRow('strains', row); onChanged(); flash('Saved'); close() }
@@ -61,6 +62,7 @@ export function StrainCardHost({ backend, strains, flash, onChanged }: { backend
       {(s.aliases ?? []).length > 0 && <p className="muted">Also called {s.aliases.join(', ')}</p>}
       {s.notes && <p>{s.notes}</p>}
       {profile}
+      <StrainItems sb={backend.client()} strainId={s.id} strainType={s.strain_type ?? null} flash={flash} canEdit={false} />
     </div></div>
   )
 }

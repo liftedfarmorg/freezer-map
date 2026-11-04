@@ -53,13 +53,14 @@ import { MetrcWeightRow } from './comp/metrcweight'
 import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
+import { ItemsView } from './items'
 import { ReceivingView } from './receiving'
 import { FillTolerance, ShippingQuote, ShippingSettings, rpc } from './ship'
 import { metrcRun } from './metrcCall'
 import { TagSuggestProvider } from './tagSuggest'
 import type { LoadCtx } from './loads'
 import { lang, setLang, t } from './i18n'
-import { setMyAccess } from './fold'
+import { setMyAccess, isAnyAdmin } from './fold'
 import { WeatherBar } from './weather'
 import type { Grade, Item, HarvestLot, FOrder, ModKey, Freezer, Me, FreezerStatus, InvEvent, Load, LoadItem, LoadStop, Pallet, Site, Slot, Snapshot } from './types'
 
@@ -81,7 +82,7 @@ const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distributio
 const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Production', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
-type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
+type SalesTab = 'dash' | 'inventory' | 'items' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
 type AdminTab = 'dash' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
@@ -823,7 +824,7 @@ export default function App() {
     ...(isAdminOf('dist') ? [{ k: 'settings', l: 'Settings', on: view === 'settings', go: () => go('settings') }] : []),
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
-  const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
+  const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), sItem('items', 'Items'), sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
     sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
@@ -1006,6 +1007,7 @@ export default function App() {
           if (salesTab === 'review') return <SalesReview backend={backend} customers={snap.customers ?? []} isAdmin={salesAdmin} go={goS} fulfil={forders} onFulfil={refreshF} flash={flash} />
           if (salesTab === 'activity') return <ActivityView ix={ix} module="sales" />
           if (salesTab === 'inventory') return <SalesInventory c={invCtx} strains={snap.strains ?? []} sb={backend.client()} onNewOrder={isSales ? () => setNewOrder(true) : undefined} />
+          if (salesTab === 'items') return <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} />
           if (salesTab === 'returns') return <ReturnsView sb={backend.client()} customers={snap.customers ?? []} flash={flash}
             canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} isAdmin={salesAdmin || !!me?.access?.owner} />
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />
