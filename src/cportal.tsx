@@ -814,7 +814,29 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const entry = (a: Act) => {
       const many = a.lines.length > 6, open = actOpen.includes(a.id), lines = many && !open ? a.lines.slice(0, 5) : a.lines
       const req = a.kind === 'request'
-      return <section key={a.id} className={c(`card act ${a.by === 'lifted' ? 'act-l' : ''}`)}>
+      const afterOf = (l: ActLine) => !req ? l.to : l.after !== undefined ? (l.after == null ? null : Number(l.after)) : a.status === 'approved' ? l.to : a.status === 'partly' ? (l.ok ?? l.to) : a.status === 'waiting' ? null : l.from
+      const more = many && <button className={c('linkish act-more')} onClick={() => setActOpen(open ? actOpen.filter(x => x !== a.id) : [...actOpen, a.id])}>{open ? 'Show less' : `Show all ${a.lines.length} strains`}</button>
+      const decided = req && a.decidedAt ? <><b>{a.status === 'approved' ? 'Approved' : a.status === 'partly' ? 'Partly approved' : a.status === 'declined' ? 'Not approved' : 'Cancelled'}</b> {actDay(a.decidedAt)}{a.decidedBy ? ` by ${a.decidedBy}` : ''}{a.reply ? <> · “{a.reply}”</> : ''}</> : null
+      const noteLbl = a.by === 'you' ? 'Your note' : a.kind === 'adjust' ? 'Why' : 'Note'
+      // phones: the same card + list rows as Contract Reserves and Orders (strain and details on the left, the change on the right)
+      if (!desk) return <section key={a.id} className={c('card')}>
+        <div className={c('li act-mh')}><div className={c('grow')}><p className={c('name')}>{title(a)}</p>
+          <p className={c('meta act-mmeta')}>{chip(a)}<span>{actWhen(a.at)} · {a.who}</span></p></div></div>
+        {lines.map(l => {
+          const after = afterOf(l), d0 = after == null ? null : after - l.from
+          const detail = !req ? `${fmt(l.from)} → ${fmt(l.to)} lbs`
+            : after == null ? `${fmt(l.from)} → asked for ${fmt(l.to)} lbs · waiting`
+            : a.status === 'declined' || a.status === 'cancelled' || (after === l.from && l.to !== l.from) ? `Asked for ${fmt(l.to)} · stays ${fmt(l.from)} lbs`
+            : after !== l.to ? `${fmt(l.from)} → ${fmt(after)} lbs (asked for ${fmt(l.to)})` : `${fmt(l.from)} → ${fmt(after)} lbs`
+          return <div key={l.s + l.y} className={c('li')}><div className={c('grow')}><p className={c('name')}>{l.s} {yrTag(l.y)}</p><p className={c('meta num')}>{detail}</p></div>
+            <b className={c(`num ${d0 == null || d0 === 0 ? 'muted' : d0 > 0 ? 'up' : 'down'}`)}>{d0 == null ? `${sign(l.to - l.from)} lbs` : d0 === 0 ? '–' : `${sign(d0)} lbs`}</b></div>
+        })}
+        {more && <div className={c('li')} style={{ padding: 0 }}>{more}</div>}
+        {(a.note || decided) && <div className={c('li')} style={{ background: '#f7f9f6' }}><div className={c('grow act-mnotes')}>
+          {a.note && <p><span className={c('meta')} style={{ display: 'inline' }}>{noteLbl}: </span>{a.note}</p>}
+          {decided && <p className={c(`act-reply ${a.status}`)}>{decided}</p>}</div></div>}
+      </section>
+      return <section key={a.id} className={c('card act')}>
         <div className={c('act-h')}>
           <span className={c(`act-dot ${a.by}`)} aria-hidden="true">{a.by === 'lifted' ? <img src="/logo-dark.svg" alt="" /> : I.user}</span>
           <div className={c('grow')}><p className={c('name')}>{title(a)}</p>
@@ -823,7 +845,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         </div>
         <div className={c(`actt head ${req ? '' : 'nr'}`)}><span>Strain</span><span>Before</span>{req && <span>Asked for</span>}<span>After</span><span>Change</span></div>
         {lines.map(l => {
-          const after = !req ? l.to : l.after !== undefined ? (l.after == null ? null : Number(l.after)) : a.status === 'approved' ? l.to : a.status === 'partly' ? (l.ok ?? l.to) : a.status === 'waiting' ? null : l.from
+          const after = afterOf(l)
           return <div key={l.s + l.y} className={c(`actt ${req ? '' : 'nr'}`)}>
             <span className={c('rmname')}>{l.s} {yrTag(l.y)}</span>
             <span className={c('muted')}>{fmt(l.from)}</span>
@@ -832,10 +854,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <span className={c(after == null || after === l.from ? 'muted' : after > l.from ? 'up' : 'down')}>{after == null ? '–' : sign(after - l.from)}</span>
           </div>
         })}
-        {many && <button className={c('linkish act-more')} onClick={() => setActOpen(open ? actOpen.filter(x => x !== a.id) : [...actOpen, a.id])}>{open ? 'Show less' : `Show all ${a.lines.length} strains`}</button>}
-        {(a.note || a.reply || (req && a.decidedAt)) && <div className={c('act-notes')}>
-          {a.note && <p><span className={c('meta')} style={{ display: 'inline' }}>{a.by === 'you' ? 'Your note' : a.kind === 'adjust' ? 'Why' : 'Note'}: </span>{a.note}</p>}
-          {req && a.decidedAt && <p className={c(`act-reply ${a.status}`)}><b>{a.status === 'approved' ? 'Approved' : a.status === 'partly' ? 'Partly approved' : a.status === 'declined' ? 'Not approved' : 'Cancelled'}</b> {actDay(a.decidedAt)}{a.decidedBy ? ` by ${a.decidedBy}` : ''}{a.reply ? <> · “{a.reply}”</> : ''}</p>}
+        {more}
+        {(a.note || decided) && <div className={c(`act-notes ${a.by === 'lifted' && a.kind === 'adjust' ? 'gold' : ''}`)}>
+          {a.note && <p><span className={c('meta')} style={{ display: 'inline' }}>{noteLbl}: </span>{a.note}</p>}
+          {decided && <p className={c(`act-reply ${a.status}`)}>{decided}</p>}
         </div>}
       </section>
     }
