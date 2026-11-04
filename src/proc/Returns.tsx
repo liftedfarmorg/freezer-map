@@ -4,7 +4,6 @@ import type { Pallet } from '../types'
 import type { ProcApi, PData } from './api'
 import { metrcRun } from '../metrcCall'
 import { TagInput } from '../taginput'
-import { NewPackageForm } from '../forms'
 import type { PkgItem } from '../forms'
 import { NumIn, Sheet, errText } from '../cult/ui'
 import type { Flash } from '../cult/ui'
@@ -141,50 +140,88 @@ export function ComingBack({ sb, api, flash, reload, isAdmin }: { sb: SupabaseCl
   </>
 }
 
-/** Back on the processor's tag: Repackage onto our tag(s) with the item picked (174). All of it = repackage (same pallet, new tag + item);
- *  part of it = split a piece onto our tag, the rest stays on theirs. METRC: a new package from theirs, on the license METRC has it on. */
+/** Back on the processor's tag: Repackage onto our tag(s) (174, 175). Several lines at once: tag + item + lbs each. The first line starts
+ *  with the whole package; every line is a split piece onto our tag, and a last line that takes all that's left repackages the package
+ *  itself. Total can't be more than the package; anything left stays on their tag. METRC: new packages from theirs, on the license METRC
+ *  has it on. Warns when the package is an input to an open run (finish the run instead). */
 export function NeedsOurTag({ d, sb, flash, reload, isAdmin, openPkg }: { d: PData; api?: ProcApi; sb: SupabaseClient; flash: Flash; reload: () => Promise<void>; isAdmin: boolean; openPkg: (p: Pallet) => void }) {
   const rows = useMemo(() => d.pallets.filter(p => p.their_tag && (p.status === 'in_freezer' || p.status === 'unslotted')), [d])
   const [form, setForm] = useState<Pallet | null>(null)
-  const [busy, setBusy] = useState(false)
   const lot = (id?: number | null) => d.pallets.find(p => p.id === id)
-  async function repackage(p: Pallet, whole: boolean, n: number, tag: string | null, pending: boolean, itemId: number | null, note: string) {
-    const t = (tag ?? '').trim()
-    if (!pending && !confirm(`${p.code}: our label ${t} is on?\nMETRC makes a new package on ${t} from ${p.package_tag} (${whole ? `all ${n0(p.current_weight)}` : n0(n)} lb)${whole ? ' and finishes theirs' : `; ${p.code} keeps the rest on their tag`}.`)) return
-    setBusy(true)
-    try {
-      const { data, error } = await sb.rpc('new_package', { p_pallet_id: p.id, p_lbs: n, p_tag: t || null, p_tag_pending: pending, p_dest_slot: null,
-        p_item_id: itemId, p_note: note || null, p_keep_on_load: false })
-      if (error) throw new Error(error.message)
-      const c = data as Pallet
-      const k = await metrcRun<{ results?: { id: number; state: string; error?: string; info?: string }[] }>(sb, { action: 'kick' }).catch(() => null)
-      const bad = (k?.results ?? []).filter(x => x.state === 'error')
-      const done = whole ? `${p.code} is on …${(c.package_tag ?? '').slice(-6)} now.` : `${c.code} made (${n0(n)} lb${t ? ` on …${t.slice(-6)}` : ', tag pending'}). ${p.code} keeps the rest on their tag.`
-      flash(bad.length ? `${done} METRC: ${bad.map(b => `#${b.id} ${b.error ?? b.info}`).join('; ')}` : done, bad.length > 0)
-      setForm(null)
-      await reload()
-    } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
-  }
+  const inRun = (id: number) => { const i = d.inputs.find(x => x.pallet_id === id && d.runs.some(r => r.id === x.run_id && r.status === 'open')); return i ? d.runs.find(r => r.id === i.run_id) ?? null : null }
   if (!rows.length) return null
   return <>
     <h3 className="csec">Needs our tag <span className="muted">{rows.length}</span></h3>
     <div className="cwrap fit"><table className="ctable">
       <thead><tr><th>Package</th><th>Strain</th><th className="num">Lbs</th><th className="hide-s">Their tag</th><th className="hide-s">Wet lot</th><th>Back</th><th /></tr></thead>
-      <tbody>{rows.map(p => { const age = ageDays(p.returned_at), late = age > OVERDUE_DAYS, w = lot(p.wet_lot_id)
+      <tbody>{rows.map(p => { const age = ageDays(p.returned_at), late = age > OVERDUE_DAYS, w = lot(p.wet_lot_id), run = inRun(p.id)
         return <tr key={p.id}>
-          <td className="tap" onClick={() => openPkg(p)}><b>{p.code}</b></td><td>{p.strain}</td><td className="num">{n0(p.current_weight)}</td>
+          <td className="tap" onClick={() => openPkg(p)}><b>{p.code}</b>{run ? <span className="pill warnp">in {run.code}</span> : null}</td><td>{p.strain}</td><td className="num">{n0(p.current_weight)}</td>
           <td className="hide-s mono small">…{(p.package_tag ?? '').slice(-6)}</td>
           <td className="hide-s small">{w ? `${w.code}${w.status === 'at_processor' ? ' (open)' : ''}` : <span className="warn-t">none</span>}</td>
           <td className={late ? 'neg small' : 'muted small'}>{Math.floor(age)}d{late ? ' · overdue' : ''}</td>
-          <td>{isAdmin ? <button className="primary small" disabled={busy} onClick={() => setForm(p)}>Repackage</button> : null}</td>
+          <td>{isAdmin ? <button className={run ? 'ghost small' : 'primary small'} onClick={() => setForm(p)}>Repackage</button> : null}</td>
         </tr> })}</tbody>
     </table></div>
-    <p className="muted small">Repackage: put our label on, pick the item, all of it or part of it (several new tags = split pieces, then all of the rest). More than {OVERDUE_DAYS} days on the processor's tag is overdue.</p>
-    {form && <NewPackageForm p={form} where="where it is now" busy={busy} onClose={() => setForm(null)}
-      loadItems={async () => { const { data, error } = await sb.rpc('new_package_items', { p_pallet_id: form.id }); if (error) throw new Error(error.message); return (data ?? []) as PkgItem[] }}
-      loadMetrcItem={async () => { const { data, error } = await sb.rpc('pallet_metrc_item', { p_pallet_id: form.id }); return error ? null : ((data as string | null) ?? null) }}
-      onSubmit={(whole, n, tag, pending, _dest, itemId, note) => repackage(form, whole, n, tag, pending, itemId, note)} />}
+    <p className="muted small">Repackage: put our labels on, then one line per new tag (item and lbs). More than {OVERDUE_DAYS} days on the processor's tag is overdue.</p>
+    {form && <RepackageSheet p={form} run={inRun(form.id)} sb={sb} flash={flash} reload={reload} onClose={() => setForm(null)} />}
   </>
+}
+
+interface RpLine { tag: string; item: number | null; lbs: number | null }
+const r2 = (x: number) => Math.round(x * 100) / 100
+
+function RepackageSheet({ p, run, sb, flash, reload, onClose }: { p: Pallet; run: { code: string } | null; sb: SupabaseClient; flash: Flash; reload: () => Promise<void>; onClose: () => void }) {
+  const w = Number(p.current_weight ?? 0)
+  const [lines, setLines] = useState<RpLine[]>([{ tag: '', item: null, lbs: w }])
+  const [items, setItems] = useState<PkgItem[] | null>(null)
+  const [metrcItem, setMetrcItem] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let on = true
+    sb.rpc('new_package_items', { p_pallet_id: p.id }).then(({ data }) => { if (on) setItems((data ?? []) as PkgItem[]) })
+    sb.rpc('pallet_metrc_item', { p_pallet_id: p.id }).then(({ data }) => { if (on) setMetrcItem((data as string | null) ?? null) })
+    return () => { on = false }
+  }, [p.id])
+  const cur = items?.find(i => i.current)
+  const total = r2(lines.reduce((a, l) => a + (l.lbs ?? 0), 0))
+  const left = r2(w - total)
+  const over = total > w + 0.0001
+  const ok = !over && lines.every(l => l.tag.trim().length === 24 && (l.lbs ?? 0) > 0)
+  const set = (i: number, x: Partial<RpLine>) => setLines(ls => ls.map((l, j) => j === i ? { ...l, ...x } : l))
+  const itemName = (id: number | null) => (id ? items?.find(i => i.id === id)?.metrc_name : cur?.metrc_name) ?? 'same item'
+  async function save() {
+    const sum = lines.map(l => `…${l.tag.slice(-6)}: ${n0(l.lbs)} lb, ${itemName(l.item)}`).join('\n')
+    if (!confirm(`${p.code}: our labels are on?\n${sum}\n${left > 0.0001 ? `${n0(left)} lb stays on their tag (${p.package_tag}).` : `Their tag ${p.package_tag} goes to 0 and is finished.`}`)) return
+    setBusy(true)
+    try {
+      const { data, error } = await sb.rpc('proc_repackage_multi', { p_pallet: p.id, p_lines: lines.map(l => ({ tag: l.tag.trim(), item_id: l.item, lbs: l.lbs })) })
+      if (error) throw new Error(error.message)
+      const res = data as { lines: { code: string; tag: string; lbs: number }[]; left: number | null }
+      const k = await metrcRun<{ results?: { id: number; state: string; error?: string; info?: string }[] }>(sb, { action: 'kick' }).catch(() => null)
+      const bad = (k?.results ?? []).filter(x => x.state === 'error')
+      const done = `${res.lines.map(l => `${l.code} …${(l.tag ?? '').slice(-6)} ${n0(l.lbs)} lb`).join(', ')}${res.left ? ` · ${n0(res.left)} lb still on their tag` : ''}`
+      flash(bad.length ? `${done}. METRC: ${bad.map(b => `#${b.id} ${b.error ?? b.info}`).join('; ')}` : done, bad.length > 0)
+      await reload(); onClose()
+    } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
+  }
+  return <Sheet wide title={`Repackage ${p.code} ${p.strain ?? ''}`} sub={`${n0(w)} lb on their tag …${(p.package_tag ?? '').slice(-6)}${metrcItem ? ` · METRC: ${metrcItem}` : ''}`} onClose={onClose}>
+    {run && <p className="warn-t">{p.code} is an input to open run {run.code}. Finish the run instead (what comes out goes on our tags). Repackaging it now takes it out from under the run.</p>}
+    {lines.map((l, i) => <div key={i} className="row noline">
+      <TagInput compact value={l.tag} onChange={v => set(i, { tag: v })} where={{ pallet: p.id, purpose: 'processing' }} placeholder="Label you put on" />
+      <select value={l.item ?? ''} onChange={e => set(i, { item: e.target.value ? Number(e.target.value) : null })} disabled={items == null}>
+        <option value="">{items == null ? 'Loading…' : `Same item${cur ? ` (${cur.metrc_name})` : ''}`}</option>
+        {(items ?? []).filter(x => !x.current).map(x => <option key={x.id} value={x.id}>{x.metrc_name}</option>)}
+      </select>
+      <NumIn value={l.lbs} placeholder="lbs" onChange={v => set(i, { lbs: v })} />
+      {lines.length > 1 && <button className="ghost small" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>✕</button>}
+    </div>)}
+    <div className="row"><button className="ghost small" onClick={() => setLines(ls => [...ls, { tag: '', item: ls[ls.length - 1]?.item ?? null, lbs: left > 0 ? left : null }])}>+ Another tag</button></div>
+    <p className={over ? 'neg' : 'muted small'}>{over ? `That's ${n0(total)} lb. ${p.code} only has ${n0(w)} lb.` : `${n0(total)} of ${n0(w)} lb${left > 0.0001 ? ` · ${n0(left)} lb stays on their tag` : ' · all of it'}`}</p>
+    <p className="muted small">The item has to be on GVR processing's list in METRC. Every new package is made from their tag in METRC; the last line takes what's left and the package keeps its number and spot.</p>
+    <div className="row between csave"><span /><span className="row"><button className="ghost" onClick={onClose}>Cancel</button>
+      <button className="primary" disabled={busy || !ok} onClick={save}>{busy ? 'Saving…' : `Repackage (${lines.length} tag${lines.length === 1 ? '' : 's'})`}</button></span></div>
+  </Sheet>
 }
 
 /** close a wet lot out at a processor (everything came back): yield = dry back / wet sent */
