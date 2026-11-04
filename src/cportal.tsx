@@ -97,7 +97,7 @@ const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ m
 type Screen = 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
-  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>; qbo: Record<string, QboLine[]>
+  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
 }
 interface ResRow { k: string; s: string; y: number; res: number; used: number; left: number; asked: number | null
   /** desktop table: shipped, on any open SO (approved + submitted), and what's left after both */
@@ -122,10 +122,13 @@ async function loadAll(backend: Backend): Promise<Data> {
   const cy = ys?.current ?? mc?.year ?? Math.max(new Date().getFullYear(), ...menu.map(m => m.crop_year))
   const years = [...new Set([cy, ...menu.map(m => m.crop_year), ...orders.flatMap(o => o.order_lines.map(l => l.crop_year ?? cy))])]
   const ps = await Promise.all(years.map(y => safe(backend.myTermsFor(y), null).then(t => [y, t?.price_per_lb ?? null] as const)))
+  // 175: this customer's price per strain + crop year (contract, else item card, else market), same as place_order uses
+  const lp = await safe(Promise.resolve(backend.client()?.rpc('my_line_prices')).then(r => (r?.data ?? []) as { strain: string; crop_year: number; price: number | null }[]), [])
+  const linePrices: Record<string, number | null> = Object.fromEntries(lp.map(x => [`${x.strain}|${x.crop_year}`, x.price != null ? Number(x.price) : null]))
   const qbo = await safe(backend.qboInvoiceLines((st?.invoices ?? []).map(i => i.qbo_id).filter((x): x is string => !!x)), {} as Record<string, QboLine[]>)
   const prices: Record<number, number | null> = {}
   for (const [y, p] of ps) prices[y] = p != null ? Number(p) : (terms?.price_per_lb != null ? Number(terms.price_per_lb) : null)
-  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, prices, qbo }
+  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, prices, linePrices, qbo }
 }
 
 /* ---------- the portal ---------- */
@@ -293,7 +296,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const holdLbs = (h: SampleHold) => Number(h.state === 'active' ? h.remaining : h.hold_lbs)
   const sampleOf = (h: SampleHold) => Number(d?.orders.flatMap(o => o.order_lines).find(l => l.id === h.line_id)?.lbs ?? 0)
   const holdReq = (h: SampleHold) => d?.reqs.find(r => r.status === 'pending' && r.hold_line_id === h.line_id)
-  const priceOf = (y: number) => d?.prices[y] ?? (d?.terms?.price_per_lb != null ? Number(d.terms.price_per_lb) : null)
+  const priceOf = (y: number, s?: string) => {
+    const k = s ? `${s}|${y}` : '', lp = d?.linePrices ?? {}
+    if (k && k in lp && lp[k] != null) return lp[k]
+    return d?.prices[y] ?? (d?.terms?.price_per_lb != null ? Number(d.terms.price_per_lb) : null)
+  }
 
   /* ---------- reserve edits ---------- */
   const ed: Record<string, number> = edit ?? Object.fromEntries(reserves.map(r => [r.k, r.asked ?? r.res]))
@@ -354,7 +361,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const allLines = [...orderable.resd, ...orderable.others]
   const detail: Detail[] = allLines.filter(l => (ord[l.k] ?? 0) > 0).map(l => {
     const qv = ord[l.k], sp = lineSplit(l, qv)
-    return { k: l.k, s: l.s, y: l.y, q: qv, ...sp, sample: !!smp[l.k], hold: smp[l.k] ? (holdAsk[l.k] ?? 0) : 0, price: priceOf(l.y) }
+    return { k: l.k, s: l.s, y: l.y, q: qv, ...sp, sample: !!smp[l.k], hold: smp[l.k] ? (holdAsk[l.k] ?? 0) : 0, price: priceOf(l.y, l.s) }
   })
   const oTot = {
     lbs: detail.reduce((a, x) => a + x.q, 0), res: detail.reduce((a, x) => a + x.fromRes, 0), open: detail.reduce((a, x) => a + x.fromOpen + x.fromHold, 0),
@@ -1017,7 +1024,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const others = sortRows('oom', orderable.others.filter(show), { open: l => l.open })
     const clearLine = (k: string) => { const o = { ...ord }; delete o[k]; setOrd(o); const s0 = { ...smp }; delete s0[k]; setSmp(s0); const h = { ...holdAsk }; delete h[k]; setHoldAsk(h) }
     const setQ0 = (k: string, n: number) => { if (n > 0) setOrd({ ...ord, [k]: n }); else clearLine(k) }
-    const money0 = (l: OLine, qv: number) => { const p0 = priceOf(l.y); return qv > 0 && p0 != null ? money(qv * p0) : '' }
+    const money0 = (l: OLine, qv: number) => { const p0 = priceOf(l.y, l.s); return qv > 0 && p0 != null ? money(qv * p0) : '' }
     const label = oTot.bad ? 'Fix the red lines' : editing ? 'Review changes' : 'Review order'
     const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
     const line = (l: OLine) => {

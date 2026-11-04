@@ -236,7 +236,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   useEffect(() => { backend.paymentTerms().then(setTerms).catch(() => {}) }, [])
   // market price per crop year (164): what a customer with no contract price pays
   const [market, setMarket] = useState<Map<number, number>>(new Map())
-  useEffect(() => { backend.client()?.from('market_prices').select('crop_year,price_per_lb')
+  useEffect(() => { backend.client()?.from('market_prices').select('crop_year,price_per_lb').eq('finish', 'FF')
     .then(r => setMarket(new Map(((r.data ?? []) as { crop_year: number; price_per_lb: number }[]).map(x => [Number(x.crop_year), Number(x.price_per_lb)]))), () => {}) }, [])
   const c = customers.find(x => x.id === cust)
   useEffect(() => { setTermsCode(c?.payment_terms ?? '') }, [cust])
@@ -376,46 +376,61 @@ export function TermsPanel({ backend, flash, canEdit }: { backend: Backend; flas
   )
 }
 
-/** Sales settings > Market price: $/lb per crop year for outside customers with no contract price (164) */
-type MarketPrice = { crop_year: number; price_per_lb: number; updated_by: string | null; updated_at: string }
+/** Sales settings > Market price: $/lb per product + crop year (e.g. 2026 Fresh Frozen) for outside customers with no contract price (164, 175) */
+type MarketPrice = { crop_year: number; finish: string; price_per_lb: number; updated_by: string | null; updated_at: string }
+const MENU_FINISHES: [string, string][] = [['FF', 'Fresh Frozen'], ['ST', 'Standards'], ['SM', 'Smalls']]
 export function MarketPricePanel({ backend, flash, canEdit }: { backend: Backend; flash: Flash; canEdit: boolean }) {
   const sb = backend.client()
   const [rows, setRows] = useState<MarketPrice[] | null>(null)
   const [missing, setMissing] = useState(false)
   const [cur, setCur] = useState(CUR_YEAR)
+  const [fin, setFin] = useState('FF')
+  const [others, setOthers] = useState<[string, string][]>([])
   const [ed, setEd] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
   const load = async () => {
     if (!sb) { setRows([]); return }
     const { data, error } = await sb.from('market_prices').select('*').order('crop_year', { ascending: false })
-    setMissing(!!error && /market_prices/.test(error.message)); setRows(error ? [] : (data ?? []) as MarketPrice[])
+    setMissing(!!error && /market_prices/.test(error.message)); setRows(error ? [] : ((data ?? []) as MarketPrice[]).map(r => ({ ...r, finish: r.finish ?? 'FF' })))
   }
-  useEffect(() => { load(); backend.reserveYears().then(y => setCur(y.current)).catch(() => {}) }, [])
+  useEffect(() => {
+    load(); backend.reserveYears().then(y => setCur(y.current)).catch(() => {})
+    sb?.from('finishes').select('code,name').then(r => setOthers(((r.data ?? []) as { code: string; name: string }[]).filter(f => !MENU_FINISHES.some(m => m[0] === f.code)).map(f => [f.code, f.name])), () => {})
+  }, [])
   if (!rows) return <p className="muted">Loading…</p>
   if (missing) return <div className="warnbox">Market prices need 164_market_price.sql run in Supabase.</div>
-  const years = [...new Set([cur + 1, cur, cur - 1, ...rows.map(r => r.crop_year)])].sort((a, b) => b - a)
+  const finName = (f: string) => [...MENU_FINISHES, ...others].find(x => x[0] === f)?.[1] ?? f
+  const mine = rows.filter(r => r.finish === fin)
+  const years = [...new Set([cur + 1, cur, cur - 1, ...mine.map(r => r.crop_year)])].sort((a, b) => b - a)
   async function save(y: number, clear: boolean) {
     if (!sb) return
     const v = (ed[y] ?? '').trim()
     if (!clear && !(Number(v) >= 0 && v !== '')) { flash('Enter a price in $/lb', true); return }
     setBusy(true)
     try {
-      const { error } = await sb.rpc('set_market_price', { p_year: y, p_price: clear ? null : Number(v) })
+      const { error } = await sb.rpc('set_market_price', { p_year: y, p_price: clear ? null : Number(v), p_finish: fin })
       if (error) throw new Error(error.message)
       setEd(e => { const n = { ...e }; delete n[y]; return n }); await load()
-      flash(clear ? `${y} market price cleared` : `${y} market price saved: ${money(Number(v))}/lb`)
+      flash(clear ? `${y} ${finName(fin)} market price cleared` : `${y} ${finName(fin)} market price saved: ${money(Number(v))}/lb`)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
+  const pill = (k: string, l: string) => <button key={k} className={fin === k ? 'primary small' : 'ghost small'} onClick={() => { setFin(k); setEd({}) }}>{l}</button>
   return (
     <div className="dlist">
-      <p className="muted">Outside customers with no contract price pay the market price for the crop year they buy, on portal orders, Sales orders and invoices.
-        Contract customers always pay their contract price. Orders already placed keep their prices.</p>
+      <p className="muted">One price per product and crop year, for every strain (e.g. 2026 Fresh Frozen). Outside customers with no contract price pay it on portal orders,
+        Sales orders and invoices, unless the strain's item card has its own price. The open menu shows the item card price, else this. Contract customers always pay
+        their contract price. Orders already placed keep their prices.</p>
+      <div className="row wrap" style={{ gap: 6 }}>
+        {MENU_FINISHES.map(([k, l]) => pill(k, l))}
+        {others.length > 0 && <select value={MENU_FINISHES.some(m => m[0] === fin) ? '' : fin} onChange={e => { if (e.target.value) { setFin(e.target.value); setEd({}) } }}>
+          <option value="">Other product…</option>{others.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
+      </div>
       {years.map(y => {
-        const r = rows.find(x => x.crop_year === y), editing = ed[y] !== undefined
+        const r = mine.find(x => x.crop_year === y), editing = ed[y] !== undefined
         return (
           <div key={y} className="drow">
-            <span><b>{y} crop</b>{y === cur && <span className="muted"> · current</span>}<br />
-              <span className="muted">{r ? `${money(Number(r.price_per_lb))}/lb · set by ${r.updated_by ?? 'someone'} ${new Date(r.updated_at).toLocaleDateString()}` : 'Not set: customers without a contract price get no price for this crop'}</span></span>
+            <span><b>{y} {finName(fin)}</b>{y === cur && <span className="muted"> · current crop</span>}<br />
+              <span className="muted">{r ? `${money(Number(r.price_per_lb))}/lb · set by ${r.updated_by ?? 'someone'} ${new Date(r.updated_at).toLocaleDateString()}` : 'Not set: Call/Email for Price on the menu, and customers without a contract price get no price'}</span></span>
             {canEdit && (editing
               ? <span className="row noline">
                   <input type="number" min="0" step="0.01" inputMode="decimal" style={{ width: 110 }} placeholder="$/lb" value={ed[y]} autoFocus
@@ -425,7 +440,7 @@ export function MarketPricePanel({ backend, flash, canEdit }: { backend: Backend
                 </span>
               : <span className="row noline">
                   <button className="ghost small" disabled={busy} onClick={() => setEd({ ...ed, [y]: r ? String(r.price_per_lb) : '' })}>{r ? 'Change' : 'Set price'}</button>
-                  {r && <button className="ghost small" disabled={busy} onClick={() => { if (confirm(`Clear the ${y} market price?`)) save(y, true) }}>Clear</button>}
+                  {r && <button className="ghost small" disabled={busy} onClick={() => { if (confirm(`Clear the ${y} ${finName(fin)} market price?`)) save(y, true) }}>Clear</button>}
                 </span>)}
           </div>
         )
@@ -436,6 +451,62 @@ export function MarketPricePanel({ backend, flash, canEdit }: { backend: Backend
 }
 
 /** the page behind a texted / emailed link: anyone with the link sees the document and can download it */
+/** Sales settings > Contract product prices: one price per product across all strains for a contract customer (175). Fresh frozen stays on their terms. */
+type Cpp = { customer_id: number; crop_year: number; finish: string; price_per_lb: number; updated_by: string | null; updated_at: string }
+export function ContractProductPrices({ backend, flash, canEdit }: { backend: Backend; flash: Flash; canEdit: boolean }) {
+  const sb = backend.client()
+  const [rows, setRows] = useState<Cpp[] | null>(null)
+  const [custs, setCusts] = useState<{ id: number; name: string }[]>([])
+  const [fins, setFins] = useState<[string, string][]>([])
+  const [f, setF] = useState({ cust: '', year: String(CUR_YEAR), fin: 'ST', price: '' })
+  const [busy, setBusy] = useState(false)
+  const load = async () => {
+    if (!sb) { setRows([]); return }
+    const { data, error } = await sb.from('customer_product_prices').select('*').order('crop_year', { ascending: false })
+    if (error) flash(/customer_product_prices/.test(error.message) ? 'Contract product prices need 175_pricing.sql run in Supabase.' : error.message, true)
+    setRows(error ? [] : (data ?? []) as Cpp[])
+  }
+  useEffect(() => {
+    load()
+    sb?.from('customers').select('id,name').order('name').then(r => setCusts((r.data ?? []) as { id: number; name: string }[]), () => {})
+    sb?.from('finishes').select('code,name').then(r => setFins(((r.data ?? []) as { code: string; name: string }[]).filter(x => x.code !== 'FF').map(x => [x.code, x.name])), () => {})
+  }, [])
+  const custName = (id: number) => custs.find(c => c.id === id)?.name ?? `#${id}`
+  const finName = (c: string) => fins.find(x => x[0] === c)?.[1] ?? c
+  async function save(cust: number, year: number, fin: string, price: number | null) {
+    if (!sb) return
+    setBusy(true)
+    try {
+      const { error } = await sb.rpc('set_customer_product_price', { p_customer: cust, p_year: year, p_finish: fin, p_price: price })
+      if (error) throw new Error(error.message)
+      await load(); flash(price == null ? 'Contract price removed' : `Saved: ${custName(cust)} ${year} ${finName(fin)} ${money(price)}/lb`)
+      if (price != null) setF(x => ({ ...x, price: '' }))
+    } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
+  }
+  if (!rows) return <p className="muted">Loading…</p>
+  return (
+    <div className="dlist">
+      <p className="muted">A contract customer's price for a product, the same for every strain (e.g. their 2026 Smalls price). It carries into later crop years until
+        a newer one is set. Their fresh frozen price stays on their payment terms. Orders already placed keep their prices; special prices are still changed on the sales order.</p>
+      {!rows.length && <p className="muted">No contract product prices yet.</p>}
+      {rows.map(r => (
+        <div key={`${r.customer_id}-${r.crop_year}-${r.finish}`} className="drow">
+          <span><b>{custName(r.customer_id)}</b> · {r.crop_year} {finName(r.finish)}<br />
+            <span className="muted">{money(Number(r.price_per_lb))}/lb · set by {r.updated_by ?? 'someone'} {new Date(r.updated_at).toLocaleDateString()}</span></span>
+          {canEdit && <button className="ghost small" disabled={busy} onClick={() => { if (confirm(`Remove ${custName(r.customer_id)}'s ${r.crop_year} ${finName(r.finish)} price?`)) save(r.customer_id, r.crop_year, r.finish, null) }}>Remove</button>}
+        </div>
+      ))}
+      {canEdit ? <div className="row wrap" style={{ gap: 6, marginTop: 8 }}>
+        <select value={f.cust} onChange={e => setF({ ...f, cust: e.target.value })}><option value="">Customer…</option>{custs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <select value={f.fin} onChange={e => setF({ ...f, fin: e.target.value })}>{fins.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <input type="number" style={{ width: 90 }} value={f.year} onChange={e => setF({ ...f, year: e.target.value })} aria-label="Crop year" />
+        <input type="number" min="0" step="0.01" inputMode="decimal" style={{ width: 110 }} placeholder="$/lb" value={f.price} onChange={e => setF({ ...f, price: e.target.value })} />
+        <button className="primary small" disabled={busy || !f.cust || !(Number(f.price) >= 0) || f.price.trim() === ''} onClick={() => save(Number(f.cust), Number(f.year), f.fin, Number(f.price))}>Save price</button>
+      </div> : <p className="muted">Only a Sales Admin can change contract prices.</p>}
+    </div>
+  )
+}
+
 export function SharedDocPage({ backend, token }: { backend: Backend; token: string }) {
   const [d, setD] = useState<SalesDoc | null | undefined>(undefined)
   const [url, setUrl] = useState<string | null>(null)

@@ -19,7 +19,7 @@ import { AdminDashboard, AdminReview, AppSettingsPanel } from './admin'
 import type { Jump } from './admin'
 import { DeadlinesPanel, SalesDashboard, SalesReview } from './salesdash'
 import { MySettings } from './mine'
-import { DocSheet, InvoicesView, MarketPricePanel, NewOrderSheet, SharedDocPage, TermsPanel } from './invoices'
+import { ContractProductPrices, DocSheet, InvoicesView, MarketPricePanel, NewOrderSheet, SharedDocPage, TermsPanel } from './invoices'
 import { FulfillView, STATE_LABEL } from './fulfill'
 import { applyTheme } from './theme'
 import { money } from './docs'
@@ -799,6 +799,7 @@ export default function App() {
   const salesSettings = <SettingsView key="sales-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Sales settings" focus="sales"
     lists={['customers', 'strains']} canTerms={salesAdmin} extra={[{ k: 'terms', l: 'Payment terms', node: <TermsPanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'market', l: 'Market price', node: <MarketPricePanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
+      { k: 'contract', l: 'Contract product prices', node: <ContractProductPrices backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'deadlines', l: 'Reserve deadlines', node: <DeadlinesPanel backend={backend} flash={flash} /> },
       { k: 'shipping', l: 'Shipping', node: <ShippingSettings sb={backend.client()} flash={flash} canEdit={salesAdmin || isAdminOf('dist')} /> },
       { k: 'fulfill', l: 'Fulfillment', node: <FillTolerance sb={backend.client()} flash={flash} canEdit={salesAdmin || isAdminOf('dist')} /> },
@@ -942,7 +943,7 @@ export default function App() {
       <main>
         {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
         {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} />}
-        {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} />}
+        {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} canPrice={salesAdmin || !!me?.access?.owner} />}
         {view === 'mine' && <MySettings backend={backend} me={me!} flash={flash} onSaved={(p, name) => setMe(m => m && ({ ...m, display_name: name ?? m.display_name, access: { ...m.access, prefs: p } }))} />}
         {noMods && view !== 'mine' && view !== 'fleet' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}
         {view === 'dash' && cur === 'dist' && (

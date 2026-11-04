@@ -14,10 +14,14 @@ export interface ItemCard {
   site: string; license: string | null; metrc_name: string; on_menu: boolean; active: boolean; metrc_status: string
   licenses: { license: string; site: string | null; kind: string | null; metrc_id: number }[]; home_in_metrc: boolean
   packages: number; lbs: number; pkgs_other_item: number; created_at: string
+  price_per_lb: number | null; price_bho: number | null; market: number | null   // 175
 }
 interface CardPkg { pallet_id: number; code: string | null; tag: string | null; status: string; lbs: number | null; metrc_license: string | null; metrc_item: string | null }
 
 const SQL = '171_item_cards'
+const usd = (x: number) => `$${Number(x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+/** the menu price: the card's own, else the market price for that product + crop year (175) */
+const priceText = (r: ItemCard) => r.price_per_lb != null ? `${usd(r.price_per_lb)}${r.price_bho != null ? ` · BHO ${usd(r.price_bho)}` : ''}` : r.market != null ? `${usd(r.market)} market` : ''
 const n0 = (x: number | null | undefined) => Number(x ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })
 const licLabel = (l: { license: string; site: string | null; kind: string | null }) =>
   `${l.site ?? l.license}${l.kind === 'processor' ? ' proc' : l.kind === 'nursery' ? ' nursery' : ''}`
@@ -26,7 +30,7 @@ export const STRAIN_TYPES = ['Indica', 'Indica Hybrid', 'Hybrid', 'Sativa Hybrid
 export function loadItemCards(sb: SupabaseClient | null) { return rpc<ItemCard[]>(sb, 'item_cards', {}, SQL) }
 
 /** Sales › Items: every item card, with filters */
-export function ItemsView({ sb, flash, canEdit }: { sb: SupabaseClient | null; flash: Flash; canEdit: boolean }) {
+export function ItemsView({ sb, flash, canEdit, canPrice = false }: { sb: SupabaseClient | null; flash: Flash; canEdit: boolean; canPrice?: boolean }) {
   const [rows, setRows] = useState<ItemCard[] | null>(null)
   const [q, setQ] = useState('')
   const [prod, setProd] = useState('')
@@ -71,25 +75,35 @@ export function ItemsView({ sb, flash, canEdit }: { sb: SupabaseClient | null; f
     {rows === null && <p className="muted">Loading…</p>}
     {rows && !list.length && <p className="muted">No item cards match.</p>}
     {list.length > 0 && <div className="tablewrap"><table className="ct"><thead><tr><th>Strain</th><th>Product</th><th>Crop</th><th>Farm</th><th>In METRC on</th>
-      <th className="num">Packages</th><th className="num">Lbs</th><th>On menu</th><th /></tr></thead>
+      <th className="num">Packages</th><th className="num">Lbs</th><th className="num">Price /lb</th><th>On menu</th><th /></tr></thead>
       <tbody>{list.map(r => <tr key={r.id} className="tap" onClick={() => setOpen(r)}>
         <td><StrainLink name={r.strain} />{r.strain_type && <div className="muted small">{r.strain_type}</div>}</td>
         <td>{r.product ?? r.finish}</td><td>{r.crop_year}</td><td>{r.site}</td>
         <td className="small">{r.licenses.length ? r.licenses.map(l => <span key={l.license} className="pill" title={l.license} style={{ marginRight: 4 }}>{licLabel(l)}</span>) : <span className="pill m-warn">not in METRC</span>}</td>
         <td className="num">{r.packages ? n0(r.packages) : ''}</td><td className="num">{r.lbs ? n0(r.lbs) : ''}</td>
+        <td className="num small">{r.price_per_lb != null ? priceText(r) : <span className="muted">{priceText(r) || 'call'}</span>}</td>
         <td onClick={e => e.stopPropagation()}>{canEdit
           ? <label className="check"><input type="checkbox" checked={r.on_menu} onChange={() => toggleMenu(r)} /> {r.on_menu ? 'On' : 'Off'}</label>
           : r.on_menu ? 'On' : 'Off'}</td>
         <td className="small">{r.pkgs_other_item > 0 && <span className="pill m-warn" title="METRC has some of these packages on a different item">{r.pkgs_other_item} on another METRC item</span>}</td>
       </tr>)}</tbody></table></div>}
-    {open && <ItemCardSheet sb={sb} card={open} canEdit={canEdit} flash={flash} onClose={() => setOpen(null)} onChanged={c => { setRows(rs => (rs ?? []).map(x => x.id === c.id ? c : x)); setOpen(c) }} />}
+    {open && <ItemCardSheet sb={sb} card={open} canEdit={canEdit} canPrice={canPrice} flash={flash} onClose={() => setOpen(null)}
+      onChanged={c => { setRows(rs => (rs ?? []).map(x => x.id === c.id ? c : x.strain_id === c.strain_id && x.finish === c.finish && x.crop_year === c.crop_year ? { ...x, price_per_lb: c.price_per_lb, price_bho: c.price_bho } : x)); setOpen(c) }} />}
   </div>
 }
 
 /** one item card */
-export function ItemCardSheet({ sb, card, canEdit, flash, onClose, onChanged }: { sb: SupabaseClient | null; card: ItemCard; canEdit: boolean; flash: Flash; onClose: () => void; onChanged: (c: ItemCard) => void }) {
+export function ItemCardSheet({ sb, card, canEdit, canPrice = false, flash, onClose, onChanged }: { sb: SupabaseClient | null; card: ItemCard; canEdit: boolean; canPrice?: boolean; flash: Flash; onClose: () => void; onChanged: (c: ItemCard) => void }) {
   const [pkgs, setPkgs] = useState<CardPkg[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pe, setPe] = useState<{ p: string; b: string } | null>(null)
+  async function savePrice(clear: boolean) {
+    const p = clear ? null : pe?.p.trim() ? Number(pe.p) : null, b = clear || card.finish !== 'FF' ? null : pe?.b.trim() ? Number(pe.b) : null
+    if (!clear && (p == null || !(p >= 0) || (b != null && !(b >= 0)))) { flash('Enter a price in $/lb', true); return }
+    setBusy(true)
+    try { await rpc(sb, 'set_item_price', { p_item: card.id, p_price: p, p_bho: b }, '175_pricing'); onChanged({ ...card, price_per_lb: p, price_bho: b }); setPe(null); flash(clear ? 'Price cleared: it uses the market price' : 'Price saved') }
+    catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
+  }
   useEffect(() => { rpc<CardPkg[]>(sb, 'item_card_packages', { p_item: card.id }, SQL).then(setPkgs, e => { flash((e as Error).message, true); setPkgs([]) }) }, [card.id])
   async function set(on_menu: boolean | null, active: boolean | null) {
     setBusy(true)
@@ -104,6 +118,18 @@ export function ItemCardSheet({ sb, card, canEdit, flash, onClose, onChanged }: 
       <span><b>On the menu</b> <span className="muted">off = it doesn't show on the open menu or the portal. Packages stay in inventory.</span></span></label></div>
     <div className="field"><label className="check"><input type="checkbox" disabled={!canEdit || busy} checked={card.active} onChange={e => set(null, e.target.checked)} />
       <span><b>Active</b> <span className="muted">off = kept for history, not picked for new packages</span></span></label></div>
+    <h3>Price</h3>
+    {pe ? <div className="row wrap" style={{ gap: 6 }}>
+        <label className="small">{card.finish === 'FF' ? 'SHO ' : ''}$/lb <input type="number" min="0" step="0.01" inputMode="decimal" style={{ width: 110 }} value={pe.p} autoFocus onChange={e => setPe({ ...pe, p: e.target.value })} /></label>
+        {card.finish === 'FF' && <label className="small">BHO $/lb <input type="number" min="0" step="0.01" inputMode="decimal" style={{ width: 110 }} placeholder="same" value={pe.b} onChange={e => setPe({ ...pe, b: e.target.value })} /></label>}
+        <button className="primary small" disabled={busy} onClick={() => savePrice(false)}>Save</button><button className="ghost small" disabled={busy} onClick={() => setPe(null)}>Cancel</button>
+      </div>
+      : <div className="row wrap" style={{ gap: 6 }}>
+        <span>{card.price_per_lb != null ? <b>{priceText(card)}/lb</b> : card.market != null ? <>Market price <b>{usd(card.market)}/lb</b> <span className="muted small">({card.crop_year} {card.product ?? card.finish})</span></> : <span className="muted">No price: Call/Email for Price</span>}</span>
+        {canPrice && <button className="ghost small" disabled={busy} onClick={() => setPe({ p: card.price_per_lb != null ? String(card.price_per_lb) : '', b: card.price_bho != null ? String(card.price_bho) : '' })}>{card.price_per_lb != null ? 'Change' : 'Set a price for this strain'}</button>}
+        {canPrice && card.price_per_lb != null && <button className="ghost small" disabled={busy} onClick={() => savePrice(true)}>Use market price</button>}
+      </div>}
+    <p className="muted small" style={{ marginTop: 2 }}>One price for {card.strain} {card.product ?? card.finish} {card.crop_year} on both farms' cards. Outside customers pay it unless they have a contract price; special prices are still changed on the sales order.{!canPrice && ' Sales Admins change prices in Items.'}</p>
     <h3>In METRC</h3>
     {card.licenses.length === 0 ? <p className="warn-t">METRC doesn't have this item on any license yet. A "Create item in METRC" to-do sends it (Compliance › METRC › To do).</p>
       : <div className="tablewrap"><table className="ct"><thead><tr><th>License</th><th>METRC item ID</th></tr></thead>
@@ -120,6 +146,7 @@ export function ItemCardSheet({ sb, card, canEdit, flash, onClose, onChanged }: 
 
 /** strain card › Items: this strain's cards, a type picker and + New item */
 export function StrainItems({ sb, strainId, strainType, flash, canEdit, onChanged }: { sb: SupabaseClient | null; strainId: number; strainType: string | null; flash: Flash; canEdit: boolean; onChanged?: () => void }) {
+  const canPrice = false   // prices are changed in Items (Sales Admins)
   const [rows, setRows] = useState<ItemCard[] | null>(null)
   const [type, setType] = useState(strainType ?? '')
   const [adding, setAdding] = useState(false)
@@ -156,6 +183,7 @@ export function StrainItems({ sb, strainId, strainType, flash, canEdit, onChange
       <input type="number" value={f.year} onChange={e => setF({ ...f, year: e.target.value })} style={{ width: 90 }} aria-label="Crop year" />
       <button className="primary small" disabled={busy} onClick={add}>{busy ? '…' : 'Make it'}</button><button className="ghost small" onClick={() => setAdding(false)}>Cancel</button>
     </div>}
-    {open && <ItemCardSheet sb={sb} card={open} canEdit={canEdit} flash={flash} onClose={() => setOpen(null)} onChanged={c => { setRows(rs => (rs ?? []).map(x => x.id === c.id ? c : x)); setOpen(c) }} />}
+    {open && <ItemCardSheet sb={sb} card={open} canEdit={canEdit} canPrice={canPrice} flash={flash} onClose={() => setOpen(null)}
+      onChanged={c => { setRows(rs => (rs ?? []).map(x => x.id === c.id ? c : x.strain_id === c.strain_id && x.finish === c.finish && x.crop_year === c.crop_year ? { ...x, price_per_lb: c.price_per_lb, price_bho: c.price_bho } : x)); setOpen(c) }} />}
   </section>
 }
