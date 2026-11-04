@@ -816,7 +816,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       const req = a.kind === 'request'
       const afterOf = (l: ActLine) => !req ? l.to : l.after !== undefined ? (l.after == null ? null : Number(l.after)) : a.status === 'approved' ? l.to : a.status === 'partly' ? (l.ok ?? l.to) : a.status === 'waiting' ? null : l.from
       const more = many && <button className={c('linkish act-more')} onClick={() => setActOpen(open ? actOpen.filter(x => x !== a.id) : [...actOpen, a.id])}>{open ? 'Show less' : `Show all ${a.lines.length} strains`}</button>
-      const decided = req && a.decidedAt ? <><b>{a.status === 'approved' ? 'Approved' : a.status === 'partly' ? 'Partly approved' : a.status === 'declined' ? 'Not approved' : 'Cancelled'}</b> {actDay(a.decidedAt)}{a.decidedBy ? ` by ${a.decidedBy}` : ''}{a.reply ? <> · “{a.reply}”</> : ''}</> : null
+      const decided = req && a.decidedAt ? <>{chip(a)} {actDay(a.decidedAt)}{a.decidedBy ? ` by ${a.decidedBy}` : ''}{a.reply ? <> · “{a.reply}”</> : ''}</> : null
       const noteLbl = a.by === 'you' ? 'Your note' : a.kind === 'adjust' ? 'Why' : 'Note'
       return <section key={a.id} className={c('card act')}>
         <div className={c('act-h')}>

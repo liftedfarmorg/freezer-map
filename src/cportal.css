@@ -456,3 +456,4 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-act-mnotes { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .cp .cp-act-mnotes p { margin: 0; line-height: 1.45; }
 .cp .cp-act-mmeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
+.cp .cp-act-reply .cp-chip { margin-right: 4px; vertical-align: 1px; }
