@@ -9,6 +9,7 @@ import {
   sendNurseryMothers, sendPlantLoss, sendPlanting,
 } from './_plants.js'
 import { sendItemCreate, sendStrainCreate, sendStrainUpdate } from './_setup.js'
+import { sendProcOutput, sendProcUsed, sendRunWaste } from './_proc.js'
 
 export { asUser, caller, db, isLive, missing, rpc, send, setting, t3, useSource } from './_core.js'
 export { testApi } from './_api.js'
@@ -61,6 +62,7 @@ const SENDERS = {
   planting: sendPlanting, plant_loss: sendPlantLoss, flower: sendFlower,
   harvest_plants: sendHarvestPlants, harvest_package: sendHarvestPackage, harvest_waste: sendHarvestWaste, harvest_finish: sendHarvestFinish,
   strain_create: sendStrainCreate, item_create: sendItemCreate, strain_update: sendStrainUpdate,
+  proc_output: sendProcOutput, run_waste: sendRunWaste, proc_used: sendProcUsed,
 }
 // METRC API senders, one per kind, added as each is built and tested in the sandbox (then api_ready = true for that kind).
 // Same contract as the T3 senders: (job, ctx) => { state, info, request, response }, throw Skip / Wait / Held.
@@ -217,4 +219,16 @@ export async function sendQueue(ctx, ids, t0, budgetMs) {
     out.push(await runJob(j, ctx))
   }
   return { out, tried, timedOut }
+}
+
+/** Dry check (181): run one to-do's sender without submitting and without saving anything on the to-do. */
+export async function dryCheck(job, by) {
+  const ctx = { live: false, by, deadline: Date.now() + 40000 }
+  try {
+    if (!canSend(job.kind)) throw new Error(`The app can't send "${job.kind}" yet`)
+    const r = await (SENDERS[job.kind])(job, ctx)
+    return { id: job.id, kind: job.kind, state: r.state, info: r.info, request: r.request ?? null }
+  } catch (e) {
+    return { id: job.id, kind: job.kind, state: e instanceof Skip ? 'skip' : e instanceof Wait ? 'waiting' : 'failed', error: e.message }
+  }
 }

@@ -17,7 +17,7 @@
 //   { action: 'package_weight', pallet_id }  TEMPORARY (114): what METRC shows right now for a pallet's tag (pallet card)
 //   { action: 'tag_range', planting_id, purpose, count, first?, after?, save? }  plant tag runs for a planting:
 //        suggest the next clean run (no first), check a run (first), or check and hold it for the planting (save)
-import { sendQueue, asUser, caller, db, isLive, missing, rpc, runJob, send, t3, testApi, testConnection, useSource } from './_t3.js'
+import { dryCheck, sendQueue, asUser, caller, db, isLive, missing, rpc, runJob, send, t3, testApi, testConnection, useSource } from './_t3.js'
 import { incoming, loadChecklist, receiveDelivery } from './_xfer.js'
 import { enc, packageAnywhere, t3file, up } from './_core.js'
 import { checkRun, suggestRun } from './_tagrange.js'
@@ -64,6 +64,15 @@ export default async function handler(req, res) {
       const q = await sendQueue(ctx, ids, t0, 45000)
       const left = ids.filter(id => !q.tried.includes(id))
       return send(res, 200, { live, results: q.out, not_sent: q.timedOut ? [] : left, out_of_time: q.timedOut ? left : [] })
+    }
+    if (body.action === 'dry_check') {
+      // 181: run senders without submitting and without touching the to-dos (Compliance Admin)
+      if (!me.admin) return send(res, 403, { error: 'Only a Compliance Admin' })
+      const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number).filter(Boolean).slice(0, 20)
+      const jobs = ids.length ? await db(`comp_metrc_actions?id=in.(${ids.join(',')})&select=*&order=id`) : []
+      const out = []
+      for (const j of jobs ?? []) out.push(await dryCheck(j, me.email))
+      return send(res, 200, { results: out })
     }
     if (body.action === 'kick') {
       if (!(await isLive())) return send(res, 200, { live: false, results: [] })

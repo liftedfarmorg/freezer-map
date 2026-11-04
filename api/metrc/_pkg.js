@@ -55,7 +55,7 @@ export async function sendAdjust(job, ctx) {
 }
 
 // ---------- new package from packages (split / combine) ----------
-async function createFromPackages(ctx, job, { tag, qty, sources, item, note }) {
+export async function createFromPackages(ctx, job, { tag, qty, sources, item, note }) {
   const license = job.license
   const inp = await inputs(ctx, license, '/v2/packages/create/inputs').catch(() => ({}))
   const tagId = await tagIdFor(ctx, license, '/v2/packages/create/source-tags', tag)
