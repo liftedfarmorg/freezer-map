@@ -41,7 +41,7 @@ export function ItemsView({ sb, flash, canEdit }: { sb: SupabaseClient | null; f
   const prods = useMemo(() => [...new Map(all.map(r => [r.finish, r.product ?? r.finish])).entries()], [rows])
   const years = useMemo(() => [...new Set(all.map(r => r.crop_year))].sort((a, b) => b - a), [rows])
   const lics = useMemo(() => [...new Map(all.flatMap(r => r.licenses).map(l => [l.license, licLabel(l)])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows])
-  const flagged = (r: ItemCard) => !r.home_in_metrc || r.pkgs_other_item > 0
+  const flagged = (r: ItemCard) => r.licenses.length === 0 || r.pkgs_other_item > 0
   const ql = q.trim().toLowerCase()
   const list = all.filter(r => (!ql || r.strain.toLowerCase().includes(ql) || r.sku.toLowerCase().includes(ql) || r.metrc_name.toLowerCase().includes(ql))
     && (!prod || r.finish === prod) && (!year || String(r.crop_year) === year) && (!farm || r.site === farm)
@@ -80,8 +80,7 @@ export function ItemsView({ sb, flash, canEdit }: { sb: SupabaseClient | null; f
         <td onClick={e => e.stopPropagation()}>{canEdit
           ? <label className="check"><input type="checkbox" checked={r.on_menu} onChange={() => toggleMenu(r)} /> {r.on_menu ? 'On' : 'Off'}</label>
           : r.on_menu ? 'On' : 'Off'}</td>
-        <td className="small">{!r.home_in_metrc && <span className="pill m-warn" title={`METRC doesn't have this item on ${r.license}`}>not on {r.site} in METRC</span>}
-          {r.pkgs_other_item > 0 && <span className="pill m-warn" title="METRC has some of these packages on a different item">{r.pkgs_other_item} on another METRC item</span>}</td>
+        <td className="small">{r.pkgs_other_item > 0 && <span className="pill m-warn" title="METRC has some of these packages on a different item">{r.pkgs_other_item} on another METRC item</span>}</td>
       </tr>)}</tbody></table></div>}
     {open && <ItemCardSheet sb={sb} card={open} canEdit={canEdit} flash={flash} onClose={() => setOpen(null)} onChanged={c => { setRows(rs => (rs ?? []).map(x => x.id === c.id ? c : x)); setOpen(c) }} />}
   </div>
@@ -109,7 +108,6 @@ export function ItemCardSheet({ sb, card, canEdit, flash, onClose, onChanged }: 
     {card.licenses.length === 0 ? <p className="warn-t">METRC doesn't have this item on any license yet. A "Create item in METRC" to-do sends it (Compliance › METRC › To do).</p>
       : <div className="tablewrap"><table className="ct"><thead><tr><th>License</th><th>METRC item ID</th></tr></thead>
         <tbody>{card.licenses.map(l => <tr key={l.license}><td>{licLabel(l)} <span className="mono small">{l.license}</span>{l.license === card.license && <span className="muted small"> (home)</span>}</td><td className="mono">{l.metrc_id}</td></tr>)}</tbody></table></div>}
-    {!card.home_in_metrc && card.licenses.length > 0 && <p className="warn-t small">Not in METRC on its home license ({card.site} {card.license}).</p>}
     <h3>Packages on this item</h3>
     {pkgs === null ? <p className="muted">Loading…</p> : !pkgs.length ? <p className="muted">None in inventory.</p>
       : <div className="tablewrap"><table className="ct"><thead><tr><th>Package</th><th>Tag</th><th className="num">Lbs</th><th>METRC has it on</th></tr></thead>
