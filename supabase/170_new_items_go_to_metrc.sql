@@ -1,4 +1,4 @@
--- NOT RUN YET (waiting on Aziz). Dry run on live 11/3 rolled back OK.
+-- RUN LIVE 11/3 by Claude in the SQL Editor (Aziz OK).
 -- 170: no app item without a METRC item (Aziz 11/3).
 -- Before: item_for() (054, 158) quietly made a new item in the app the first time a pallet needed one (a harvest, a processing
 -- output, a product change), marked "to_create", and nothing ever sent it to METRC. That's how the app ended up with items
