@@ -421,7 +421,7 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-act-dot svg { width: 17px; height: 17px; }
 .cp .cp-act-dot.cp-lifted { background: var(--ink); }
 .cp .cp-act-dot.cp-lifted img { width: 26px; height: auto; }
-.cp .cp-actt { display: grid; grid-template-columns: minmax(0, 1fr) 50px 58px 50px 52px; column-gap: 6px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--line-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.cp .cp-actt { display: grid; grid-template-columns: minmax(0, 1fr) 46px 62px 60px 50px; column-gap: 6px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--line-2); font-size: 14px; font-variant-numeric: tabular-nums; }
 .cp .cp-actt.cp-nr { grid-template-columns: minmax(0, 1fr) 50px 50px 52px; }
 .cp .cp-actt > :not(:first-child) { text-align: right; }
 .cp .cp-actt.cp-head { padding-block: 7px; font-size: 11.5px; font-weight: 600; color: var(--muted); background: #f7f9f6; }
