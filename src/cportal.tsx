@@ -15,6 +15,8 @@ const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
 const money2 = (n: number) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const f10 = (n: number | null | undefined) => Math.max(0, Math.floor(Number(n ?? 0) / 10) * 10)
 const not10 = (v: number) => v % 10 !== 0
+const actDay = (at: string) => new Date(at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+const actWhen = (at: string) => `${actDay(at)} · ${new Date(at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
 /** typed lbs snap to the nearest 10 when the box is left (34 → 30, 35 → 40) */
 const round10 = (v: number) => Math.sign(v) * Math.round(Math.abs(v) / 10) * 10
 const TEN = 'Use steps of 10 lbs, like 120 or 130'
@@ -48,6 +50,7 @@ const I = {
   back: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>,
   down: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>,
   up: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>,
+  clock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ verticalAlign: '-3px' }}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   user: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6" /></svg>,
   plusbox: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 8v8M8 12h8" /></svg>,
   share: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="Share" role="img" style={{ verticalAlign: '-2px' }}><path d="M12 3v12M8 7l4-4 4 4" /><path d="M6 11v9h12v-9" /></svg>,
@@ -94,10 +97,17 @@ const STEPS: [number, string][] = [[10, '10 lbs'], [50, '50 lbs'], [100, '100 lb
 const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ margin: '2px 0 0' }}>{msg}</p>
 
 /* ---------- data ---------- */
-type Screen = 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
+type Screen = 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
+/** reserve history (mockup): one entry per request (with Lifted's decision) or per change Lifted made */
+export interface ActLine { s: string; y: number; from: number; to: number; ok?: number | null
+  /** reserve after Lifted's decision on this line (null while waiting); when present it wins over the entry's status */
+  after?: number | null }
+export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string; kind: 'request' | 'adjust' | 'setup'
+  status?: 'waiting' | 'approved' | 'partly' | 'declined' | 'cancelled'; decidedAt?: string | null; decidedBy?: string | null
+  lines: ActLine[]; note?: string | null; reply?: string | null; fromHold?: boolean }
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
-  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
+  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; acts: Act[]; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
 }
 interface ResRow { k: string; s: string; y: number; res: number; used: number; left: number; asked: number | null
   /** desktop table: shipped, on any open SO (approved + submitted), and what's left after both */
@@ -114,6 +124,8 @@ interface ORow {
 
 async function loadAll(backend: Backend): Promise<Data> {
   const safe = <T,>(p: Promise<T>, d: T) => p.catch(() => d)
+  const actFn = (backend as unknown as { reserveActivity?: () => Promise<Act[]> }).reserveActivity
+  const acts = actFn ? await safe(actFn.call(backend), [] as Act[]) : []
   const [terms, ys, menu, bal, reqs, orders, flags, st, mc, holds, hd] = await Promise.all([
     safe(backend.myTerms(), null), safe(backend.reserveYears(), null), safe(backend.openMenu(), [] as MenuRow[]), safe(backend.listBalances(), [] as Balance[]),
     safe(backend.listRequests(), [] as ReserveRequest[]), safe(backend.listOrders(), [] as Order[]), safe(backend.myOrderFlags(), [] as number[]),
@@ -128,7 +140,7 @@ async function loadAll(backend: Backend): Promise<Data> {
   const qbo = await safe(backend.qboInvoiceLines((st?.invoices ?? []).map(i => i.qbo_id).filter((x): x is string => !!x)), {} as Record<string, QboLine[]>)
   const prices: Record<number, number | null> = {}
   for (const [y, p] of ps) prices[y] = p != null ? Number(p) : (terms?.price_per_lb != null ? Number(terms.price_per_lb) : null)
-  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, prices, linePrices, qbo }
+  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, acts, prices, linePrices, qbo }
 }
 
 /* ---------- the portal ---------- */
@@ -161,7 +173,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const go = (s0: Screen) => {
     // desktop contract customers: Contract Reserves, Open Menu and Edit Reserves are one screen
     const s: Screen = desk && contract && (s0 === 'reserves' || s0 === 'menu' || s0 === 'edit') ? 'resmenu' : desk && !contract && s0 === 'menu' ? 'home' : s0
-    setScreen(s); history.pushState({ cp: s }, ''); window.scrollTo({ top: 0 }); if (s === 'home' || s === 'orders' || s === 'reserves' || s === 'menu' || s === 'resmenu') refresh() }
+    setScreen(s); history.pushState({ cp: s }, ''); window.scrollTo({ top: 0 }); if (s === 'home' || s === 'activity' || s === 'orders' || s === 'reserves' || s === 'menu' || s === 'resmenu') refresh() }
 
   // phones: while the keyboard is up, hide the bottom bar (it rides above the keyboard and covers the box) and keep the box
   // being typed in centred on screen once the keyboard has opened
@@ -498,6 +510,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             : <p className={c('sub mint')}>{balance ? 'Balance · nothing past due' : 'Balance'}</p>}
         </header>
         <main className={c('main lift')}>
+          {adjustNote()}
           {a2hs && !desk && <section className={c('card a2hs')}>
             <div className={c('row')} style={{ alignItems: 'flex-start', gap: 10 }}><div className={c('grow')}>
               <p className={c('name')} style={{ fontSize: 16 }}>Add Lifted to your home screen</p>
@@ -550,6 +563,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <div><h1>{me.customer_name}</h1>{terms && <p className={c('meta')} style={{ fontSize: 15, margin: '4px 0 0' }}>{terms}</p>}</div>
           <button className={c('btn hcta')} onClick={() => newOrder()}>Place an order</button>
         </div>
+        {adjustNote()}
         <div className={c('kpis')}>
           <button className={c('kpi ink')} onClick={() => { setFilter('all'); go('orders') }}><p>Balance</p><b>{balance ? money(balance.amount) : '—'}</b>
             <small style={{ color: balance && balance.past_due > 0 ? '#f9a8b8' : 'var(--mint)' }}>{balance && balance.past_due > 0 ? `${money2(balance.past_due)} past due` : 'Nothing past due'} · {plural(openInvoices.length, 'open invoice')}</small></button>
@@ -631,7 +645,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const bad = [...reserves.filter(r => !!resErr(r)).map(r => r.s), ...editNew.filter(n => n.lbs > 0 && !!newErr(n)).map(n => n.s)]
     return (
       <div className={c('screen rm')}>
-        <header className={c('hdr')}><h1>Reserves &amp; Menu</h1>
+        <header className={c('hdr')}><div className={c('row')} style={{ justifyContent: 'space-between', alignItems: 'center' }}><h1>Reserves &amp; Menu</h1>
+          {!!d?.acts.length && <button className={c('pillbtn hist')} onClick={() => go('activity')}>{I.clock} Reserve history</button>}</div>
           <p className={c('sub')}>Everything on the open menu and everything you have reserved, in one place. Lifted reviews every reserve change.</p></header>
         <div className={c('kpis five')}>
           <div className={c('kpi')}><p>Reserved</p><b>{fmt(totals.res)} lbs</b></div>
@@ -699,7 +714,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   function sidebar() {
-    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['holds', 'Sample Holds', liveHolds.length > 0]]
+    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0]]
     const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order' }
     const on = group[screen] ?? screen
     return (
@@ -773,10 +788,79 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     )
   }
 
+  // ---------- reserve history (mockup) ----------
+  const [actF, setActF] = useState<'all' | 'you' | 'lifted'>('all')
+  const [actOpen, setActOpen] = useState<string[]>([])
+  const actSeenKey = 'cp-act-seen'
+  const latestAdjust = (d?.acts ?? []).filter(a => a.by === 'lifted' && a.kind === 'adjust').sort((a, b) => b.at.localeCompare(a.at))[0]
+  const [actSeen, setActSeen] = useState(() => { try { return localStorage.getItem(actSeenKey) ?? '' } catch { return '' } })
+  const showAdjustNote = !!latestAdjust && latestAdjust.id !== actSeen && (Date.now() - new Date(latestAdjust.at).getTime()) < 30 * 864e5
+  const seeHistory = () => { if (latestAdjust) { setActSeen(latestAdjust.id); try { localStorage.setItem(actSeenKey, latestAdjust.id) } catch { /* private mode */ } } go('activity') }
+  const adjustNote = () => showAdjustNote && latestAdjust ? <button className={c('note gold actnote')} onClick={seeHistory}>
+    <b>Lifted changed {latestAdjust.lines.length === 1 ? `your ${latestAdjust.lines[0].s} reserve` : `${latestAdjust.lines.length} of your reserves`}</b> on {actDay(latestAdjust.at)}. <u>See what changed and why</u></button> : null
+  function ActivityScreen() {
+    const acts = [...(d?.acts ?? [])].sort((a, b) => b.at.localeCompare(a.at))
+    const ql = q.toLowerCase()
+    const list = acts.filter(a => (actF === 'all' || a.by === actF) && (!ql || a.lines.some(l => l.s.toLowerCase().includes(ql))))
+    const months: [string, Act[]][] = []
+    for (const a of list) { const m = new Date(a.at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), g = months.find(x => x[0] === m); if (g) g[1].push(a); else months.push([m, [a]]) }
+    const sign = (n: number) => n === 0 ? '0' : (n > 0 ? '+' : '−') + fmt(Math.abs(n))
+    const title = (a: Act) => a.kind === 'setup' ? `Lifted set up your ${a.lines[0]?.y ?? cy} reserves`
+      : a.kind === 'adjust' ? `Lifted changed ${a.lines.length === 1 ? 'your reserve' : `${a.lines.length} of your reserves`}`
+      : a.fromHold ? 'You asked to reserve a sample hold' : `You asked to change ${plural(a.lines.length, 'reserve')}`
+    const chip = (a: Act) => a.kind !== 'request' ? <span className={c('chip c-lifted')}>{a.kind === 'setup' ? 'Contract set up' : 'Changed by Lifted'}</span>
+      : a.status === 'waiting' ? <span className={c('chip c-wait')}>Waiting on Lifted</span> : a.status === 'approved' ? <span className={c('chip c-ok')}>Approved</span>
+      : a.status === 'partly' ? <span className={c('chip c-part')}>Partly approved</span> : a.status === 'declined' ? <span className={c('chip c-no')}>Not approved</span> : <span className={c('chip')}>Cancelled</span>
+    const entry = (a: Act) => {
+      const many = a.lines.length > 6, open = actOpen.includes(a.id), lines = many && !open ? a.lines.slice(0, 5) : a.lines
+      const req = a.kind === 'request'
+      return <section key={a.id} className={c(`card act ${a.by === 'lifted' ? 'act-l' : ''}`)}>
+        <div className={c('act-h')}>
+          <span className={c(`act-dot ${a.by}`)} aria-hidden="true">{a.by === 'lifted' ? <img src="/logo-dark.svg" alt="" /> : I.user}</span>
+          <div className={c('grow')}><p className={c('name')}>{title(a)}</p>
+            <p className={c('meta')} style={{ margin: '2px 0 0' }}>{actWhen(a.at)} · {a.who}</p></div>
+          {chip(a)}
+        </div>
+        <div className={c(`actt head ${req ? '' : 'nr'}`)}><span>Strain</span><span>Before</span>{req && <span>Asked for</span>}<span>After</span><span>Change</span></div>
+        {lines.map(l => {
+          const after = !req ? l.to : l.after !== undefined ? (l.after == null ? null : Number(l.after)) : a.status === 'approved' ? l.to : a.status === 'partly' ? (l.ok ?? l.to) : a.status === 'waiting' ? null : l.from
+          return <div key={l.s + l.y} className={c(`actt ${req ? '' : 'nr'}`)}>
+            <span className={c('rmname')}>{l.s} {yrTag(l.y)}</span>
+            <span className={c('muted')}>{fmt(l.from)}</span>
+            {req && <span>{fmt(l.to)}</span>}
+            <b>{after == null ? <span className={c('muted')} style={{ fontWeight: 500 }}>waiting</span> : fmt(after)}</b>
+            <span className={c(after == null || after === l.from ? 'muted' : after > l.from ? 'up' : 'down')}>{after == null ? '–' : sign(after - l.from)}</span>
+          </div>
+        })}
+        {many && <button className={c('linkish act-more')} onClick={() => setActOpen(open ? actOpen.filter(x => x !== a.id) : [...actOpen, a.id])}>{open ? 'Show less' : `Show all ${a.lines.length} strains`}</button>}
+        {(a.note || a.reply || (req && a.decidedAt)) && <div className={c('act-notes')}>
+          {a.note && <p><span className={c('meta')} style={{ display: 'inline' }}>{a.by === 'you' ? 'Your note' : a.kind === 'adjust' ? 'Why' : 'Note'}: </span>{a.note}</p>}
+          {req && a.decidedAt && <p className={c(`act-reply ${a.status}`)}><b>{a.status === 'approved' ? 'Approved' : a.status === 'partly' ? 'Partly approved' : a.status === 'declined' ? 'Not approved' : 'Cancelled'}</b> {actDay(a.decidedAt)}{a.decidedBy ? ` by ${a.decidedBy}` : ''}{a.reply ? <> · “{a.reply}”</> : ''}</p>}
+        </div>}
+      </section>
+    }
+    const fb = (id: typeof actF, label: string) => <button key={id} aria-pressed={actF === id} onClick={() => setActF(id)}>{label}</button>
+    return (
+      <div className={c('screen act-screen')}>
+        <header className={c('hdr')}>{back(desk ? 'resmenu' : 'reserves', desk ? 'Reserves & Menu' : 'Contract Reserves')}<h1>Reserve History</h1>
+          <p className={c('sub')}>Every change to your contract reserves: the ones you asked for, and any Lifted had to make.</p></header>
+        <main className={c('main')}>
+          <div className={c('rmbar act-bar')}>
+            <div className={c('filters')} role="group" aria-label="Show">{fb('all', 'All')}{fb('you', 'Your requests')}{fb('lifted', 'Changes by Lifted')}</div>
+            <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
+          </div>
+          {list.length === 0 && <p className={c('loading')}>Nothing here yet.</p>}
+          {months.map(([m, as]) => <Fragment key={m}><p className={c('act-month')}>{m}</p>{as.map(entry)}</Fragment>)}
+        </main>
+      </div>
+    )
+  }
+
   function ReservesScreen() {
     return (
       <div className={c('screen')}>
-        <header className={c('hdr')}>{back('home', 'Home')}<h1>Contract Reserves</h1><p className={c('sub')}>{fmt(totals.left)} of {fmt(totals.res)} lbs left to pick up</p></header>
+        <header className={c('hdr')}>{back('home', 'Home')}<h1>Contract Reserves</h1><p className={c('sub')}>{fmt(totals.left)} of {fmt(totals.res)} lbs left to pick up</p>
+          {!!d?.acts.length && <button className={c('pillbtn hist')} onClick={() => go('activity')}>{I.clock} Reserve history</button>}</header>
         <main className={c('main')}>
           <section className={c('card')}>
             <div className={c('tbl head')}><span>Strain</span><span>Reserved</span><span>Picked up</span><span>Left</span></div>
@@ -1369,11 +1453,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   // the order form screens need a loaded menu; send people home if a reload drops them somewhere odd
-  useEffect(() => { if (d && !contract && (screen === 'reserves' || screen === 'edit' || screen === 'reqReview' || screen === 'sent' || screen === 'contract')) setScreen('home') }, [d, contract, screen])
+  useEffect(() => { if (d && !contract && (screen === 'activity' || screen === 'reserves' || screen === 'edit' || screen === 'reqReview' || screen === 'sent' || screen === 'contract')) setScreen('home') }, [d, contract, screen])
   useEffect(() => { if (focusK) { const t = setTimeout(() => setFocusK(null), 500); return () => clearTimeout(t) } }, [focusK])
 
   const SCREENS: Record<Screen, () => React.ReactElement> = {
-    resmenu: ResMenuScreen, home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, reqReview: ReqReviewScreen, sent: SentScreen, menu: MenuScreen,
+    activity: ActivityScreen, resmenu: ResMenuScreen, home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, reqReview: ReqReviewScreen, sent: SentScreen, menu: MenuScreen,
     order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen,
   }
   return (

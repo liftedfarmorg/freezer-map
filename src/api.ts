@@ -411,6 +411,12 @@ class SupaBackend implements Backend {
     fail(error)
     return portalUrl(`?${kind}=${data as string}`)
   }
+  /** 180: the customer's reserve history: their requests (with Lifted's decision) and changes Lifted made */
+  async reserveActivity() {
+    const { data, error } = await this.sb.rpc('my_reserve_activity')
+    fail(error)
+    return (data ?? []) as unknown[]
+  }
   async checkLink(code: string) {
     // 165: login_link_status also answers for used/expired links; fall back to check_login_link until it's run
     const st = await this.sb.rpc('login_link_status', { p_code: code })

@@ -68,7 +68,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [orders, setOrders] = useState<Order[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
-  const [edit, setEdit] = useState<{ customer_id: number | null; strain: string; lbs: string; isNew: boolean } | null>(null)
+  const [edit, setEdit] = useState<{ customer_id: number | null; strain: string; lbs: string; isNew: boolean; note?: string } | null>(null)
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
@@ -131,7 +131,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   async function save() {
     if (!edit || edit.customer_id == null) return
     const lbs = Number(edit.lbs)
-    try { await backend.setReserve(edit.customer_id, edit.strain, lbs, undefined, rYear !== cur ? rYear : undefined); await load(); setOpen(edit.customer_id); setEdit(null); flash(lbs === 0 ? 'Reserve removed' : 'Reserve saved') }
+    try { await backend.setReserve(edit.customer_id, edit.strain, lbs, edit.note?.trim() || undefined, rYear !== cur ? rYear : undefined); await load(); setOpen(edit.customer_id); setEdit(null); flash(lbs === 0 ? 'Reserve removed' : 'Reserve saved') }
     catch (e) { flash(String((e as Error).message ?? e), true) }
   }
   async function copyMenu() {
@@ -311,6 +311,8 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
             <div className="field"><label>Reserved lbs <span className="muted">(the full amount, including what's already shipped)</span></label>
               <input type="number" min="0" step="10" value={edit.lbs} onChange={e => setEdit({ ...edit, lbs: e.target.value })} autoFocus={!edit.isNew} />
               {edit.strain && <span className="muted">{n0(onHandOf(edit.strain))} lbs on hand</span>}</div>
+            <div className="field"><label>Reason <span className="muted">(optional; the customer sees this in their Reserve History)</span></label>
+              <input type="text" value={edit.note ?? ''} onChange={e => setEdit({ ...edit, note: e.target.value })} placeholder="e.g. Strain came in under estimate, so reserves were reduced 10%" /></div>
             <div className="row between">
               {!edit.isNew ? <button className="ghost" onClick={() => setEdit({ ...edit, lbs: '0' })}>Set to 0 (remove)</button> : <span />}
               <div className="row">
