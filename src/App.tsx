@@ -54,6 +54,8 @@ import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
 import { ItemsView } from './items'
+import { StaffOpenMenu } from './openmenu'
+import { CatalogButton } from './catalog'
 import { ReceivingView } from './receiving'
 import { FillTolerance, ShippingQuote, ShippingSettings, rpc } from './ship'
 import { metrcRun } from './metrcCall'
@@ -1011,6 +1013,7 @@ export default function App() {
           if (salesTab === 'review') return <SalesReview backend={backend} customers={snap.customers ?? []} isAdmin={salesAdmin} go={goS} fulfil={forders} onFulfil={refreshF} flash={flash} />
           if (salesTab === 'activity') return <ActivityView ix={ix} module="sales" />
           if (salesTab === 'inventory') return <SalesInventory c={invCtx} strains={snap.strains ?? []} sb={backend.client()} onNewOrder={isSales ? () => setNewOrder(true) : undefined} />
+          if (salesTab === 'menu') return <StaffOpenMenu sb={backend.client()} flash={flash} isAdmin={salesAdmin || !!me?.access?.owner} tools={<CatalogButton backend={backend} flash={flash} />} />
           if (salesTab === 'returns') return <ReturnsView sb={backend.client()} customers={snap.customers ?? []} flash={flash}
             canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} isAdmin={salesAdmin || !!me?.access?.owner} />
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />

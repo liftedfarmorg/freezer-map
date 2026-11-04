@@ -33,9 +33,18 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
   }
 }
 
+// 174: the public open menu (lifted-orders.app/menu/<code>): no login, nothing else of the app
+const menuCode = /^\/menu\/([A-Za-z0-9]{8,40})\/?$/.exec(location.pathname)?.[1]
+const PublicMenu = React.lazy(async () => {
+  const [{ PublicMenuPage }, { createClient }] = await Promise.all([import('./openmenu'), import('@supabase/supabase-js')])
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined, key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  const sb = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null
+  return { default: () => <PublicMenuPage sb={sb} code={menuCode!} /> }
+})
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ErrorBoundary><App /></ErrorBoundary>
+    <ErrorBoundary>{menuCode ? <React.Suspense fallback={null}><PublicMenu /></React.Suspense> : <App />}</ErrorBoundary>
     <UpdateBanner />
   </React.StrictMode>,
 )
