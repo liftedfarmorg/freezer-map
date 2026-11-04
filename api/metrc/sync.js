@@ -2,11 +2,18 @@
 // outgoing transfers and the packages on each delivery (since the last pull). Then close to-dos METRC already shows.
 // GET = nightly cron (vercel.json, needs CRON_SECRET). POST { licenses?: [...] } = "Pull from METRC" in Compliance > METRC > Reconcile.
 // Runs out of time gracefully: what's left is picked up by the next call (the app calls again until done).
+// 168: each call skips licenses already pulled in full in this window (nightly: 3 hours, a tap: 30 minutes), farms go first
+// (OHR, GVR farm, GVR processing, 1PN), and every license starts with at least MIN_START_MS left, so the cron's later slots
+// (vercel.json) finish what an earlier one couldn't. A step that runs out of time leaves the run "not complete" and says
+// which step. Two failed nightly tries on a license = one email that day to whoever turned on "METRC pull problems".
 import { caller, db, missing, rpc, send, t3, useSource } from './_t3.js'
 import { list } from './_core.js'
+import { alertPullProblem } from './_alert.js'
 
 export const config = { maxDuration: 300 }
 const BUDGET_MS = 240000
+const MIN_START_MS = 150000   // a license only starts with at least this much of the call left
+const KIND_ORDER = { cultivation: 0, processor: 1, nursery: 2 }
 const SEASON_START = '2026-01-01T00:00:00Z'
 const PAGE = 500
 
@@ -85,9 +92,9 @@ async function syncTagsOnly(license, t0) {
   return { license, complete, error, tags: out.tags, calls: out.calls }
 }
 
-async function syncLicense(license, by, t0) {
+async function syncLicense(license, by, t0, callT0 = t0) {
   const run = (await db('metrc_sync_runs', { method: 'POST', body: JSON.stringify({ license, started_by: by }), headers: { Prefer: 'return=representation' } }))[0]
-  const out = { calls: 0, active: 0, intransit: 0, inactive: 0, transferred: 0, transfers: 0, delivery_packages: 0, locations: 0, strains: 0, plant_batches: 0, harvests: 0, plants: 0, tags: 0, notes: [], live: new Set(), timeUp: () => Date.now() - t0 > BUDGET_MS }
+  const out = { calls: 0, active: 0, intransit: 0, inactive: 0, transferred: 0, transfers: 0, delivery_packages: 0, locations: 0, strains: 0, plant_batches: 0, harvests: 0, plants: 0, tags: 0, notes: [], live: new Set(), timeUp: () => Date.now() - t0 > BUDGET_MS || Date.now() - callT0 > BUDGET_MS }
   const now = new Date().toISOString()
   let complete = false, error = null
   try {
@@ -159,11 +166,16 @@ async function syncLicense(license, by, t0) {
     }
     // 5) Phase 2: locations, strains, plant batches, harvests, plant counts by location and strain
     // Phase 2 and tags: a step METRC refuses (a permission the app's METRC user doesn't have) is noted, not fatal
+    // items + strains before plants: they're quick and everything else leans on them (168)
     if (full) {
-      try { await syncTags(license, out, now) } catch (e) { out.notes.push(`tags: ${String(e.message || e).slice(0, 200)}`) }
-      try { await syncPlants(license, out, now) } catch (e) { out.notes.push(`plants: ${String(e.message || e).slice(0, 200)}`) }
-      try { await syncSetup(license, out, now) } catch (e) { out.notes.push(`items: ${String(e.message || e).slice(0, 200)}`) }
-    }
+      const step = async (name, fn) => {
+        try { const ok = await fn(); if (ok === false && out.timeUp()) { out.notes.push(`${name}: ran out of time, picked up next call`); return false } return true }
+        catch (e) { out.notes.push(`${name}: ${String(e.message || e).slice(0, 200)}`); return true }
+      }
+      full = await step('tags', () => syncTags(license, out, now)) && full
+      full = await step('items and strains', () => syncSetup(license, out, now)) && full
+      full = await step('plants', () => syncPlants(license, out, now)) && full
+    } else if (out.timeUp()) out.notes.push('packages: ran out of time, picked up next call')
     complete = full
   } catch (e) { error = String(e.message || e).slice(0, 800) }
   const { timeUp, live, ...counts } = out
@@ -184,7 +196,10 @@ async function syncSetup(license, out, now) {
     out.items += rows.length
   }, out)
   // a full pull: items METRC no longer lists are gone (archived / discontinued)
-  if (ok) await db(`metrc_items?license=eq.${encodeURIComponent(license)}&seen_at=lt.${encodeURIComponent(now)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+  if (ok) {
+    await db(`metrc_items?license=eq.${encodeURIComponent(license)}&seen_at=lt.${encodeURIComponent(now)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+    await setCursor(license, 'setup', now)
+  }
   return ok
 }
 async function syncSetupOnly(license, t0) {
@@ -373,24 +388,36 @@ export default async function handler(req, res) {
   if (missing().length) return send(res, 200, { skipped: `missing ${missing().join(', ')}` })
   try {
     // one pull at a time
-    const busy = only ? [] : await db(`metrc_sync_runs?finished_at=is.null&started_at=gt.${encodeURIComponent(new Date(Date.now() - 6 * 60000).toISOString())}&select=id&limit=1`)
+    const busy = only ? [] : await db(`metrc_sync_runs?finished_at=is.null&started_at=gt.${encodeURIComponent(new Date(Date.now() - 5.5 * 60000).toISOString())}&select=id&limit=1`)
     if (busy.length) return send(res, 409, { error: 'A METRC pull is already running. Try again in a few minutes.' })
     const conn = (await db('metrc_connection?id=eq.1&select=licenses'))?.[0]
     const reach = (conn?.licenses ?? []).filter(l => l.in_t3).map(l => l.license)
-    let want = Array.isArray(req.body?.licenses) && req.body.licenses.length ? req.body.licenses.filter(l => reach.includes(l)) : reach
-    if (only === 'setup') {   // licenses that hold strains and items (not transport)
-      const keep = (await db('licenses?select=license_no&kind=in.(cultivation,processor,nursery)&active=is.true')).map(l => l.license_no)
-      want = want.filter(l => keep.includes(l))
-    }
-    if (only === 'plants' && !req.body?.licenses?.length) {   // farm licenses only
-      const farms = (await db('licenses?select=license_no&kind=eq.cultivation&active=is.true')).map(l => l.license_no)
-      want = want.filter(l => farms.includes(l))
-    }
+    const picked = Array.isArray(req.body?.licenses) && req.body.licenses.length
+    let want = picked ? req.body.licenses.filter(l => reach.includes(l)) : reach
+    // farms first, then processing, then the nursery (168)
+    const lics = await db('licenses?select=license_no,kind&active=is.true')
+    const kindOf = new Map(lics.map(l => [l.license_no, l.kind]))
+    want = [...want].sort((a, b) => (KIND_ORDER[kindOf.get(a)] ?? 9) - (KIND_ORDER[kindOf.get(b)] ?? 9) || a.localeCompare(b))
+    if (only === 'setup') want = want.filter(l => kindOf.get(l) in KIND_ORDER)   // licenses that hold strains and items (not transport)
+    if (only === 'plants' && !picked) want = want.filter(l => kindOf.get(l) === 'cultivation')   // farm licenses only
     if (!want.length) return send(res, 400, { error: 'No licenses to pull. Test the METRC connection in Compliance > Settings first.' })
+    // a full pull skips licenses already pulled in full in this window, so the next call (cron slot or the app's next pass)
+    // carries on with the rest instead of starting over (168)
+    const windowStart = new Date(Date.now() - (by === 'nightly' ? 3 * 3600000 : 30 * 60000)).toISOString()
+    const recent = only ? [] : await db(`metrc_sync_runs?started_at=gt.${encodeURIComponent(windowStart)}&select=license,complete,error,counts,started_at&order=started_at.desc`)
+    const doneNow = new Set(recent.filter(r => r.complete).map(r => r.license))
     const results = []
     for (const lic of want) {
-      if (Date.now() - t0 > BUDGET_MS) { results.push({ license: lic, complete: false, left: true }); continue }
-      results.push(only === 'tags' ? await syncTagsOnly(lic, t0) : only === 'plants' ? await syncPlantsOnly(lic, t0) : only === 'setup' ? await syncSetupOnly(lic, t0) : await syncLicense(lic, by, t0))
+      if (!only && !picked && doneNow.has(lic)) { results.push({ license: lic, complete: true, already: true }); continue }
+      const left = BUDGET_MS - (Date.now() - t0)
+      if (results.some(r => !r.already) && left < MIN_START_MS) { results.push({ license: lic, complete: false, left: true }); continue }
+      const r = only === 'tags' ? await syncTagsOnly(lic, t0) : only === 'plants' ? await syncPlantsOnly(lic, t0) : only === 'setup' ? await syncSetupOnly(lic, t0) : await syncLicense(lic, by, Date.now(), t0)
+      results.push(r)
+      // nightly: the second failed try on a license today emails whoever turned on "METRC pull problems"
+      if (by === 'nightly' && !only && !r.complete) {
+        const tries = recent.filter(x => x.license === lic && !x.complete).length + 1
+        if (tries >= 2 || r.error) { try { await alertPullProblem(lic, r, tries) } catch (e) { console.error('alert', e) } }
+      }
     }
     let closed = 0
     try { closed = await rpc('metrc_autoclose', {}) } catch { /* 071 missing */ }

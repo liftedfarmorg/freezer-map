@@ -153,7 +153,7 @@ export const MODULES: { key: ModKey; label: string; what: string; user: string; 
   { key: 'compliance', label: 'Compliance', what: 'METRC, CCOF, document library, deadlines', user: 'Add documents, check off METRC work, deadlines, CCOF materials, reconcile', admin: '+ Compliance settings (document types, SharePoint backup)' },
   { key: 'admin', label: 'Admin', what: 'Company dashboard, users and access, app settings', user: 'Everything in Admin', admin: 'Everything in Admin' },
 ]
-export interface Prefs { theme?: 'light' | 'dark' | 'system'; lang?: 'en' | 'es'; start_module?: ModKey; start_site?: Site; notify?: { requests?: boolean; orders?: boolean } }
+export interface Prefs { theme?: 'light' | 'dark' | 'system'; lang?: 'en' | 'es'; start_module?: ModKey; start_site?: Site; notify?: { requests?: boolean; orders?: boolean; metrc_pull?: boolean } }
 export interface Access { owner: boolean; modules: Partial<Record<ModKey, Level>>; prefs: Prefs; perms?: Record<string, Record<string, boolean>>; login?: 'microsoft' | 'email' | null }
 export interface UserAccess { email: string; module: ModKey; level: Level }
 /** before 023 is run: work it out from the old role */

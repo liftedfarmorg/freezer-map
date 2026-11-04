@@ -92,10 +92,13 @@ export function LiveReconcile({ c }: { c: Ctx }) {
   return <>
     <p className="muted">METRC is pulled through T3 every night (and when you tap Pull), then compared with every package in the app. Each gap says what METRC did with the package: split, shipped on which manifest, finished. Export to Excel, fill in Action and Reason, and drop it back here to fix the app in bulk.</p>
     <p className="muted small">1PN (nursery) has its own report: Nursery (1PN) above.</p>
-    <div className="tablewrap"><table className="ct"><thead><tr><th>License</th><th className="num">Active in METRC</th><th>Last pull</th><th /></tr></thead>
+    <div className="tablewrap"><table className="ct"><thead><tr><th>License</th><th className="num">Active in METRC</th><th>Last full pull</th><th>Last try</th><th className="num">METRC items</th><th /></tr></thead>
       <tbody>{st.map(s => <tr key={s.license} className={`tap ${lic === s.license ? 'sel' : ''}`} onClick={() => setLic(s.license)}>
         <td><b>{s.site}</b> <span className="mono small">{s.license}</span></td><td className="num">{s.active.toLocaleString()}</td>
-        <td className="small">{when(s.last_pull)}{!s.complete && s.last_pull && <span className="muted"> (partial)</span>}{s.error && <div className="neg small">{s.error}</div>}</td>
+        <td className="small">{s.last_pull ? when(s.last_pull) : <span className="neg">never</span>}</td>
+        <td className="small">{s.last_try ? <>{when(s.last_try)} {s.complete ? <span className="pill cp-ok">finished</span> : <span className="pill cp-bad">didn't finish</span>}</> : <span className="muted">none</span>}
+          {s.error && <div className="neg small">{s.error}</div>}{!s.complete && s.last_try_note && <div className="muted small">{s.last_try_note}</div>}</td>
+        <td className="num small">{s.items != null ? s.items.toLocaleString() : ''}{s.items_at && <div className="muted small">{when(s.items_at)}</div>}</td>
         <td>{lic === s.license && <span className="pill cp-ok">showing</span>}</td></tr>)}</tbody></table></div>
     <div className="row wrap toolbar" style={{ marginTop: 8 }}>
       {c.canEdit && <button className="primary" disabled={!!busy} onClick={pull}>{busy?.startsWith('Pull') || busy?.startsWith('Still') ? busy : 'Pull from METRC now'}</button>}

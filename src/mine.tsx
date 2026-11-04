@@ -58,6 +58,11 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
           onChange={e => savePref({ notify: { ...p.notify, orders: e.target.checked } })} /><span><b>{t('New orders')}</b> <span className="muted">{t('when a customer places an order in the portal')}</span></span></label>
       </section>}
 
+      {(me.access.owner || lv.compliance === 'admin') && <section className="dcard"><h3>{t('METRC emails')}</h3>
+        <label className="check"><input type="checkbox" disabled={busy} checked={p.notify?.metrc_pull === true}
+          onChange={e => savePref({ notify: { ...p.notify, metrc_pull: e.target.checked } })} /><span><b>{t('METRC pull problems')}</b> <span className="muted">{t("when a license's nightly METRC pull doesn't finish")}</span></span></label>
+      </section>}
+
       <section className="dcard"><h3>{t('What you can use')}</h3>
         {me.access.owner ? <p>{t('Owner: every module, as Admin.')}</p> : mine.length ? <div className="dlist">{mine.map(m => (
           <div key={m.key} className="drow"><span><b>{t(m.label)}</b><span className="muted"> · {lv[m.key] === 'admin' && m.key !== 'admin' ? `${t(m.user)} ${t(m.admin)}` : t(m.user)}</span></span><span className="pill">{t(m.key === 'admin' ? 'On' : lv[m.key] === 'admin' ? 'Admin' : lv[m.key] === 'view' ? 'View only' : 'User')}</span></div>))}</div>

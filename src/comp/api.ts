@@ -98,7 +98,8 @@ export interface LiveRecon {
   app_item: string | null; metrc_item: string | null; app_license: string | null; metrc_location: string | null; app_spot: string | null
   metrc_changed: string | null; explain: string | null; trail: unknown; note: string | null
 }
-export interface SyncStatus { license: string; site: string | null; last_pull: string | null; complete: boolean; active: number; error: string | null }
+export interface SyncStatus { license: string; site: string | null; last_pull: string | null; complete: boolean; active: number; error: string | null
+  /** 168 */ last_try?: string | null; last_try_note?: string | null; items?: number | null; items_at?: string | null }
 export interface SyncResult { done: boolean; closed: number; results: { license: string; complete: boolean; error?: string | null; active?: number; transfers?: number; left?: boolean }[]; error?: string }
 export interface PushResult { id: number; state: 'checked' | 'sent' | 'failed' | 'waiting'; info?: string; error?: string }
 export interface Upload { id: number; license: string; file_name: string | null; rows: number; uploaded_by: string | null; uploaded_at: string }
