@@ -463,7 +463,7 @@ export function ContractProductPrices({ backend, flash, canEdit }: { backend: Ba
   const load = async () => {
     if (!sb) { setRows([]); return }
     const { data, error } = await sb.from('customer_product_prices').select('*').order('crop_year', { ascending: false })
-    if (error) flash(/customer_product_prices/.test(error.message) ? 'Contract product prices need 175_pricing.sql run in Supabase.' : error.message, true)
+    if (error) flash(/customer_product_prices/.test(error.message) ? 'Contract product prices need 176_pricing.sql run in Supabase.' : error.message, true)
     setRows(error ? [] : (data ?? []) as Cpp[])
   }
   useEffect(() => {

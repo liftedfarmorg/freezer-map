@@ -1,3 +1,4 @@
+-- Numbered 176 because another chat's 175_repackage_multi.sql went in first (same night). Inside it still says 175.
 -- RUN LIVE 11/3 by Claude in the SQL Editor (Aziz OK). Dry run first, then the real run; checks after: 4 patches in, 131 of 131 menu rows priced.
 -- 175: pricing (Aziz 11/3). Build step 2 of 3 (item cards, pricing, open menu).
 -- How a line gets its price (portal orders, order changes, Sales orders, Sales adding a line, invoices made at shipping):

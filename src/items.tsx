@@ -101,7 +101,7 @@ export function ItemCardSheet({ sb, card, canEdit, canPrice = false, flash, onCl
     const p = clear ? null : pe?.p.trim() ? Number(pe.p) : null, b = clear || card.finish !== 'FF' ? null : pe?.b.trim() ? Number(pe.b) : null
     if (!clear && (p == null || !(p >= 0) || (b != null && !(b >= 0)))) { flash('Enter a price in $/lb', true); return }
     setBusy(true)
-    try { await rpc(sb, 'set_item_price', { p_item: card.id, p_price: p, p_bho: b }, '175_pricing'); onChanged({ ...card, price_per_lb: p, price_bho: b }); setPe(null); flash(clear ? 'Price cleared: it uses the market price' : 'Price saved') }
+    try { await rpc(sb, 'set_item_price', { p_item: card.id, p_price: p, p_bho: b }, '176_pricing'); onChanged({ ...card, price_per_lb: p, price_bho: b }); setPe(null); flash(clear ? 'Price cleared: it uses the market price' : 'Price saved') }
     catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
   }
   useEffect(() => { rpc<CardPkg[]>(sb, 'item_card_packages', { p_item: card.id }, SQL).then(setPkgs, e => { flash((e as Error).message, true); setPkgs([]) }) }, [card.id])
