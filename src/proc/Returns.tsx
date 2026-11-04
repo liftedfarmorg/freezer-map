@@ -4,6 +4,8 @@ import type { Pallet } from '../types'
 import type { ProcApi, PData } from './api'
 import { metrcRun } from '../metrcCall'
 import { TagInput } from '../taginput'
+import { NewPackageForm } from '../forms'
+import type { PkgItem } from '../forms'
 import { NumIn, Sheet, errText } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 
@@ -139,41 +141,49 @@ export function ComingBack({ sb, api, flash, reload, isAdmin }: { sb: SupabaseCl
   </>
 }
 
-/** Back on the processor's tag: put our label on, confirm the tag, METRC makes the new package */
-export function NeedsOurTag({ d, api, sb, flash, reload, isAdmin, openPkg }: { d: PData; api: ProcApi; sb: SupabaseClient; flash: Flash; reload: () => Promise<void>; isAdmin: boolean; openPkg: (p: Pallet) => void }) {
+/** Back on the processor's tag: Repackage onto our tag(s) with the item picked (174). All of it = repackage (same pallet, new tag + item);
+ *  part of it = split a piece onto our tag, the rest stays on theirs. METRC: a new package from theirs, on the license METRC has it on. */
+export function NeedsOurTag({ d, sb, flash, reload, isAdmin, openPkg }: { d: PData; api?: ProcApi; sb: SupabaseClient; flash: Flash; reload: () => Promise<void>; isAdmin: boolean; openPkg: (p: Pallet) => void }) {
   const rows = useMemo(() => d.pallets.filter(p => p.their_tag && (p.status === 'in_freezer' || p.status === 'unslotted')), [d])
-  const [tags, setTags] = useState<Record<number, string>>({})
-  const [busy, setBusy] = useState<number | null>(null)
+  const [form, setForm] = useState<Pallet | null>(null)
+  const [busy, setBusy] = useState(false)
   const lot = (id?: number | null) => d.pallets.find(p => p.id === id)
-  async function confirmTag(p: Pallet) {
-    const t = (tags[p.id] ?? '').trim()
-    if (!t) { flash('Enter our tag (the label you put on)', true); return }
-    if (!confirm(`${p.code}: our label ${t} is on the package?\nMETRC makes a new package on ${t} from ${p.package_tag} (${n0(p.current_weight)} lb) and finishes theirs.`)) return
-    setBusy(p.id)
+  async function repackage(p: Pallet, whole: boolean, n: number, tag: string | null, pending: boolean, itemId: number | null, note: string) {
+    const t = (tag ?? '').trim()
+    if (!pending && !confirm(`${p.code}: our label ${t} is on?\nMETRC makes a new package on ${t} from ${p.package_tag} (${whole ? `all ${n0(p.current_weight)}` : n0(n)} lb)${whole ? ' and finishes theirs' : `; ${p.code} keeps the rest on their tag`}.`)) return
+    setBusy(true)
     try {
-      await api.retag(p.id, t)
+      const { data, error } = await sb.rpc('new_package', { p_pallet_id: p.id, p_lbs: n, p_tag: t || null, p_tag_pending: pending, p_dest_slot: null,
+        p_item_id: itemId, p_note: note || null, p_keep_on_load: false })
+      if (error) throw new Error(error.message)
+      const c = data as Pallet
       const k = await metrcRun<{ results?: { id: number; state: string; error?: string; info?: string }[] }>(sb, { action: 'kick' }).catch(() => null)
       const bad = (k?.results ?? []).filter(x => x.state === 'error')
-      flash(bad.length ? `On our tag in the app. METRC: ${bad.map(b => `#${b.id} ${b.error ?? b.info}`).join('; ')}` : `${p.code} is on ${t}.`, bad.length > 0)
+      const done = whole ? `${p.code} is on …${(c.package_tag ?? '').slice(-6)} now.` : `${c.code} made (${n0(n)} lb${t ? ` on …${t.slice(-6)}` : ', tag pending'}). ${p.code} keeps the rest on their tag.`
+      flash(bad.length ? `${done} METRC: ${bad.map(b => `#${b.id} ${b.error ?? b.info}`).join('; ')}` : done, bad.length > 0)
+      setForm(null)
       await reload()
-    } catch (e) { flash(errText(e), true) } finally { setBusy(null) }
+    } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
   }
   if (!rows.length) return null
   return <>
     <h3 className="csec">Needs our tag <span className="muted">{rows.length}</span></h3>
     <div className="cwrap fit"><table className="ctable">
-      <thead><tr><th>Package</th><th>Strain</th><th className="num">Lbs</th><th className="hide-s">Their tag</th><th className="hide-s">Wet lot</th><th>Back</th><th>Our tag</th><th /></tr></thead>
+      <thead><tr><th>Package</th><th>Strain</th><th className="num">Lbs</th><th className="hide-s">Their tag</th><th className="hide-s">Wet lot</th><th>Back</th><th /></tr></thead>
       <tbody>{rows.map(p => { const age = ageDays(p.returned_at), late = age > OVERDUE_DAYS, w = lot(p.wet_lot_id)
         return <tr key={p.id}>
           <td className="tap" onClick={() => openPkg(p)}><b>{p.code}</b></td><td>{p.strain}</td><td className="num">{n0(p.current_weight)}</td>
           <td className="hide-s mono small">…{(p.package_tag ?? '').slice(-6)}</td>
           <td className="hide-s small">{w ? `${w.code}${w.status === 'at_processor' ? ' (open)' : ''}` : <span className="warn-t">none</span>}</td>
           <td className={late ? 'neg small' : 'muted small'}>{Math.floor(age)}d{late ? ' · overdue' : ''}</td>
-          <td>{isAdmin ? <TagInput compact value={tags[p.id] ?? ''} onChange={v => setTags(x => ({ ...x, [p.id]: v }))} where={{ pallet: p.id, purpose: 'processing' }} placeholder="Label you put on" /> : null}</td>
-          <td>{isAdmin ? <button className="primary small" disabled={busy != null} onClick={() => confirmTag(p)}>{busy === p.id ? '…' : 'Label is on'}</button> : null}</td>
+          <td>{isAdmin ? <button className="primary small" disabled={busy} onClick={() => setForm(p)}>Repackage</button> : null}</td>
         </tr> })}</tbody>
     </table></div>
-    <p className="muted small">More than {OVERDUE_DAYS} days on the processor's tag is overdue.</p>
+    <p className="muted small">Repackage: put our label on, pick the item, all of it or part of it (several new tags = split pieces, then all of the rest). More than {OVERDUE_DAYS} days on the processor's tag is overdue.</p>
+    {form && <NewPackageForm p={form} where="where it is now" busy={busy} onClose={() => setForm(null)}
+      loadItems={async () => { const { data, error } = await sb.rpc('new_package_items', { p_pallet_id: form.id }); if (error) throw new Error(error.message); return (data ?? []) as PkgItem[] }}
+      loadMetrcItem={async () => { const { data, error } = await sb.rpc('pallet_metrc_item', { p_pallet_id: form.id }); return error ? null : ((data as string | null) ?? null) }}
+      onSubmit={(whole, n, tag, pending, _dest, itemId, note) => repackage(form, whole, n, tag, pending, itemId, note)} />}
   </>
 }
 

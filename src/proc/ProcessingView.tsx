@@ -336,8 +336,8 @@ function PkgTable({ c, rows, sel, extra, showProduct, extraOnPhone = true }: { c
   </table></div>
 }
 
-function TagIn({ value, onChange, placeholder, pallet }: { value: string; onChange: (v: string) => void; placeholder?: string; pallet?: number }) {
-  return <TagInput compact value={value} onChange={onChange} where={{ pallet: pallet ?? null }} placeholder={placeholder ?? 'Last digits or scan (blank = pending)'} />
+function TagIn({ value, onChange, placeholder, pallet, purpose }: { value: string; onChange: (v: string) => void; placeholder?: string; pallet?: number; purpose?: string }) {
+  return <TagInput compact value={value} onChange={onChange} where={{ pallet: pallet ?? null, ...(purpose ? { purpose } : {}) }} placeholder={placeholder ?? 'Last digits or scan (blank = pending)'} />
 }
 
 function WetSheet({ c, h, onClose }: { c: Ctx; h: DryHarvest; onClose: () => void }) {
@@ -602,7 +602,8 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
       {rows.map((r, i) => <div key={i} className="row noline">
         <Select value={r.product} onChange={e => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, product: e.target.value as Product } : x)) }}>{OUTS[run.kind].map(k => <option key={k} value={k}>{PL(k)}{run.kind === 'buck' && k === 'trim' ? ' (buck trim)' : ''}</option>)}</Select>
         <NumIn value={r.lbs} placeholder="lbs" onChange={v => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, lbs: v } : x)) }} />
-        <TagIn value={r.tag} onChange={v => setRows(rs => rs.map((x, j) => j === i ? { ...x, tag: v } : x))} />
+        {/* 172: tags for what came out come from the license METRC has the first input package on (e.g. GVR processing for a CCP return) */}
+        <TagIn value={r.tag} onChange={v => setRows(rs => rs.map((x, j) => j === i ? { ...x, tag: v } : x))} pallet={ins[0]?.i.pallet_id ?? undefined} purpose="processing" />
         {rows.length > 1 && <button className="ghost small" onClick={() => { setTouched(true); setRows(rs => rs.filter((_, j) => j !== i)) }}>✕</button>}
       </div>)}
       <div className="row"><button className="ghost small" onClick={() => { setTouched(true); setRows(rs => [...rs, { product: rs[rs.length - 1]?.product ?? OUTS[run.kind][0], lbs: null, tag: '' }]) }}>+ Another package</button>
