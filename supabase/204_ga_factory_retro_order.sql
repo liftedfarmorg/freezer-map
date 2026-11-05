@@ -40,9 +40,9 @@ begin
     returning id into lid;
     for i in 1 .. array_length(r.tags, 1) loop
       if exists (select 1 from pallets where package_tag = r.tags[i]) then raise exception 'Package % is already in the app', r.tags[i]; end if;
-      insert into pallets (code, strain, crop_year, product, kind, package_tag, og_weight, current_weight, status, origin_site, pushed, notes)
+      insert into pallets (code, strain, crop_year, product, kind, package_tag, og_weight, current_weight, status, origin_site, received_site, pushed, notes)
       values ('L25-' || right(r.tags[i], 4), r.strain, 2025, 'fresh_frozen', 'package', r.tags[i], r.each_lbs[i], r.each_lbs[i], 'shipped',
-              r.sites[i], true, 'Shipped to GA Factory on METRC manifest 0011828178 (11/5/2026); added after the fact')
+              r.sites[i], r.sites[i], true, 'Shipped to GA Factory on METRC manifest 0011828178 (11/5/2026); added after the fact')
       returning id into pid;
       insert into order_picks (order_id, order_line_id, pallet_id, lbs, created_by)
       values (o.id, lid, pid, r.each_lbs[i], 'aziz@lifted-organics.com');
