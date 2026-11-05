@@ -395,12 +395,38 @@ export function MyOrders({ backend, onChange }: { backend: Backend; onChange?: (
 function OrderEditor({ backend, o, strains, flash, onChanged }: {
   backend: Backend; o: Order; strains: Strain[]; flash: (t: string, bad?: boolean) => void; onChanged: () => void
 }) {
-  const [so, setSo] = useState(o.so_number ?? '')
+  // Roshi SO # field removed (Aziz 11/4); an SO # already on the order is kept as is
+  const so = o.so_number ?? ''
   const [shipOn, setShipOn] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })
   const [edits, setEdits] = useState<Record<number, { lbs: string; price: string; year: number }>>({})
   const cy = new Date().getFullYear()
   const [add, setAdd] = useState({ strain: '', lbs: '' })
   const [busy, setBusy] = useState(false)
+  // Add a strain: what this customer can order right now = open menu + their own reserve left, per strain + crop year
+  const [avail, setAvail] = useState<{ k: string; strain: string; year: number; open: number; res: number }[] | null>(null)
+  useEffect(() => {
+    if (!(o.status === 'submitted' || o.status === 'pending')) return
+    let gone = false
+    Promise.all([backend.openMenu().catch(() => []), backend.listBalances().catch(() => [] as Balance[])]).then(([menu, bal]) => {
+      const m = new Map<string, { k: string; strain: string; year: number; open: number; res: number }>()
+      const at = (strain: string, year: number) => { const k = `${strain.toLowerCase()}|${year}`; let x = m.get(k); if (!x) { x = { k, strain, year, open: 0, res: 0 }; m.set(k, x) } return x }
+      for (const r of menu) if (Number(r.available) > 0) at(r.strain, r.crop_year).open += Number(r.available)
+      for (const b of bal) if (b.customer_id === o.customer_id && Number(b.remaining) > 0) at(b.strain, b.crop_year ?? cy).res += Number(b.remaining)
+      if (!gone) setAvail([...m.values()].sort((a, b) => a.strain.localeCompare(b.strain) || b.year - a.year))
+    })
+    return () => { gone = true }
+  }, [o.id, o.status])
+  const addPick = avail?.find(x => x.k === add.strain) ?? null
+  async function addLine() {
+    if (!addPick) return
+    await backend.setOrderLine(o.id, null, addPick.strain, Number(add.lbs), null)
+    if (addPick.year !== cy) {   // older crop: move the new line to that crop year
+      const sb = backend.client()!
+      const { data } = await sb.from('order_lines').select('id').eq('order_id', o.id).ilike('strain', addPick.strain).order('id', { ascending: false }).limit(1)
+      const id = (data as { id: number }[] | null)?.[0]?.id
+      if (id) { const { error } = await sb.rpc('set_order_line_year', { p_line: id, p_year: addPick.year }); if (error) throw new Error(error.message) }
+    }
+  }
   const run = async (f: () => Promise<void>, ok: string) => {
     setBusy(true)
     try { await f(); flash(ok); setEdits({}); setAdd({ strain: '', lbs: '' }); onChanged() } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
@@ -433,11 +459,13 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
           )
         })}</tbody>
         <tfoot>
-          {open_ && <tr><td><ListInput list="order-strains" placeholder="Add a strain" value={add.strain} onChange={e => setAdd({ ...add, strain: e.target.value })} />
-            <datalist id="order-strains">{strains.filter(s => s.active).map(s => <option key={s.id} value={s.name} />)}</datalist></td>
+          {open_ && <tr><td><Select value={add.strain} onChange={e => setAdd({ ...add, strain: e.target.value })} disabled={!avail}>
+              <option value="">{avail ? (avail.length ? 'Add a strain' : 'Nothing on the menu or in reserves') : 'Loading menu…'}</option>
+              {(avail ?? []).map(x => <option key={x.k} value={x.k}>{x.strain}{x.year !== cy ? ` (${x.year} crop)` : ''} · {n0(x.open + x.res)} lbs available{x.res > 0 ? ` (${n0(x.res)} reserve${x.open > 0 ? ` + ${n0(x.open)} open` : ''})` : ''}</option>)}
+            </Select></td>
             <td className="num"><input className="qty" type="number" step="10" min="0" placeholder="lbs" value={add.lbs} onChange={e => setAdd({ ...add, lbs: e.target.value })} /></td>
             <td className="muted small">customer price</td>
-            <td className="num"><button className="ghost small" disabled={busy || !add.strain || !(Number(add.lbs) > 0)} onClick={() => run(() => backend.setOrderLine(o.id, null, add.strain, Number(add.lbs), null), 'Line added')}>Add</button></td></tr>}
+            <td className="num"><button className="ghost small" disabled={busy || !addPick || !(Number(add.lbs) > 0)} title={addPick && Number(add.lbs) > addPick.open + addPick.res ? 'More than shows as available' : undefined} onClick={() => run(addLine, 'Line added')}>Add</button></td></tr>}
           <tr><td colSpan={open_ ? 4 : 3}>
             <div className="muted">{total > 0 && <>Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · </>}{o.po_number && <>PO {o.po_number} · </>}{o.wanted_date && <>wanted by {fmtDate(o.wanted_date)} · </>}{o.placed_by && <>placed by {o.placed_by}</>}{o.confirmed_by && <> · confirmed by {o.confirmed_by}</>}</div>
             {o.notes && <div className="muted">"{o.notes}"</div>}
@@ -446,9 +474,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
       </table>
       {open_ && (
         <div className="row reqact">
-          <input placeholder="Roshi SO # (optional)" value={so} onChange={e => setSo(e.target.value)} />
           {o.status === 'submitted' && <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Order confirmed')}>Confirm</button>}
-          {o.status === 'pending' && so !== (o.so_number ?? '') && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'SO # saved')}>Save SO #</button>}
           <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
             <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>
           <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'cancelled', so, ''), 'Order cancelled')}>Cancel order</button>
