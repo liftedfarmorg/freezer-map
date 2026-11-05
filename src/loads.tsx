@@ -443,10 +443,10 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
               <div className="row between">
                 <div><span className="stopnum">{s.seq}</span> <b>{c?.name}</b>{s.manifest && <span className="muted"> · manifest {s.manifest}</span>}</div>
                 {s.status === 'delivered'
-                  ? <span className="pill s-delivered">Delivered</span>
+                  ? <span className="pill s-delivered">{site ? 'Received' : 'Delivered'}</span>
                   : l.status === 'in_transit' && <button className="primary small" disabled={ctx.busy} onClick={() => ctx.confirm(
-                      `Mark stop ${s.seq} (${c?.name}) delivered? ${its.length} pallet${its.length === 1 ? '' : 's'} ${site ? `will be received at ${c?.name} and need a freezer spot` : 'will leave inventory'}.`,
-                      'Delivered', async () => { await ctx.run(() => ctx.api.deliverStop(s.id), `Stop ${s.seq} delivered`) })}>Mark delivered</button>}
+                      `Mark stop ${s.seq} (${c?.name}) ${site ? 'received' : 'delivered'}? ${its.length} pallet${its.length === 1 ? '' : 's'} ${site ? `will be received at ${c?.name} and need a freezer spot` : 'will leave inventory'}.`,
+                      site ? 'Received' : 'Delivered', async () => { await ctx.run(() => ctx.api.deliverStop(s.id), `Stop ${s.seq} ${site ? 'received' : 'delivered'}`) })}>{site ? 'Mark received' : 'Mark delivered'}</button>}
               </div>
               <div className="muted">{its.length} pallet{its.length === 1 ? '' : 's'} · {lbs(w)}</div>
               {(sOrders.length > 0 || waiting.length > 0 || loose > 0 || carrying.length > 0) && <div className="stoporders">
