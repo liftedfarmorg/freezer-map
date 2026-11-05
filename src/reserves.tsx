@@ -419,6 +419,13 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
   const addPick = avail?.find(x => x.k === add.strain) ?? null
   // can't add more than the list shows as available (Aziz 11/4)
   const addMax = addPick ? addPick.open + addPick.res : 0, addOver = !!addPick && Number(add.lbs) > addMax
+  // Edit on a line: up to what it has now + what's still open / in reserve for that strain + crop year (fresh frozen lines)
+  const lineMax = (l: Order['order_lines'][number], year: number) => {
+    if (!avail || (l.product && l.product !== 'fresh_frozen')) return Infinity
+    const x = avail.find(a => a.k === `${l.strain.toLowerCase()}|${year}`)
+    // a confirmed order's lbs are already off the menu / reserve, so they count back in; a submitted one's aren't held yet
+    return (x ? x.open + x.res : 0) + (o.status === 'pending' && year === (l.crop_year ?? cy) ? Number(l.lbs) : 0)
+  }
   async function addLine() {
     if (!addPick) return
     if (Number(add.lbs) > addMax) throw new Error(`Only ${n0(addMax)} lbs of ${addPick.strain} available`)
@@ -442,6 +449,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
         <thead><tr><th>Strain</th><th className="num">Lbs</th><th className="num">$/lb</th>{open_ && <th />}</tr></thead>
         <tbody>{o.order_lines.map(l => {
           const e = edits[l.id]
+          const eMax = e ? lineMax(l, e.year) : Infinity, eOver = !!e && Number(e.lbs) > eMax
           return (
             <tr key={l.id}>
               <td>{l.strain}{!e && l.crop_year && l.crop_year !== cy ? <span className="pill old">{l.crop_year} crop</span> : null}{e && <Select className="inline" value={e.year} title="Crop year" onChange={x => setEdits({ ...edits, [l.id]: { ...e, year: Number(x.target.value) } })}>
@@ -449,7 +457,8 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
               {e ? <>
                 <td className="num"><input className="qty" type="number" step="10" min="0" value={e.lbs} onChange={x => setEdits({ ...edits, [l.id]: { ...e, lbs: x.target.value } })} /></td>
                 <td className="num"><input className="qty" type="number" step="0.5" min="0" value={e.price} onChange={x => setEdits({ ...edits, [l.id]: { ...e, price: x.target.value } })} /></td>
-                <td className="num"><button className="primary small" disabled={busy} onClick={() => run(async () => {
+                <td className="num">{eOver && <div className="small" style={{ color: 'var(--bad)', fontWeight: 600, whiteSpace: 'nowrap' }}>Only {n0(eMax)} lbs available</div>}<button className="primary small" disabled={busy || eOver} onClick={() => run(async () => {
+                  if (Number(e.lbs) > lineMax(l, e.year)) throw new Error(`Only ${n0(lineMax(l, e.year))} lbs of ${l.strain} available`)
                   if (Number(e.lbs) > 0 && e.year !== (l.crop_year ?? cy)) { const { error } = await backend.client()!.rpc('set_order_line_year', { p_line: l.id, p_year: e.year }); if (error) throw new Error(/set_order_line_year|schema cache/i.test(error.message) ? `${error.message} (run 098_crop_years.sql in Supabase)` : error.message) }
                   await backend.setOrderLine(o.id, l.id, l.strain, Number(e.lbs), e.price === '' ? null : Number(e.price))
                 }, Number(e.lbs) === 0 ? 'Line removed' : 'Line saved')}>Save</button></td>
