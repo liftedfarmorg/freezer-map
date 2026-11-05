@@ -139,7 +139,7 @@ export interface Snapshot {
 
 export type Role = 'admin' | 'sales' | 'crew' | 'customer' | 'none'
 export interface Me { email: string; role: Role; display_name: string | null; customer_id: number | null; customer_name: string | null; viewing_as?: boolean; real_email?: string; access: Access }
-export interface AppUser { login_kind?: 'microsoft' | 'email'; email: string; role: Role; customer_id: number | null; display_name: string | null; added_by: string | null; created_at: string; last_seen: string | null; modules?: string[]; owner?: boolean; access?: Partial<Record<ModKey, Level>>; prefs?: Prefs }
+export interface AppUser { login_kind?: 'microsoft' | 'email'; phone?: string | null; email: string; role: Role; customer_id: number | null; display_name: string | null; added_by: string | null; created_at: string; last_seen: string | null; modules?: string[]; owner?: boolean; access?: Partial<Record<ModKey, Level>>; prefs?: Prefs }
 /** the parts of the app. Levels per person: off (missing), user, admin. Owners are admin everywhere. */
 export type ModKey = 'distribution' | 'sales' | 'cultivation' | 'nursery' | 'processing' | 'accounting' | 'compliance' | 'admin'
 export type Level = 'view' | 'user' | 'admin'

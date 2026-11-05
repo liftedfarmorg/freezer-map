@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Backend } from './api'
 import { MODULES } from './types'
 import type { Me, ModKey, Prefs, Site } from './types'
@@ -10,6 +10,14 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
   const p = me.access.prefs ?? {}
   const [name, setName] = useState(me.display_name ?? '')
   const [busy, setBusy] = useState(false)
+  // your phone (SQL 200): goes on METRC manifests when you drive
+  const [phone, setPhone] = useState(''), [phone0, setPhone0] = useState('')
+  useEffect(() => { backend.myPhone().then(x => { setPhone(x ?? ''); setPhone0(x ?? '') }).catch(() => {}) }, [backend])
+  const savePhone = async () => {
+    setBusy(true)
+    try { await backend.setMyPhone(phone); setPhone0(phone.trim()); flash(t('Phone saved')) }
+    catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
+  }
   const mine = MODULES.filter(m => me.access.modules[m.key])
   const lv = me.access.modules
   async function savePref(x: Prefs, msg = 'Saved') {
@@ -35,6 +43,11 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
         <div className="row"><input value={name} placeholder={t('What the app shows')} onChange={e => setName(e.target.value)} />
           <button className="primary small" disabled={busy || name.trim() === (me.display_name ?? '')} onClick={saveName}>{t('Save')}</button></div>
         <p className="muted">{t('Shows on your activity and in the top bar.')}</p></section>
+
+      <section className="dcard"><h3>{t('Phone')}</h3>
+        <div className="row"><input type="tel" value={phone} placeholder="831-555-0100" onChange={e => setPhone(e.target.value)} />
+          <button className="primary small" disabled={busy || phone.trim() === phone0} onClick={savePhone}>{t('Save')}</button></div>
+        <p className="muted">{t('Goes on METRC manifests as the phone for questions when you drive a load.')}</p></section>
 
       <section className="dcard"><h3>{lang() === 'es' ? 'Idioma · Language' : 'Language · Idioma'}</h3>
         {seg(p.lang ?? 'en', LANGS, v => savePref({ lang: v }, v === 'es' ? 'Idioma: español' : 'Language: English'))}

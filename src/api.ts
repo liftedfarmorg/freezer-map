@@ -139,6 +139,9 @@ export interface Backend {
   setMyPrefs(p: Prefs): Promise<Prefs>
   setUserLang(email: string, lang: 'en' | 'es'): Promise<void>
   setMyName(name: string): Promise<void>
+  myPhone(): Promise<string | null>
+  setMyPhone(phone: string): Promise<void>
+  setUserPhone(email: string, phone: string): Promise<void>
   /** Fulfillment: open orders with their assigned pallets (no prices) */
   fulfillmentOrders(): Promise<FOrder[]>
   pickPallet(lineId: number, palletId: number): Promise<void>
@@ -378,6 +381,9 @@ class SupaBackend implements Backend {
   async setInvoiceStatus(id: number, status: 'open' | 'paid' | 'void', note?: string) { const { error } = await this.sb.rpc('set_invoice_status', { p_inv: id, p_status: status, p_note: note ?? null }); fail(error) }
   async markInvoiceSent(id: number, to: string) { const { error } = await this.sb.rpc('mark_invoice_sent', { p_inv: id, p_to: to }); fail(error) }
   async setMyName(name: string) { const { error } = await this.sb.rpc('set_my_name', { p_name: name }); fail(error) }
+  async myPhone() { const { data, error } = await this.sb.rpc('my_phone'); if (error) return null; return (data as string | null) ?? null }
+  async setMyPhone(phone: string) { const { error } = await this.sb.rpc('set_my_phone', { p_phone: phone }); fail(error, '200_user_phone') }
+  async setUserPhone(email: string, phone: string) { const { error } = await this.sb.rpc('set_user_phone', { p_email: email, p_phone: phone }); fail(error, '200_user_phone') }
   async dashRecord(p: Record<string, number>) { await this.sb.rpc('dash_record', { p }) }
   async dashSeries(keys: string[], from: string) {
     const { data, error } = await this.sb.rpc('dash_series', { p_keys: keys, p_from: from })
@@ -1187,6 +1193,9 @@ class DemoBackend implements Backend {
   async setMyPrefs(p: Prefs) { return p }
   async setUserLang() { /* demo */ }
   async setMyName() {}
+  async myPhone() { return null }
+  async setMyPhone() {}
+  async setUserPhone() {}
   async getDoc(): Promise<SalesDoc> { throw new Error('Not in demo') }
   async sharedDoc() { return null }
   async paymentTerms() { return [] as PaymentTerm[] }

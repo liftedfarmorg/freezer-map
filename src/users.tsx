@@ -86,6 +86,7 @@ export function UsersTab({ backend, me, customers, flash }: {
               access: kind === 'staff' ? (u.access ?? {}) : {}, owner: me.access.owner ? !!u.owner : undefined,
               login: kind === 'staff' && u.login_kind && u.login_kind !== edit.login_kind ? u.login_kind : null })
             if (kind === 'staff' && (u.prefs?.lang ?? 'en') !== (edit.prefs?.lang ?? 'en')) await backend.setUserLang(u.email!, u.prefs?.lang ?? 'en')
+            if ((u.phone ?? '').trim() !== (edit.phone ?? '').trim()) await backend.setUserPhone(u.email!, u.phone ?? '')
             await load(); flash('Saved')
             // new customer: keep the card open so the invite link can be made right away
             if (kind === 'customer' && !edit.created_at) setEdit({ ...u, role: 'customer', created_at: new Date().toISOString(), added_by: me.email }); else setEdit(null)
@@ -135,6 +136,8 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
           <input type="email" value={u.email ?? ''} disabled={!isNew} autoFocus={isNew} onChange={e => set({ email: e.target.value })} placeholder="name@company.com" /></div>
         <div className="field"><label>Name <span className="muted">(what the app shows)</span></label>
           <input value={u.display_name ?? ''} disabled={locked} onChange={e => set({ display_name: e.target.value })} /></div>
+        {kind === 'staff' && <div className="field"><label>Phone <span className="muted">(goes on METRC manifests when they drive)</span></label>
+          <input type="tel" value={u.phone ?? ''} onChange={e => set({ phone: e.target.value })} placeholder="831-555-0100" /></div>}
         {kind === 'staff' && <div className="field"><label>Language <span className="muted">(they can change it in My settings too)</span></label>
           <div className="seg">{LANGS.map(([v, l]) => <button key={v} className={(u.prefs?.lang ?? 'en') === v ? 'on' : ''} disabled={locked} onClick={() => set({ prefs: { ...u.prefs, lang: v } })}>{l}</button>)}</div></div>}
         <div className="field"><label>Type</label>
