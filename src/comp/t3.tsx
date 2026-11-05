@@ -60,7 +60,7 @@ export function T3Settings({ c }: { c: Ctx }) {
   }
   const hasRoute = kinds.some(k => k.route)
   async function mode(k: PushKind, m: PushKind['mode']) {
-    if (m === 'auto' && !confirm(`Put "${k.label}" on Auto?\n\nWhen Live, the app sends these every 5 minutes without anyone tapping Send.`)) return
+    if (m === 'auto' && !confirm(`Put "${k.label}" on Auto?\n\nWhen Live, the app sends these about every minute without anyone tapping Send.`)) return
     try { await c.api.setPushMode(k.kind, m); await load(); c.flash(`${k.label}: ${MODE[m]}`) } catch (e) { c.flash(errText(e), true) }
   }
 
@@ -123,7 +123,7 @@ export function T3Settings({ c }: { c: Ctx }) {
     })}</div>
 
     <h3 style={{ marginTop: 14 }}>What the app sends</h3>
-    <p className="muted small"><b>Off</b>: done by hand in METRC, checked off on the To do list. <b>Approve</b>: a Send button on each to-do. <b>Auto</b>: sent every 5 minutes while Live. Kinds the app can't send yet show their phase.</p>
+    <p className="muted small"><b>Off</b>: done by hand in METRC, checked off on the To do list. <b>Approve</b>: a Send button on each to-do. <b>Auto</b>: sent about every minute while Live. Kinds the app can't send yet show their phase.</p>
     {hasRoute && <p className="muted small"><b>Route</b>: T3 or the METRC API (METRC API only once that kind's API sender is built). <b>If it fails</b>: <b>Safe only</b> tries the other route only when the first one was refused before anything reached METRC (key refused, rate limit, route not set up, can't connect). <b>Safe + check</b> also retries a send whose outcome is unknown (timeout, server error), only for kinds whose sender checks METRC first, so nothing is made twice. If METRC says the data is wrong, it never switches: the other route hits the same METRC rules.</p>}
     <div className="tablewrap"><table className="ct"><thead><tr><th>Kind</th><th>How</th>{hasRoute && <><th>Route</th><th>If it fails</th></>}<th className="hide-s">Changed</th></tr></thead>
       <tbody>{phases.map(ph => kinds.filter(k => k.phase === ph).map((k, i) => <tr key={k.kind}>
