@@ -232,6 +232,7 @@ async function syncTags(license, out, now) {
   return all
 }
 
+const PLANT_LIST_MAX = 5000     // up to this many plants in a phase: every plant's tag is kept in metrc_plants (1PN)
 const PLANT_DETAIL_MAX = 60000   // more plants than this on a license: just the total (paging 1M+ plants nightly takes too long)
 
 async function syncPlants(license, out, now) {
@@ -294,8 +295,11 @@ async function syncPlants(license, out, now) {
         return true
       }
       const agg = new Map()
+      const tags = total <= PLANT_LIST_MAX ? [] : null   // small license (1PN): keep every plant's tag too (193)
       const done = await pages(`/v2/plants/${phase}`, { licenseNumber: license }, async rows => {
         for (const p of rows) {
+          if (tags && p.label) tags.push({ license, label: up(p.label), id: p.id ?? null, phase, strain: p.strainName ?? null, location: p.locationName ?? null,
+            batch: p.plantBatchName ?? null, planted_on: isoDay(p.plantedDate), phase_on: isoDay(phase === 'flowering' ? p.floweringDate : p.vegetativeDate), seen_at: now })
           const k = `${p.locationId ?? 0}|${p.strainName ?? ''}`
           const a = agg.get(k) ?? { location_id: p.locationId ?? 0, location: p.locationName ?? null, strain: p.strainName ?? '', plants: 0, oldest: null, newest: null }
           a.plants++
@@ -308,6 +312,12 @@ async function syncPlants(license, out, now) {
       if (!done) return false
       if (agg.size) await rpc('metrc_plant_counts_add', { p_license: license, p_phase: phase, p_run: run, p_rows: [...agg.values()] })
       await rpc('metrc_plant_counts_swap', { p_license: license, p_phase: phase, p_run: run })
+      if (tags) {
+        try {
+          await upsert('metrc_plants', tags, 'license,label')
+          await db(`metrc_plants?license=eq.${encodeURIComponent(license)}&phase=eq.${phase}&seen_at=lt.${encodeURIComponent(now)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+        } catch (e) { if (!/metrc_plants/.test(String(e.message))) throw e; out.notes.push('plant list needs SQL 193') }
+      }
       out.plants += total
       return true
     })
