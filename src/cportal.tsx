@@ -108,7 +108,14 @@ export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
   st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; acts: Act[]; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
+  /** 195: strain (lowercase name or alias) -> grade SHO/BHO and type short code (S, S/H, H, I/H, I) */
+  tags: Record<string, Tag>
 }
+/** strain grade + type as the menu shows them */
+interface Tag { g: string | null; t: string | null }
+const TYPE_SHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
+const TYPE_ORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
+const TYPE_LONG: Record<string, string> = { S: 'Sativa', 'S/H': 'Sativa hybrid', H: 'Hybrid', 'I/H': 'Indica hybrid', I: 'Indica' }
 interface ResRow { k: string; s: string; y: number; res: number; used: number; left: number; asked: number | null
   /** desktop table: shipped, on any open SO (approved + submitted), and what's left after both */
   ful: number; so: number; rem: number }
@@ -137,10 +144,15 @@ async function loadAll(backend: Backend): Promise<Data> {
   // 175: this customer's price per strain + crop year (contract, else item card, else market), same as place_order uses
   const lp = await safe(Promise.resolve(backend.client()?.rpc('my_line_prices')).then(r => (r?.data ?? []) as { strain: string; crop_year: number; price: number | null }[]), [])
   const linePrices: Record<string, number | null> = Object.fromEntries(lp.map(x => [`${x.strain}|${x.crop_year}`, x.price != null ? Number(x.price) : null]))
+  // 195: grade + type per strain (until 195 is run this comes back empty and the columns show –)
+  const tg = await safe(Promise.resolve(backend.client()?.rpc('menu_strain_tags')).then(r => (r?.data ?? []) as { strain: string; aliases: string[] | null; strain_type: string | null; grade: string | null }[]), [])
+  const tags: Record<string, Tag> = {}
+  for (const x of tg) { const v = { g: x.grade ?? null, t: x.strain_type ? TYPE_SHORT[x.strain_type] ?? null : null }
+    for (const n of [x.strain, ...(x.aliases ?? [])]) if (n && !(n.toLowerCase().trim() in tags)) tags[n.toLowerCase().trim()] = v }
   const qbo = await safe(backend.qboInvoiceLines((st?.invoices ?? []).map(i => i.qbo_id).filter((x): x is string => !!x)), {} as Record<string, QboLine[]>)
   const prices: Record<number, number | null> = {}
   for (const [y, p] of ps) prices[y] = p != null ? Number(p) : (terms?.price_per_lb != null ? Number(terms.price_per_lb) : null)
-  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, acts, prices, linePrices, qbo }
+  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, acts, prices, linePrices, qbo, tags }
 }
 
 /* ---------- the portal ---------- */
@@ -274,6 +286,13 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const cy = d?.cy ?? new Date().getFullYear()
   const contract = !!d?.contract
   const yrTag = (y: number) => y < cy ? <span className={c('yr old')}>{y} crop</span> : null
+  // 195: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns, phones a small pill
+  const tagOf = (s: string): Tag => d?.tags[s.toLowerCase().trim()] ?? { g: null, t: null }
+  const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}</span> }
+  const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : <span className={c('muted')}>–</span>}</span> }
+  const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpill')} title={[g, t && TYPE_LONG[t]].filter(Boolean).join(' · ')}>{[g, t].filter(Boolean).join(' · ')}</span> : null }
+  const gradeN = (s: string) => ({ SHO: 1, BHO: 2 } as Record<string, number>)[tagOf(s).g ?? ''] ?? 9
+  const typeN = (s: string) => TYPE_ORDER[tagOf(s).t ?? ''] ?? 9
 
   const menuItems: MenuItem[] = useMemo(() => (d?.menu ?? []).filter(m => m.crop_year <= cy).map(m => ({
     k: kOf(m.strain, m.crop_year), s: m.strain, y: m.crop_year, open: f10(m.available), hold: Number(m.my_hold ?? 0), row: m,
@@ -594,9 +613,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                   {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}</div>
                 <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label></div>}
               {all.length > 0 && om.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0, borderTop: '1px solid var(--line)' }}>No strains match.</p> : om.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0 }}>Nothing on the open menu right now.</p> : <div className={c('hscroll tall')}>
-                <div className={c('htb head two')}>{sh('homenc', 's', 'Strain')}{sh('homenc', 'open', 'Open menu available')}</div>
-                {sortRows('homenc', om, { open: m => m.open }).map(m => <div key={m.k} className={c('htb two')}><span className={c('rmname')}>{m.s} {yrTag(m.y)} {m.hold > 0 && <span className={c('chip c-wait')}>{fmt(m.hold)} held for you</span>}</span><b>{fmt(m.open)}</b></div>)}
-                <div className={c('htb total two')}><b>Total · {plural(om.length, 'strain')}</b><b style={{ color: 'var(--teal-ink)' }}>{fmt(om.reduce((t, m) => t + m.open, 0))}</b></div>
+                <div className={c('htb head four')}>{sh('homenc', 's', 'Strain')}{sh('homenc', 'g', 'Grade')}{sh('homenc', 't', 'Type')}{sh('homenc', 'open', 'Open menu available')}</div>
+                {sortRows('homenc', om, { open: m => m.open, g: m => gradeN(m.s), t: m => typeN(m.s) }).map(m => <div key={m.k} className={c('htb four')}><span className={c('rmname')}>{m.s} {yrTag(m.y)} {m.hold > 0 && <span className={c('chip c-wait')}>{fmt(m.hold)} held for you</span>}</span>{gradeCell(m.s)}{typeCell(m.s)}<b>{fmt(m.open)}</b></div>)}
+                <div className={c('htb total four')}><b>Total · {plural(om.length, 'strain')}</b><span /><span /><b style={{ color: 'var(--teal-ink)' }}>{fmt(om.reduce((t, m) => t + m.open, 0))}</b></div>
               </div>}</> })()}
           </section>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -637,7 +656,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       .sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const years = [...new Set(all.map(x => x.y))].sort((a, b) => b - a)
     const list = sortRows('rm', all.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear)
-      && (rmRes === 'all' || (rmRes === 'res' ? !!x.r : !x.r))), { res: x => x.r?.res ?? 0, ful: x => x.r?.ful ?? 0, so: x => x.r?.so ?? 0, rem: x => x.r?.res ? x.r.rem : 0, open: x => x.m?.open ?? 0 })
+      && (rmRes === 'all' || (rmRes === 'res' ? !!x.r : !x.r))), { res: x => x.r?.res ?? 0, ful: x => x.r?.ful ?? 0, so: x => x.r?.so ?? 0, rem: x => x.r?.res ? x.r.rem : 0, open: x => x.m?.open ?? 0, g: x => gradeN(x.s), t: x => typeN(x.s) })
     const menuBad = editNew.some(n => n.lbs > 0 && !!newErr(n)) || reserves.some(r => !!resErr(r))
     const menuTotal = menuItems.reduce((a, m) => a + m.open, 0)
     const fb = (on: boolean, label: string, f: () => void) => <button key={label} aria-pressed={on} onClick={f}>{label}</button>
@@ -667,8 +686,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
           </div>
           {/* freeze pane: the title, totals, filters and column headers stay put; only the rows scroll */}
-          <div className={c('rmscroll')}><div style={{ minWidth: 860 }}>
-            <div className={c('rmt head')}>{sh('rm', 's', 'Strain')}{sh('rm', 'res', 'Reserved')}{sh('rm', 'ful', 'Fulfilled')}{sh('rm', 'so', 'Open SO')}{sh('rm', 'rem', 'Remaining')}{sh('rm', 'open', <>Open menu<br />available</>)}<span>Change reserve</span></div>
+          <div className={c('rmscroll')}><div style={{ minWidth: 990 }}>
+            <div className={c('rmt head')}>{sh('rm', 's', 'Strain')}{sh('rm', 'g', 'Grade')}{sh('rm', 't', 'Type')}{sh('rm', 'res', 'Reserved')}{sh('rm', 'ful', 'Fulfilled')}{sh('rm', 'so', 'Open SO')}{sh('rm', 'rem', 'Remaining')}{sh('rm', 'open', <>Open menu<br />available</>)}<span>Change reserve</span></div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 18, margin: 0 }}>Nothing matches.</p>}
             {list.map(x => {
               const { k, r, m, t } = x, open = m?.open ?? 0
@@ -678,6 +697,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 const newRem = Math.max(v - r.ful - r.so, 0)
                 return <div key={k} className={c(`rmt ${changed ? (e ? 'bad' : 'on') : ''}`)}>
                   <span className={c('rmname')}>{x.s} {yrTag(x.y)} {r.asked != null && <span className={c('chip c-wait')}>{r.res ? `Asked ${fmt(r.asked)}` : `New · asked ${fmt(r.asked)}`} · waiting</span>}{hold}{e && <span className={c('rmerr')} title={e}>{e}</span>}</span>
+                  {gradeCell(x.s)}{typeCell(x.s)}
                   <span>{changed ? <><span className={c('muted')}>{fmt(base)} →</span> <b>{fmt(v)}</b></> : r.res ? fmt(r.res) : <span className={c('muted')}>–</span>}</span>
                   {r.res || r.ful || r.so ? <><span>{fmt(r.ful)}</span><span>{fmt(r.so)}</span></> : <><span className={c('muted')}>–</span><span className={c('muted')}>–</span></>}
                   <b style={changed ? { color: e ? 'var(--red)' : 'var(--teal-ink)' } : undefined}>{changed ? (e ? '–' : fmt(newRem)) : r.res ? fmt(r.rem) : <span className={c('muted')}>–</span>}</b>
@@ -692,6 +712,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 else setEditNew([...editNew, { k, s: x.s, y: x.y, lbs: v }]) }
               return <div key={k} className={c(`rmt ${lbs ? (e ? 'bad' : 'on') : ''}`)}>
                 <span className={c('rmname')}>{x.s} {yrTag(x.y)} {lbs > 0 && <span className={c('chip c-ship')}>New</span>}{hold}{e && <span className={c('rmerr')} title={e}>{e}</span>}</span>
+                {gradeCell(x.s)}{typeCell(x.s)}
                 <span>{lbs ? <><span className={c('muted')}>0 →</span> <b>{fmt(lbs)}</b></> : <span className={c('muted')}>–</span>}</span>
                 <span className={c('muted')}>–</span><span className={c('muted')}>–</span>
                 <b style={lbs ? { color: e ? 'var(--red)' : 'var(--teal-ink)' } : undefined}>{lbs && !e ? fmt(lbs) : <span className={c('muted')}>–</span>}</b>
@@ -699,7 +720,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 <span><AdjStepper val={lbs} step={rmStep} min={0} max={availFor(k)} bad={!!e} label={x.s} onChange={setNew} /></span>
               </div>
             })}
-            {list.length > 0 && <div className={c('rmt total')}><b>Total lbs</b><b>{fmt(totals.res)}</b><span>{fmt(dt.ful)}</span><span>{fmt(dt.so)}</span><b style={{ color: 'var(--teal-ink)' }}>{fmt(dt.rem)}</b><span className={c('muted')}>{fmt(menuTotal)}</span><span /></div>}
+            {list.length > 0 && <div className={c('rmt total')}><b>Total lbs</b><span /><span /><b>{fmt(totals.res)}</b><span>{fmt(dt.ful)}</span><span>{fmt(dt.so)}</span><b style={{ color: 'var(--teal-ink)' }}>{fmt(dt.rem)}</b><span className={c('muted')}>{fmt(menuTotal)}</span><span /></div>}
           </div></div>
         </section>
         <p className={c('meta')} style={{ margin: '0 4px' }}>Fulfilled = shipped. Open SO = on orders you've placed that haven't shipped. Remaining = reserved − fulfilled − open SO. Open menu available = what anyone can still reserve or order.</p>
@@ -1013,7 +1034,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <div className={c(`mg mg-head ${contract ? '' : 'nc'}`)}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span>{contract && <span style={{ textAlign: 'right' }}>Your reserve</span>}</div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 14 }}>{menuItems.length ? 'Nothing matches.' : 'Nothing on the menu right now.'}</p>}
             {list.map(m => {
-              const nameCell = <div style={{ minWidth: 0 }}><p className={c('name')}>{m.s}</p>{m.y < cy && <p className={c('meta')} style={{ margin: '1px 0 0' }}><span className={c('yr old')} style={{ fontSize: 12 }}>{m.y} crop</span></p>}</div>
+              const nameCell = <div style={{ minWidth: 0 }}><p className={c('name')}>{m.s} {tagPill(m.s)}</p>{m.y < cy && <p className={c('meta')} style={{ margin: '1px 0 0' }}><span className={c('yr old')} style={{ fontSize: 12 }}>{m.y} crop</span></p>}</div>
               const cells = <>{nameCell}<b className={c('num mg-a')}>{fmt(m.open)}</b></>
               if (!contract) return <div key={m.k} className={c('mg nc')}>{cells}</div>
               const r = resRow(m.k), t = !r ? editNew.find(x => x.k === m.k) : undefined
