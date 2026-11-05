@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import { readSheet } from 'read-excel-file/browser'
 import type { Backend } from './api'
 import { QboCustomerImport } from './qboImport'
+import { CustomerLogins } from './custlogins'
 import { ItemGeneratorSheet, StrainCodesSheet, StrainMetrcSheet, loadStrainPlan } from './strainMetrc'
 import type { Customer, CustomerTerms, ListName, ListRow, ReserveYears, Settings, Strain, Vehicle } from './types'
 
@@ -306,7 +307,10 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       ))}
 
       {edit && <EditForm list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms}
-        extra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' && canTerms ? <TermsByYear backend={backend} c={edit as Customer} />
+        extra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' ? <>
+              {canTerms && <TermsByYear backend={backend} c={edit as Customer} />}
+              <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} />
+            </>
           : tab === 'strains' && edit.id != null ? <>
               {sb && <div className="row" style={{ margin: '6px 0 10px' }}><button className="ghost small" onClick={() => { const id = edit.id!; setEdit(null); setMetrcFor({ id, isNew: false }) }}>METRC: strain and items on every license</button></div>}
               {profiles.get(edit.id) && <StrainProfileEdit sb={backend.client()} p={profiles.get(edit.id)!} flash={flash} onSaved={loadProfilesNow} />}

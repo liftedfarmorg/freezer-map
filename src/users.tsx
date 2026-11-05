@@ -212,7 +212,7 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
   )
 }
 
-function LinkBox({ backend, email, claimed, flash, onLinked }: {
+export function LinkBox({ backend, email, claimed, flash, onLinked }: {
   backend: Backend; email: string; claimed: boolean; flash: (t: string, bad?: boolean) => void; onLinked: () => void
 }) {
   const [link, setLink] = useState<{ kind: 'invite' | 'reset'; url: string } | null>(null)
