@@ -1,0 +1,9 @@
+-- Trial fixes round 2 (Msg RAMA-TRIALS-9, 11/5). Aziz 11/5: use Raw Weights; if no plants, harvest from leftover Slapz.
+-- RUN LIVE by Claude 11/5 via Management API (as Aziz). Dry run (rolled back) showed the 8 expected to-dos; guard = exactly 8.
+-- Lime Belts x Hashburger #38: NEW app harvest (planting 147, field 6 / METRC Field 2), 100 plants, raw 78 (Raw Weights tab),
+--   T011 (id 658) -> #38, 68.92 on ABC06030007AD3D000000811, slot 42C, item item_for(2026,'OHR','FF',210,'OCAL','FL'); waste 9.08; finish.
+--   METRC name OHR-L152-3-11052026-1-FF (cult_batch_name). To-dos #846-#849.
+-- Garlic Juice x Pressure #33: harvest 156 (OHR-GarlicJuicexPressure#33-Frozen-101926), 100 plants Field 2, raw 583.4 (Raw Weights tab),
+--   T027 (id 1896) 477.60 on ABC06030007AD3D000000851, slot 42N; waste 105.8; finish. To-dos #850-#853.
+-- Full statements: same pattern as 183_t034_t025_slapz.sql (harvest_plants with metrc_location 'Field 2', metrc_date 2026-11-05;
+--   harvest_package per pallet; harvest_waste +30 min; harvest_finish +60 min). Events: tag_audit / weight_audit (metrc false).

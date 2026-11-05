@@ -1,0 +1,7 @@
+-- Trial fixes round 3 (Msg RAMA-TRIALS-10, 11/5). Aziz approved. RUN LIVE by Claude via Management API (as Aziz).
+-- Dry run (rolled back) showed the 7 expected to-dos; guard = exactly 7.
+-- T010 Lime Belts #19 -> slot 42F (app only).
+-- BBM #11 first harvest OHR-0177-Frozen-101526 (208.9993 wet): T014 (id 664) 160 on ABC06030007AD3D000000814, 42P; waste 48.9993; finish. To-dos #862-#864.
+-- BBM #11 second harvest (raw 47.4, Raw Weights tab): no BBM plants left, so 10 leftover Slapz plants (Field 7, planting 92).
+--   New app harvest, METRC name OHR-B031-7-11052026-3-FF; new pallet T052 37.26 on ABC06030007AD3D000000852, 42R, item 96; waste 10.14; finish. To-dos #865-#868.
+-- Same statement pattern as 183_t034_t025_slapz.sql. App-only adds logged as tag_audit (added), never 'created' (that queues a METRC new-package to-do).

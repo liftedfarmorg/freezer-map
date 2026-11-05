@@ -1,0 +1,12 @@
+-- GVR fixes from Leland's round 2 (Msg LELAND-12, 11/5). Aziz approved. RUN LIVE by Claude via Management API (as Aziz).
+-- Dry run showed 5 to-dos; guard = exactly 5 (combine, adjust x2, split, repackage).
+-- App only: code swap so codes match labels. Shipped 834 W504 -> W510 (tag 2504), shipped 831 W508 -> W511 (tag 2508).
+--   1570 W510 -> W504, in_freezer 14E (slot 927) on ...2510; 1571 W511 -> W508, in_freezer 14D (slot 925) on ...2511.
+--   New tags for W504/W508 HELD: Leland's ...7205/...7206 were used 11/5 by Rama for P70-1 / P68-1 (to-dos #812/#813).
+-- W2 Its It: merge_pallets(680, 2147) -> new pallet (code set to W2) 640 on 1A4060300030F35000007207, 6J. Old rows W2-a / W2-b (merged).
+--   To-do #874 combine FAILED: METRC has ...003002 and ...005159 as two different item ids (both "FL25OH Its It"). Combine by hand in METRC.
+-- W68 Zkittlez: old W68 (KLP, finished) renamed W68-KLP. New W68 on 1A4060300030F35000005666 (50), item 188, 7B.
+--   adjust_weight -> 140 (entry) #875 sent. split_pallet 100 -> W68-1 on ...7212, 8F (#876). new_package 40 -> ...7208, 7B (#877).
+--   #876 first failed because new_package switched W68's app tag to 7208 before the split ran; W68 tag set back to ...5666 (app only,
+--   no event) so the split can send; #877 repackages 5666 -> 7208 after. Set W68's app tag to ...7208 once #877 is done.
+-- W505: 1567 back in inventory at 14G (slot 931), adjust_weight 150 -> 130 (entry) #878 sent.
