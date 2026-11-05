@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { TAB_ID } from './tabid'
 import { accessFromRole } from './types'
 import type { SalesDoc } from './docs'
 import type { MyContract, QboLine, ReserveLineInput, Item, HarvestLot, LotImpact, Invoice, NewOrderLine, PaymentTerm, FOrder, Prefs, ModKey, Level, ReserveYears, CustomerTerms, UnmatchedTag, ShippedCheck, StopManifest, OrderInput, Terms, Statement, SampleHold, MenuNumbers, MenuRow, ReserveRequest, Balance, ImportResult, Order, RoshiRow, Reserve, LinkInfo, AppUser, Customer, Me, Role, Freezer, FreezerStatus, InvEvent, ListName, ListRow, Load, LoadItem, LoadStop, MixLine, Pallet, Settings, SingleInput, Slot, Snapshot, StopInput, Strain, Vehicle } from './types'
@@ -195,7 +196,7 @@ export const CONFIG_MISSING = !(URL_ && KEY) && !import.meta.env.DEV
 
 export function makeBackend(): Backend {
   const wantDemo = new URLSearchParams(location.search).has('demo')
-  if (!wantDemo && URL_ && KEY) return new SupaBackend(createClient(URL_, KEY, { global: { fetch: kickingFetch } }))
+  if (!wantDemo && URL_ && KEY) return new SupaBackend(createClient(URL_, KEY, { global: { fetch: kickingFetch, headers: { 'X-Tab-Id': TAB_ID } } }))
   return new DemoBackend()
 }
 

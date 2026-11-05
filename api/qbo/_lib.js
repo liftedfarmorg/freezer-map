@@ -77,7 +77,7 @@ export async function caller(req) {
   const auth = req.headers.authorization || ''
   if (!auth.startsWith('Bearer ')) return null
   try {
-    const me = await sbFetch('/rest/v1/rpc/acct_me', { method: 'POST', body: '{}' }, { apikey: ANON, Authorization: auth, 'Content-Type': 'application/json' })
+    const me = await sbFetch('/rest/v1/rpc/acct_me', { method: 'POST', body: '{}' }, { apikey: ANON, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' })
     return me && me.level ? me : null
   } catch { return null }
 }
@@ -85,7 +85,7 @@ export async function caller(req) {
 export function userRpc(req, fn, args) {
   const auth = req.headers.authorization || ''
   if (!auth.startsWith('Bearer ')) return Promise.reject(new Error('Sign in first'))
-  return sbFetch(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args || {}) }, { apikey: ANON, Authorization: auth, 'Content-Type': 'application/json' })
+  return sbFetch(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args || {}) }, { apikey: ANON, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' })
 }
 
 // ---------- stored files (private bucket qbo-docs, 149) ----------

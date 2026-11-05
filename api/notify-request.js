@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   // the database only answers for the person who made the request or order, once
   const r = await fetch(`${url}/rest/v1/rpc/${kind === 'order' ? 'order_notification' : 'request_notification'}`, {
-    method: 'POST', headers: { apikey: anon, Authorization: auth, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { apikey: anon, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_id: id }),
   })
   if (!r.ok) return res.status(400).json({ error: 'not allowed' })
@@ -69,7 +69,7 @@ async function decision(req, res, { key, url, anon, auth, body }) {
   const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Boolean) : []
   if (!url || !anon || !auth.startsWith('Bearer ') || !ids.length) return res.status(400).json({ error: 'bad request' })
   const r = await fetch(`${url}/rest/v1/rpc/request_decision_notification`, {
-    method: 'POST', headers: { apikey: anon, Authorization: auth, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { apikey: anon, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_ids: ids }),
   })
   if (!r.ok) return res.status(400).json({ error: 'not allowed' })

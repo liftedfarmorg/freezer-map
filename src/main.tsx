@@ -4,6 +4,8 @@ import App from './App'
 import './styles.css'
 import { applyTheme, savedTheme } from './theme'
 import { UpdateBanner } from './update'
+import { installTabHeader } from './tabid'
+installTabHeader()
 
 applyTheme(savedTheme())
 

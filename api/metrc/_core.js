@@ -63,14 +63,14 @@ export async function caller(req) {
   const auth = req.headers.authorization || ''
   if (!auth.startsWith('Bearer ')) return null
   try {
-    const r = await fetch(`${SB}/rest/v1/rpc/metrc_me`, { method: 'POST', body: '{}', headers: { apikey: ANON, Authorization: auth, 'Content-Type': 'application/json' } })
+    const r = await fetch(`${SB}/rest/v1/rpc/metrc_me`, { method: 'POST', body: '{}', headers: { apikey: ANON, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' } })
     const me = await r.json()
     return r.ok && me && me.email ? me : null
   } catch { return null }
 }
 /** run an app RPC as the caller (their own permissions) */
 export async function asUser(req, fn, args) {
-  const r = await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args || {}), headers: { apikey: ANON, Authorization: req.headers.authorization, 'Content-Type': 'application/json' } })
+  const r = await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args || {}), headers: { apikey: ANON, Authorization: req.headers.authorization, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' } })
   const t = await r.text(); let j = null
   try { j = t ? JSON.parse(t) : null } catch { j = t }
   if (!r.ok) throw new Error((j && (j.message || j.hint)) || `Database error ${r.status}`)

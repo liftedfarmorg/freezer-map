@@ -41,7 +41,7 @@ async function caller(req) {
   const auth = req.headers.authorization || ''
   if (!auth.startsWith('Bearer ')) return null
   try {
-    const r = await fetch(`${SB}/rest/v1/rpc/comp_me`, { method: 'POST', body: '{}', headers: { apikey: ANON, Authorization: auth, 'Content-Type': 'application/json' } })
+    const r = await fetch(`${SB}/rest/v1/rpc/comp_me`, { method: 'POST', body: '{}', headers: { apikey: ANON, Authorization: auth, 'X-Tab-Id': String(req.headers['x-tab-id'] || ''), 'Content-Type': 'application/json' } })
     const me = await r.json()
     return r.ok && me && me.admin ? me : null
   } catch { return null }
