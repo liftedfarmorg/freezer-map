@@ -9,7 +9,7 @@ update pallets
        notes = concat_ws(E'\n', nullif(notes, ''), '11/4: to GVR Staging in the app. METRC has its packages on GVR''s license (CCL21-0000679) since manifest 0011764544 (Oct 26). Was in OHR 42H in the app (SQL 206).')
  where code = 'M4' and status in ('in_freezer', 'unslotted') and coalesce(pallet_site(pallets), '') <> 'GVR';
 -- its two packages still had their own slot (OHR 42H); packages on a mixed pallet have none (they go where the pallet goes)
-update pallets set slot_id = null
+update pallets set slot_id = null, status = 'unslotted'   -- in_freezer needs a slot (pallets_check)
  where container_id = (select id from pallets where code = 'M4') and slot_id is not null;
 commit;
 select p.code, p.status, pallet_site(p) site, p.slot_id,
