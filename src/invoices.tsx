@@ -300,7 +300,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   }
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet form" onClick={e => e.stopPropagation()}>
+      <div className="sheet form neworder" onClick={e => e.stopPropagation()}>
         <div className="sheet-h"><h2>New sales order</h2><button className="ghost" onClick={onClose}>✕</button></div>
         <div className="field"><label>Customer</label>
           <Select value={cust ?? ''} onChange={e => setCust(e.target.value ? Number(e.target.value) : null)}>

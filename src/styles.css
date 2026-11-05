@@ -1186,3 +1186,11 @@ html:has(.app.shell), html:has(.app.shell) body { height: 100%; overflow: hidden
 .stagebox .stagebad { border: 1px solid var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
 .stagebox .stagebad b { color: var(--bad); }
 .stageform .field { margin: 6px 0; }
+
+/* New sales order: roomy on desktop (Aziz 11/4) */
+.sheet.form.neworder { max-width: 560px; }
+@media (min-width: 900px) { .sheet.form.neworder { max-width: 920px; } }
+.neworder .noline { gap: 8px; }
+.neworder .noline > select:first-child { flex: 0 0 150px; max-width: 150px; }
+.neworder .noline > .combo.sel { flex: 4 1 0; min-width: 0; }
+.neworder .noline > input { flex: 1 1 90px; width: auto; min-width: 80px; }
