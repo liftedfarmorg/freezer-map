@@ -251,6 +251,7 @@ async function sendStage(job, ctx) {
     await stageSpec(spec, left)
   }
   if (!spec.packages.length) throw new Skip('No GVR packages on this stop any more')
+  await receiveFirst(ctx, spec.packages.map(p => p.tag), job.id)
   spec.allowInTransit = !!made
   const plan = await planTransfer(ctx, spec)
   if (made && !made.transfer_id) throw new Error(`Manifest ${made.manifest ?? '(number pending)'} has no METRC id in the app yet. Check METRC.`)
@@ -311,6 +312,7 @@ export async function sendTransfer_(job, ctx) {
   if (d.type === 'stop_departed') {
     const { spec } = await stopSpec(Number(d.stop_id), job.license)
     spec.beforeId = job.id
+    await receiveFirst(ctx, spec.packages.map(p => p.tag), job.id)
     const made = await one(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided&select=manifest,transfer_id`)
     if (made && (await stagesOn(d.stop_id, job.license)).length) {
       // staged at OHR (197): the manifest made at staging now gets this load's driver, truck and times
@@ -318,19 +320,57 @@ export async function sendTransfer_(job, ctx) {
       spec.allowInTransit = true
       const plan = await planTransfer(ctx, spec)
       const r = await updateTransfer(ctx, spec, plan, job, made)
-      if (r.state === 'sent') r.siblings = await shipSiblings(spec.packages.map(p => p.tag), job.id)
+      if (r.state === 'sent') r.siblings = [...await shipSiblings(spec.packages.map(p => p.tag), job.id), ...await receiveSiblings(spec.packages.map(p => p.tag), job.id)]
       return r
     }
     if (made) throw new Skip(`Already on METRC manifest ${made.manifest ?? '(number pending)'}`)
     const plan = await planTransfer(ctx, spec)
     const r = await sendTransfer(ctx, spec, plan, job)
-    if (r.state === 'sent') r.siblings = await shipSiblings(spec.packages.map(p => p.tag), job.id)
+    if (r.state === 'sent') r.siblings = [...await shipSiblings(spec.packages.map(p => p.tag), job.id), ...await receiveSiblings(spec.packages.map(p => p.tag), job.id)]
     return r
   }
   if (d.type === 'stage_manifest' || d.type === 'stage_void') return sendStage(job, ctx)
   if (d.type === 'proc_sent') return sendProcessorRun(job, ctx)
   if (d.type === 'nursery_shipped') return sendNurseryRun(job, ctx)
   throw new Error(`This to-do (${d.type}) isn't a transfer the app makes. Check it by hand.`)
+}
+
+/** open "receive in METRC" to-dos covering these packages (by tag, or a mixed pallet they sit on) */
+async function openReceives(tags) {
+  const t = [...new Set(tags.filter(Boolean).map(up))]
+  if (!t.length) return []
+  const pals = await db(`pallets?select=id,container_id&package_tag=in.(${t.map(enc).join(',')})`).catch(() => [])
+  const pids = [...new Set(pals.flatMap(p => [p.id, p.container_id]).filter(Boolean))]
+  const byTag = await db(`comp_metrc_actions?select=*&kind=eq.receive&status=in.(todo,error)&tag=in.(${t.map(enc).join(',')})`).catch(() => [])
+  const byPal = pids.length ? await db(`comp_metrc_actions?select=*&kind=eq.receive&status=in.(todo,error)&pallet_id=in.(${pids.join(',')})`).catch(() => []) : []
+  const m = new Map(); for (const a of [...byTag, ...byPal]) m.set(a.id, a)
+  return [...m.values()].sort((a, b) => a.id - b.id)
+}
+
+/** a package can't leave on a new manifest before its license has received it (Aziz 11/4: L-1104-5 / M12):
+ *  send any open receive first; if METRC has nothing to receive yet, the manifest waits */
+async function receiveFirst(ctx, tags, selfId) {
+  const open = (await openReceives(tags)).filter(a => a.id !== selfId)
+  if (!open.length) return
+  const done = new Set()
+  for (const a of open) {
+    if (done.has(a.id)) continue
+    let r
+    try { r = await sendReceive(a, ctx) }
+    catch (e) {
+      if (e instanceof Skip) { await rpc('metrc_close_siblings', { p_ids: [a.id], p_by: ctx.by, p_note: `Before manifest #${selfId}: ${e.message}` }).catch(() => {}); done.add(a.id); continue }
+      throw new Wait(`Receive first: to-do #${a.id} (${a.code ?? a.tag ?? 'package'}) isn't received in METRC yet. ${e.message}`)
+    }
+    if (!ctx.live) continue
+    const ids = [a.id, ...(r.siblings ?? [])]
+    await rpc('metrc_close_siblings', { p_ids: ids, p_by: ctx.by, p_note: `Received before manifest #${selfId}: ${r.info ?? ''}` }).catch(() => {})
+    ids.forEach(i => done.add(i))
+  }
+}
+
+/** once a manifest has gone out, METRC has shown the packages were received: close any receive to-dos left on them */
+async function receiveSiblings(tags, selfId) {
+  return (await openReceives(tags)).map(a => a.id).filter(id => id !== selfId)
 }
 
 /** ship-check to-dos on the same packages are covered once the manifest exists */
