@@ -253,12 +253,16 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const [bal, setBal] = useState<Balance[]>([])
   useEffect(() => { backend.client()?.rpc('staff_menu').then(({ data }) => setMenu((data ?? []) as { product: string; strain: string; crop_year: number; open_lbs: number }[]), () => setMenu([])) }, [])
   useEffect(() => { backend.listBalances().then(setBal).catch(() => {}) }, [])
+  // fresh frozen to the exact pound for staff (211); standards / smalls stay on staff_menu
+  const [ffExact, setFfExact] = useState<{ strain: string; crop_year: number; open_lbs: number }[] | null>(null)
+  useEffect(() => { backend.client()?.rpc('staff_ff_open').then(({ data, error }) => setFfExact(error ? null : (data ?? []) as { strain: string; crop_year: number; open_lbs: number }[]), () => setFfExact(null)) }, [])
   const MENU_CODE: Partial<Record<Product, string>> = { fresh_frozen: 'FF', standards: 'ST', smalls: 'SM' }
   const optionsFor = (product: Product) => {
     const m = new Map<string, { k: string; strain: string; year: number; open: number; res: number }>()
     const at = (strain: string, year: number) => { const k = `${strain.toLowerCase()}|${year}`; let x = m.get(k); if (!x) { x = { k, strain, year, open: 0, res: 0 }; m.set(k, x) } return x }
     const code = MENU_CODE[product]
-    if (code) for (const r of menu ?? []) { if (r.product === code && Number(r.open_lbs) > 0) at(r.strain, r.crop_year).open += Number(r.open_lbs) }
+    if (product === 'fresh_frozen' && ffExact) for (const r of ffExact) { if (Number(r.open_lbs) > 0) at(r.strain, r.crop_year).open += Number(r.open_lbs) }
+    else if (code) for (const r of menu ?? []) { if (r.product === code && Number(r.open_lbs) > 0) at(r.strain, r.crop_year).open += Number(r.open_lbs) }
     else if (stock) for (const [k, ys] of stock) { const [name, prod] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)]
       if (prod !== product) continue
       const shown = strains.find(s => s.name.toLowerCase() === name)?.name ?? name

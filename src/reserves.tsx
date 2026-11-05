@@ -409,7 +409,9 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
   useEffect(() => {
     if (!(o.status === 'submitted' || o.status === 'pending')) return
     let gone = false
-    Promise.all([backend.openMenu().catch(() => []), backend.listBalances().catch(() => [] as Balance[])]).then(([menu, bal]) => {
+    // staff see the exact pounds left (211), not the portal's rounded-down-to-10
+    const exact = async () => { const { data, error } = await backend.client()!.rpc('staff_ff_open'); if (error) throw error; return ((data ?? []) as { strain: string; crop_year: number; open_lbs: number }[]).map(r => ({ strain: r.strain, crop_year: r.crop_year, available: r.open_lbs })) }
+    Promise.all([exact().catch(() => backend.openMenu().catch(() => [])), backend.listBalances().catch(() => [] as Balance[])]).then(([menu, bal]) => {
       const m = new Map<string, { k: string; strain: string; year: number; open: number; res: number }>()
       const at = (strain: string, year: number) => { const k = `${strain.toLowerCase()}|${year}`; let x = m.get(k); if (!x) { x = { k, strain, year, open: 0, res: 0 }; m.set(k, x) } return x }
       for (const r of menu) if (Number(r.available) > 0) at(r.strain, r.crop_year).open += Number(r.available)
