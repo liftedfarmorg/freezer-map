@@ -417,8 +417,11 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
     return () => { gone = true }
   }, [o.id, o.status])
   const addPick = avail?.find(x => x.k === add.strain) ?? null
+  // can't add more than the list shows as available (Aziz 11/4)
+  const addMax = addPick ? addPick.open + addPick.res : 0, addOver = !!addPick && Number(add.lbs) > addMax
   async function addLine() {
     if (!addPick) return
+    if (Number(add.lbs) > addMax) throw new Error(`Only ${n0(addMax)} lbs of ${addPick.strain} available`)
     await backend.setOrderLine(o.id, null, addPick.strain, Number(add.lbs), null)
     if (addPick.year !== cy) {   // older crop: move the new line to that crop year
       const sb = backend.client()!
@@ -464,8 +467,8 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
               {(avail ?? []).map(x => <option key={x.k} value={x.k}>{x.strain}{x.year !== cy ? ` (${x.year} crop)` : ''} · {n0(x.open + x.res)} lbs available{x.res > 0 ? ` (${n0(x.res)} reserve${x.open > 0 ? ` + ${n0(x.open)} open` : ''})` : ''}</option>)}
             </Select></td>
             <td className="num"><input className="qty" type="number" step="10" min="0" placeholder="lbs" value={add.lbs} onChange={e => setAdd({ ...add, lbs: e.target.value })} /></td>
-            <td className="muted small">customer price</td>
-            <td className="num"><button className="ghost small" disabled={busy || !addPick || !(Number(add.lbs) > 0)} title={addPick && Number(add.lbs) > addPick.open + addPick.res ? 'More than shows as available' : undefined} onClick={() => run(addLine, 'Line added')}>Add</button></td></tr>}
+            <td className="muted small">{addOver ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}>Only {n0(addMax)} lbs available</span> : 'customer price'}</td>
+            <td className="num"><button className="ghost small" disabled={busy || !addPick || !(Number(add.lbs) > 0) || addOver} onClick={() => run(addLine, 'Line added')}>Add</button></td></tr>}
           <tr><td colSpan={open_ ? 4 : 3}>
             <div className="muted">{total > 0 && <>Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · </>}{o.po_number && <>PO {o.po_number} · </>}{o.wanted_date && <>wanted by {fmtDate(o.wanted_date)} · </>}{o.placed_by && <>placed by {o.placed_by}</>}{o.confirmed_by && <> · confirmed by {o.confirmed_by}</>}</div>
             {o.notes && <div className="muted">"{o.notes}"</div>}
