@@ -1064,6 +1064,7 @@ export default function App() {
           <div className="seg setpick">{ALL_SETTINGS.map(([k, l]) => <button key={k} className={adminSet === k ? 'on' : ''} onClick={() => setAdminSet(k)}>{l}</button>)}</div>
           {adminSet === 'admin' && <SettingsView backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Admin settings"
             lists={['customers']} canTerms={salesAdmin} startOn="users" extra={[{ k: 'users', l: 'Users and access', node: <UsersTab backend={backend} me={me!} customers={snap.customers ?? []} flash={flash} /> },
+              { k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
               { k: 'perms', l: 'Permissions', node: <PermissionsPanel sb={backend.client()} flash={flash} /> },
               { k: 'licenses', l: 'Licenses', node: <LicensesPanel backend={backend} flash={flash} /> },
               { k: 'app', l: 'App settings', node: <AppSettingsPanel backend={backend} flash={flash} /> }]} />}

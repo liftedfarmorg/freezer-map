@@ -53,7 +53,6 @@ export function UsersTab({ backend, me, customers, flash }: {
   const groups: [string, AppUser[]][] = [
     ['Owners', shown.filter(u => u.owner)],
     ['Staff', shown.filter(u => !u.owner && isStaffRole(u.role))],
-    ['Customers', shown.filter(u => u.role === 'customer')],
     ['No access', shown.filter(u => u.role === 'none')],
   ]
 
@@ -63,7 +62,7 @@ export function UsersTab({ backend, me, customers, flash }: {
         <input className="search" type="search" placeholder="Search people" value={q} onChange={e => setQ(e.target.value)} />
         <button className="primary" onClick={() => setEdit({ role: 'crew', access: { distribution: 'user' } })}>+ Add person</button>
       </div>
-      <p className="muted">Anyone with a Lifted Microsoft account can sign in and starts with Distribution. Staff without a Lifted email sign in with a code sent to their email (they can't be Admins). Give each person a level per module: User works in it, Admin also changes its settings and approves. Owners have everything. For a customer login, add them as Customer, then send the invite link.</p>
+      <p className="muted">Anyone with a Lifted Microsoft account can sign in and starts with Distribution. Staff without a Lifted email sign in with a code sent to their email (they can't be Admins). Give each person a level per module: User works in it, Admin also changes its settings and approves. Owners have everything. Customer portal logins are in the Customer logins tab.</p>
       {groups.map(([l, list]) => !list.length ? null : (
         <div key={l}>
           <h3 className="grouph">{l} <span className="muted">{list.length}</span></h3>
