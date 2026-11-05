@@ -80,3 +80,19 @@
 .om-contact a { color: #2b7a5e; font-weight: 600; }
 .om-foot { text-align: center; font-size: 12px; color: #5f6b64; padding: 20px 16px 32px; }
 @media (min-width: 760px) { .om-hdr { padding: 24px 32px 28px; } .om-main { padding: 20px 32px; } }
+
+/* 195: Grade (fresh frozen) + Type columns on wide screens; one small pill under the name on phones */
+.om-row { grid-template-columns: minmax(0, 1fr) 64px 54px 100px 150px 110px; }
+.om-row.dry { grid-template-columns: minmax(0, 1fr) 54px 110px 100px 150px 110px; }
+.om-row > .om-tc { text-align: center; }
+.om-row.om-head > .om-tc .om-sort { justify-content: center; }
+.om-gtag, .om-ttag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .02em; padding: 1px 7px; border-radius: 99px; white-space: nowrap; background: var(--om-tint); color: var(--om-ink); }
+.om-gtag.g-sho { background: rgba(43, 122, 94, .16); color: var(--om-green); }
+.om-gtag.g-bho { background: rgba(196, 140, 20, .18); color: #b07a10; }
+.om-tagpill { display: none; }
+@media (max-width: 640px) {
+  .om-row { grid-template-columns: minmax(0, 1fr) 54px 84px 70px; }
+  .om-row.dry { grid-template-columns: minmax(0, 1fr) 70px 50px 70px 64px; }
+  .om-row > .om-tc { display: none; }
+  .om-tagpill { display: inline-block; margin-left: 6px; vertical-align: 1px; font-size: 10px; font-weight: 700; letter-spacing: .02em; padding: 0 6px; border-radius: 99px; background: var(--om-tint); color: var(--om-muted); white-space: nowrap; }
+}

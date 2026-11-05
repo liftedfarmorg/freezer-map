@@ -7,26 +7,32 @@ import './openmenu.css'
 // its card (photo, type, lineage, SHO / BHO yield on fresh frozen, THC on dry flower). Matt's customer portal menu is separate.
 
 export interface MenuLine { product: 'FF' | 'ST' | 'SM'; strain: string; crop_year: number; open_lbs: number; price: number | null; strain_type: string | null
-  lineage: string | null; sho: number | null; bho: number | null; thc: number | null; photo_url: string | null; note: string | null }
+  lineage: string | null; sho: number | null; bho: number | null; thc: number | null; photo_url: string | null; note: string | null
+  /** 195: strain's default grade (SHO / BHO); missing until 195 is run */
+  grade?: string | null }
 type Group = 'ff' | 'df'
 const GROUP: Record<Group, string> = { ff: 'Fresh Frozen', df: 'Dry Flower' }
 const PROD: Record<MenuLine['product'], string> = { FF: 'Fresh Frozen', ST: 'Standards', SM: 'Smalls' }
 const SALES = 'sales@lifted-organics.com'
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
+// 195: type short codes (S, S/H, H, I/H, I); grade + type are columns on wide screens, one small pill on phones
+const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
+const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
+const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null
 const pct = (v: number | null) => (v == null ? '–' : `${Number(v).toFixed(1)}%`)
 
 export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff' | 'public' }) {
   const [group, setGroup] = useState<Group>('ff')
   const [year, setYear] = useState<number | 'all'>('all')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<{ col: 's' | 'y' | 'p' | 'open' | 'price'; dir: number }>({ col: 's', dir: 1 })
+  const [sort, setSort] = useState<{ col: 's' | 'y' | 'p' | 'open' | 'price' | 'g' | 't'; dir: number }>({ col: 's', dir: 1 })
   const [open, setOpen] = useState<MenuLine | null>(null)
   const inGroup = rows.filter(r => (group === 'ff' ? r.product === 'FF' : r.product !== 'FF') && r.open_lbs > 0)
   const years = useMemo(() => [...new Set(inGroup.map(r => r.crop_year))].sort((a, b) => b - a), [rows, group])
   const ql = q.trim().toLowerCase()
   const list = inGroup.filter(r => (year === 'all' || r.crop_year === year) && (!ql || r.strain.toLowerCase().includes(ql)))
   const byName = (a: MenuLine, b: MenuLine) => a.strain.localeCompare(b.strain) || b.crop_year - a.crop_year || a.product.localeCompare(b.product)
-  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : 0
+  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : sort.col === 'g' ? ({ SHO: 1, BHO: 2 } as Record<string, number>)[r.grade ?? ''] ?? 9 : sort.col === 't' ? TORDER[tShort(r) ?? ''] ?? 9 : 0
   const sorted = [...list].sort((a, b) => sort.col === 's' ? sort.dir * byName(a, b) : sort.col === 'p' ? sort.dir * a.product.localeCompare(b.product) || byName(a, b) : sort.dir * (val(a) - val(b)) || byName(a, b))
   const total = list.reduce((t, r) => t + r.open_lbs, 0)
   const allTotal = inGroup.reduce((t, r) => t + r.open_lbs, 0)
@@ -53,14 +59,16 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
         <input className="om-search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
       </div>
       <div className="om-scroll">
-        <div className={`om-row om-head ${dry ? 'dry' : ''}`}>{sh('s', 'Strain')}{dry && sh('p', 'Product')}{sh('y', 'Crop year')}{sh('open', 'Available (lbs)')}{sh('price', 'Price / lb')}</div>
+        <div className={`om-row om-head ${dry ? 'dry' : ''}`}>{sh('s', 'Strain')}{!dry && <span className="om-tc">{sh('g', 'Grade')}</span>}<span className="om-tc">{sh('t', 'Type')}</span>{dry && sh('p', 'Product')}{sh('y', 'Crop year')}{sh('open', 'Available (lbs)')}{sh('price', 'Price / lb')}</div>
         {!sorted.length && <p className="om-empty">{inGroup.length ? 'No strains match.' : `No ${GROUP[group].toLowerCase()} on the menu right now.`}</p>}
         {sorted.map(r => <div key={`${r.product}|${r.strain}|${r.crop_year}`} className={`om-row ${dry ? 'dry' : ''}`}>
-          <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button></span>
+          <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button>{(() => { const t = tShort(r), g = dry ? null : r.grade; return g || t ? <span className="om-tagpill">{[g, t].filter(Boolean).join(' · ')}</span> : null })()}</span>
+          {!dry && <span className="om-tc">{r.grade ? <span className={`om-gtag g-${r.grade.toLowerCase()}`}>{r.grade}</span> : <span className="om-dim">–</span>}</span>}
+          <span className="om-tc">{tShort(r) ? <span className="om-ttag" title={r.strain_type ?? ''}>{tShort(r)}</span> : <span className="om-dim">–</span>}</span>
           {dry && <span className="om-dim">{PROD[r.product]}</span>}
           <span className="om-dim">{r.crop_year}</span><b>{fmt(r.open_lbs)}</b><span className="om-price">{price(r)}</span>
         </div>)}
-        {sorted.length > 0 && <div className={`om-row om-total ${dry ? 'dry' : ''}`}><b>Total · {sorted.length} line{sorted.length === 1 ? '' : 's'}</b>{dry && <span />}<span /><b className="om-green">{fmt(total)}</b><span /></div>}
+        {sorted.length > 0 && <div className={`om-row om-total ${dry ? 'dry' : ''}`}><b>Total · {sorted.length} line{sorted.length === 1 ? '' : 's'}</b>{!dry && <span className="om-tc" />}<span className="om-tc" />{dry && <span />}<span /><b className="om-green">{fmt(total)}</b><span /></div>}
       </div>
     </section>
     <p className="om-note">Available = lbs on hand that aren't reserved or already on a confirmed order. Numbers change as orders and reserves are confirmed.{group === 'ff' ? ' Fresh frozen is sold in 10 lb boxes.' : ''} Prices are per lb and can change.</p>
