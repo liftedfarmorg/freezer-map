@@ -63,8 +63,8 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
         {!sorted.length && <p className="om-empty">{inGroup.length ? 'No strains match.' : `No ${GROUP[group].toLowerCase()} on the menu right now.`}</p>}
         {sorted.map(r => <div key={`${r.product}|${r.strain}|${r.crop_year}`} className={`om-row ${dry ? 'dry' : ''}`}>
           <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button>{(() => { const t = tShort(r), g = dry ? null : r.grade; return g || t ? <span className="om-tagpill">{[g, t].filter(Boolean).join(' · ')}</span> : null })()}</span>
-          {!dry && <span className="om-tc">{r.grade ? <span className={`om-gtag g-${r.grade.toLowerCase()}`}>{r.grade}</span> : <span className="om-dim">–</span>}</span>}
-          <span className="om-tc">{tShort(r) ? <span className="om-ttag" title={r.strain_type ?? ''}>{tShort(r)}</span> : <span className="om-dim">–</span>}</span>
+          {!dry && <span className="om-tc">{r.grade ? <span className={`om-gtag g-${r.grade.toLowerCase()}`}>{r.grade}</span> : null}</span>}
+          <span className="om-tc">{tShort(r) ? <span className="om-ttag" title={r.strain_type ?? ''}>{tShort(r)}</span> : null}</span>
           {dry && <span className="om-dim">{PROD[r.product]}</span>}
           <span className="om-dim">{r.crop_year}</span><b>{fmt(r.open_lbs)}</b><span className="om-price">{price(r)}</span>
         </div>)}

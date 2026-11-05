@@ -286,13 +286,13 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const cy = d?.cy ?? new Date().getFullYear()
   const contract = !!d?.contract
   const yrTag = (y: number) => y < cy ? <span className={c('yr old')}>{y} crop</span> : null
-  // 196: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns, phones a small pill
+  // 196: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns (blank when not set), phones a small pill
   const tagOf = (s: string): Tag => d?.tags[s.toLowerCase().trim()] ?? { g: null, t: null }
-  const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}</span> }
-  const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : <span className={c('muted')}>–</span>}</span> }
+  const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : null}</span> }
+  const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : null}</span> }
   const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpill')} title={[g, t && TYPE_LONG[t]].filter(Boolean).join(' · ')}>{[g, t].filter(Boolean).join(' · ')}</span> : null }
   // order screens are tight: grade over type in one narrow column
-  const stackCell = (s: string) => { const { g, t } = tagOf(s); return <span className={c('tagcell tagstack')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> }
+  const stackCell = (s: string) => { const { g, t } = tagOf(s); return <span className={c('tagcell tagstack')}>{g && <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> }
   const gradeN = (s: string) => ({ SHO: 1, BHO: 2 } as Record<string, number>)[tagOf(s).g ?? ''] ?? 9
   const typeN = (s: string) => TYPE_ORDER[tagOf(s).t ?? ''] ?? 9
 
