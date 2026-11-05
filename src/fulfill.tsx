@@ -13,6 +13,8 @@ import { PRODUCT_LABEL } from './types'
 const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
 const fmt = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+// on a customer pickup (P- load, 089): the customer comes to get it with their own driver and truck
+const isPk = (o: FOrder) => o.stop?.load_kind === 'pickup' || !!o.stop?.load?.startsWith('P-')
 export const STATE_LABEL: Record<string, string> = { open: 'Needs pallets', needs_ok: 'Waiting on Sales', ready: 'Ready to load', loaded: 'On a load', shipped: 'Shipped', cancelled: 'Cancelled', submitted: 'Not confirmed', draft: 'Draft' }
 const GROUPS: FState[] = ['open', 'needs_ok', 'ready', 'loaded', 'shipped']
 const got = (l: FLine) => l.picks.reduce((a, p) => a + Number(p.lbs), 0)
@@ -74,7 +76,8 @@ export function FulfillView(props: FulfillProps) {
                     {(g === 'open' || g === 'needs_ok') && <Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} />}
                   </div>
                   <span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
-                    : g === 'loaded' && o.fill && o.fill !== 'ready' ? `On a load · ${o.fill === 'open' ? 'needs pallets' : 'needs OK'}`
+                    : g === 'loaded' && o.fill && o.fill !== 'ready' ? `${isPk(o) ? 'Pickup' : 'On a load'} · ${o.fill === 'open' ? 'needs pallets' : 'needs OK'}`
+                    : g === 'loaded' && isPk(o) ? 'Customer pickup'
                     : g === 'shipped' && o.stop?.stop_status === 'delivered' ? 'Delivered' : STATE_LABEL[g]}</span>
                 </button>
               )
@@ -277,11 +280,14 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
           <button className="ghost" disabled={busy} onClick={() => setLoadPick(true)}>Put on a load</button></div>}
         {['ready', 'open', 'needs_ok'].includes(o.state) && loadPick && <LoadChooser o={o} loads={loads} vehicles={vehicles} stops={stops} customers={customers} busy={busy} close={() => setLoadPick(false)}
           onPick={id => run(() => backend.orderToLoad(o.id, id), 'On the load').then(() => setLoadPick(false))}
-          onNew={(v, d) => run(async () => { const l = await backend.createLoad(v, d, [{ customer_id: o.customer_id, manifest: '' }], '', ''); await backend.orderToLoad(o.id, l.id) }, 'New load made with this order').then(() => setLoadPick(false))} />}
+          onNew={(v, d) => run(async () => { const l = await backend.createLoad(v, d, [{ customer_id: o.customer_id, manifest: '' }], '', ''); await backend.orderToLoad(o.id, l.id) }, 'New load made with this order').then(() => setLoadPick(false))}
+          onPickup={d => run(async () => {
+            const { data, error } = await backend.client()!.rpc('create_pickup', { p_customer: o.customer_id, p_date: d, p_notes: null }); if (error) throw new Error(error.message)
+            await backend.orderToLoad(o.id, (data as Load).id) }, `Customer pickup made: ${o.customer} comes to get it`).then(() => setLoadPick(false))} />}
         {o.state === 'loaded' && onOpenLoad && fill !== 'ready' && <div className="warnbox">On the load, but it can't leave yet: {fill === 'open' ? 'some lines still need pallets' : 'Sales has to OK the amounts that differ'}.</div>}
-        {o.state === 'loaded' && o.stop && <div className="row between wrap"><span>On <b>{o.stop.load}</b> <span className="muted">· {fmt(o.stop.load_date)} · {o.stop.load_status.replace('_', ' ')}</span></span>
+        {o.state === 'loaded' && o.stop && <div className="row between wrap"><span>{isPk(o) ? 'Customer pickup' : 'On'} <b>{o.stop.load}</b> <span className="muted">· {fmt(o.stop.load_date)} · {o.stop.load_status.replace('_', ' ')}</span></span>
           <div className="row"><button className="ghost small" onClick={() => openLoad(o.stop!.load_id)}>Open load</button>
-            {(o.stop.load_status === 'planning' || o.stop.load_status === 'loading' || o.stop.load_status === 'cancelled') && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.orderOffLoad(o.id), 'Taken off the load')}>Take off load</button>}</div></div>}
+            {(o.stop.load_status === 'planning' || o.stop.load_status === 'loading' || o.stop.load_status === 'cancelled') && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.orderOffLoad(o.id), isPk(o) ? 'Not a pickup any more' : 'Taken off the load')}>{isPk(o) ? 'Not a pickup' : 'Take off load'}</button>}</div></div>}
         {o.state === 'shipped' && <span>Shipped {fmt(o.shipped_date)}{o.stop ? ` on ${o.stop.load}` : ''}{o.stop?.stop_status === 'delivered' ? ' · Delivered' : ''}{(o.stop?.manifest || o.inv_manifest) ? ` · METRC manifest ${o.stop?.manifest || o.inv_manifest}` : ''}{o.inv ? ` · invoice ${o.inv}` : ''}.</span>}
         {combine && <Combine o={o} line={combine} pallets={pallets} heldBy={heldBy} onLoad={onLoad} inRun={inRun} where={where} rank={rank} canon={canon} busy={busy}
           close={() => setCombine(null)}
@@ -360,8 +366,9 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart }: 
   )
 }
 
-function LoadChooser({ o, loads, vehicles, stops = [], customers = [], busy, close, onPick, onNew, title }: {
-  o: FOrder; loads: Load[]; vehicles: Vehicle[]; stops?: LoadStop[]; customers?: Customer[]; busy: boolean; close: () => void; onPick: (id: number) => void; onNew: (vehicle: number, date: string) => void; title?: string
+function LoadChooser({ o, loads, vehicles, stops = [], customers = [], busy, close, onPick, onNew, onPickup, title }: {
+  o: FOrder; loads: Load[]; vehicles: Vehicle[]; stops?: LoadStop[]; customers?: Customer[]; busy: boolean; close: () => void; onPick: (id: number) => void; onNew: (vehicle: number, date: string) => void
+  onPickup?: (date: string) => void; title?: string
 }) {
   // loads that already stop at this customer come first (the order joins that stop)
   const stopsAt = (l: Load) => stops.filter(s => s.load_id === l.id).sort((a, b) => a.seq - b.seq)
@@ -383,6 +390,9 @@ function LoadChooser({ o, loads, vehicles, stops = [], customers = [], busy, clo
         <Select value={v ?? ''} onChange={e => setV(Number(e.target.value))}>{vs.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select>
         <input type="date" value={d} onChange={e => setD(e.target.value)} />
         <button className="primary small" disabled={busy || v == null} onClick={() => onNew(v!, d)}>Make load</button></div>
+      {onPickup && <div className="drow"><span className="grow"><b>Customer pickup</b><span className="muted small"><br />{o.customer} comes to get it with their own driver and truck</span></span>
+        <input type="date" value={d} onChange={e => setD(e.target.value)} />
+        <button className="ghost small" disabled={busy} onClick={() => onPickup(d)}>Make pickup</button></div>}
     </div>
   )
 }
