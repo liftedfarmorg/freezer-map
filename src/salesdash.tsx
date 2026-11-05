@@ -83,7 +83,7 @@ export function SalesDashboard({ backend, customers, isAdmin, go }: { backend: B
       <Cards>
         <Card title="Orders to confirm" badge={toConfirm.length} action="Orders" onAction={() => go('orders')}>
           {toConfirm.length ? <div className="dlist">{toConfirm.slice(0, 8).map(o => (
-            <button key={o.id} className="drow click" onClick={() => go('orders')}><span><b>{cname(o.customer_id)}</b><span className="muted"> · {o.order_lines.length} lines{o.wanted_date ? ` · wanted ${fmt(o.wanted_date)}` : ''}</span></span>
+            <button key={o.id} className="drow click" onClick={() => go('orders')}><span><b>{cname(o.customer_id)}</b><span className="muted"> · {o.order_lines.length} lines{o.wanted_date ? ` · requested delivery ${fmt(o.wanted_date)}` : ''}</span></span>
               <b>{n0(o.order_lines.reduce((a, l) => a + Number(l.lbs), 0))} lbs</b></button>))}</div> : <Empty>No orders waiting.</Empty>}
         </Card>
         <Card title="Reserve requests" badge={pend.length} action="Requests" onAction={() => go('requests')}>

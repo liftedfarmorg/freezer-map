@@ -69,7 +69,7 @@ export function FulfillView(props: FulfillProps) {
                 <button key={o.id} className="li setrow forder" onClick={() => { setOpenId(o.id); scrollTop() }}>
                   <div className="grow">
                     <div><b>{o.customer}</b> <span className="muted">{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? ' · portal' : o.source === 'roshi' ? ' · Roshi' : o.source === 'qbo' ? ' · QuickBooks' : ''}</span></div>
-                    <div className="muted">{o.lines.length} strains · {n0(want)} lbs{o.wanted_date ? <> · <span className={late ? 'bad-t' : ''}>wanted {fmt(o.wanted_date)}</span></> : o.order_date ? ` · ordered ${fmt(o.order_date)}` : ''}
+                    <div className="muted">{o.lines.length} strains · {n0(want)} lbs{o.wanted_date ? <> · <span className={late ? 'bad-t' : ''}>requested delivery {fmt(o.wanted_date)}</span></> : o.order_date ? ` · ordered ${fmt(o.order_date)}` : ''}
                       {o.stop ? ` · ${o.stop.load} ${fmt(o.stop.load_date)}` : g === 'shipped' && o.shipped_date ? ` · shipped ${fmt(o.shipped_date)}` : ''}</div>
                     {(g === 'open' || g === 'needs_ok') && <Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} />}
                   </div>
@@ -150,7 +150,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
       <h2>{o.customer} <span className="muted">{o.so ?? `Order #${o.id}`}</span></h2>
       <div className="row wrap">
         <span className={`pill fs-${o.state}`}>{STATE_LABEL[o.state]}</span>
-        <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `wanted ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : o.source === 'qbo' ? 'from QuickBooks' : ''].filter(Boolean).join(' · ')}</span>
+        <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `requested delivery ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : o.source === 'qbo' ? 'from QuickBooks' : ''].filter(Boolean).join(' · ')}</span>
       </div>
       {o.notes && <p className="muted">"{o.notes}"</p>}
       {editable && <p className="muted small-note scanhint">Tap Scan and scan a pallet's tag to assign it to the line it matches.</p>}

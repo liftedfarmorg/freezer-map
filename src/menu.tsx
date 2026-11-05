@@ -226,7 +226,7 @@ export function OrderForm({ backend, reserves, onClose, onDone }: { backend: Bac
         </div>
         <div className="row orderfields">
           <div className="field"><label>PO # <span className="muted">(optional)</span></label><input value={po} onChange={e => setPo(e.target.value)} /></div>
-          <div className="field"><label>Wanted by <span className="muted">(optional)</span></label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
+          <div className="field"><label>Requested Delivery Date <span className="muted">(optional)</span></label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
         </div>
         <div className="field"><label>Note <span className="muted">(optional)</span></label><input value={note} onChange={e => setNote(e.target.value)} placeholder="Pickup or delivery details" /></div>
         {problems.map(p => <div key={p} className="warn-t">{p}</div>)}

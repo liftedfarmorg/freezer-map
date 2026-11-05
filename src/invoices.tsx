@@ -337,7 +337,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
         {lines.some(l => l.sample) && <p className="muted small">Sample lines hold the "hold lbs" for {c?.name ?? 'the customer'} from now until {c?.sample_hold_days ?? 10} days after the order ships. Cancelling the order drops the hold.</p>}
         <div className="grid2">
           <div className="field"><label>Customer PO</label><input value={po} onChange={e => setPo(e.target.value)} /></div>
-          <div className="field"><label>Wanted by</label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
+          <div className="field"><label>Requested Delivery Date</label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
         </div>
         <div className="field"><label>Payment terms <span className="muted">(this order only)</span></label>
           <Select value={termsCode} onChange={e => setTermsCode(e.target.value)}>
