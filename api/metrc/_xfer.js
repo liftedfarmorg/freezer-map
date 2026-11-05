@@ -1,5 +1,5 @@
 // Transfers and manifests (OHR <> GVR, out to processors, to customers), the per-stop checklist, receiving.
-// Decisions: no prices on manifests; our C13 is the transporter on every manifest (outside carriers included).
+// Decisions: no prices on manifests; the transporter is our C13, or an outside carrier's own license when it has one (202).
 import {
   LB, Skip, Wait, all, db, enc, first, inputs, list, localDT, lc, one, packageByTag, r4, rpc, setting, t3, tol, up, write, ymd,
 } from './_core.js'
@@ -48,9 +48,10 @@ export async function planTransfer(ctx, spec) {
 
   // the driver's phone (Vehicles > Drivers, else their person in the app, SQL 200), else the default in Settings, else METRC's default
   const drvPhone = spec.driver ? String((await rpc('metrc_driver_phone', { p_name: spec.driver }).catch(() => null)) ?? '').trim() : ''
+  const licPhone = String((await one(`licenses?license_no=eq.${enc(lic)}&select=metrc_phone`).catch(() => null))?.metrc_phone ?? '').trim()
   const dflt = String(await setting('comp.metrc_phone', '') ?? '').trim()
-  const phone = drvPhone || dflt || inp.defaultPhoneNumberForQuestions || ''
-  add('phone', 'Phone for questions', phone, phone ? `${phone}${drvPhone ? ` (${spec.driver})` : ' (default)'}`
+  const phone = drvPhone || licPhone || dflt || inp.defaultPhoneNumberForQuestions || ''
+  add('phone', 'Phone for questions', phone, phone ? `${phone}${drvPhone ? ` (${spec.driver})` : licPhone ? ` (${lic})` : ' (default)'}`
     : spec.driver ? `Add ${spec.driver}'s phone in Compliance > Vehicles > Drivers` : 'Pick the driver on the load (their phone goes on the manifest)')
 
   const dest = spec.toLicense ? await facility(ctx, '/v2/transfers/create/destinations', lic, spec.toLicense) : null
@@ -59,7 +60,7 @@ export async function planTransfer(ctx, spec) {
 
   const tl = spec.transporter ?? await transportLicense()
   const tr = tl ? await facility(ctx, '/v2/transfers/create/transporters', lic, tl) : null
-  add('transporter', 'Transporter (our C13)', tr, !tl ? 'No transport license in the app (Compliance > Licenses)' : tr ? `${tr.facilityName ?? ''} ${tl}` : `${tl} isn't a transporter ${lic} can use in METRC`)
+  add('transporter', spec.transporter ? 'Transporter (carrier)' : 'Transporter (our C13)', tr, !tl ? 'No transport license in the app (Compliance > Licenses)' : tr ? `${tr.facilityName ?? ''} ${tl}` : `${tl} isn't a transporter ${lic} can use in METRC`)
 
   // driver: METRC's registered driver for this license if the name matches, else what the app has
   const md = (inp.drivers ?? []).find(x => !x.isArchived && lc(x.name) === lc(spec.driver))
@@ -207,10 +208,19 @@ async function stageSpec(spec, stages) {
   const offset = new Date(noon.toLocaleString('en-US', { timeZone: 'UTC' })).getTime() - new Date(noon.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })).getTime()
   Object.assign(spec, {
     driver: g.stage_driver, driverLicense: dr?.license_no ?? null, make: v?.make, model: v?.model, plate: v?.plate,
-    transporter: null,                                    // our C13, whoever drives (outside carriers too)
+    transporter: await carrierLicense(g.stage_vehicle_id),   // the truck's carrier license (202), else our C13
     depart: new Date(Date.now() + 5 * 60000), arrive: new Date(noon.getTime() + offset),
   })
   return spec
+}
+
+/** an outside carrier's own transport license for this truck (Vehicles > Carriers, 202); null = our C13 */
+export async function carrierLicense(vehicleId) {
+  if (!vehicleId) return null
+  const v = await one(`fleet_assets?id=eq.${Number(vehicleId)}&select=carrier_id`).catch(() => null)
+  if (!v?.carrier_id) return null
+  const c = await one(`fleet_carriers?id=eq.${Number(v.carrier_id)}&select=license_no`).catch(() => null)
+  return String(c?.license_no ?? '').trim() || null
 }
 
 const stagesOn = (stopId, lic) => db(`gvr_stages?stop_id=eq.${Number(stopId)}&license=eq.${enc(lic)}&status=neq.returned&select=id,status,stage_vehicle_id,stage_driver,ship_date&order=id.desc`).catch(() => [])
@@ -255,11 +265,13 @@ export async function stopSpec(stopId, license) {
   const packages = (s.packages ?? []).filter(p => !license || p.from_license === license)
   const fromLic = license ?? packages[0]?.from_license
   const from = fromLic ? await one(`licenses?license_no=eq.${enc(fromLic)}&select=address`) : null
+  const truck = !s.transporter && s.load_id ? (await one(`loads?id=eq.${Number(s.load_id)}&select=vehicle_id`).catch(() => null))?.vehicle_id : null
+  const carrier = truck ? await carrierLicense(truck) : null
   return {
     s, spec: {
       key: `stop:${stopId}:${fromLic}`, stopId, loadId: s.load_id, kind: s.internal ? 'transfer' : 'manifest', typeKey: s.internal ? 'internal' : 'customer',
       license: fromLic, toLicense: s.to_license, toName: s.to_name, toAddress: s.to_address, fromAddress: from?.address,
-      driver: s.driver, driverLicense: s.driver_license, make: s.make, model: s.model, plate: s.plate, transporter: s.transporter,
+      driver: s.driver, driverLicense: s.driver_license, make: s.make, model: s.model, plate: s.plate, transporter: s.transporter || carrier,
       packages: packages.map(p => ({ tag: p.tag, lbs: p.lbs, code: p.code, pallet_id: p.pallet_id, tag_pending: p.tag_pending })),
       invoice: (s.orders ?? []).join(', ').slice(0, 50) || null,
     },
@@ -346,7 +358,7 @@ async function sendProcessorRun(job, ctx) {
   const spec = {
     key: `proc:${proc.id}:${day}:${job.license}`, kind: 'transfer', typeKey: 'processor', license: job.license, toLicense: proc.license, toName: proc.name,
     toAddress: proc.address, fromAddress: from?.address, driver, driverLicense: dr?.license_no, make: v?.make, model: v?.model, plate: v?.plate,
-    packages: sibs.map(x => ({ tag: x.tag, lbs: x.lbs, code: x.code, pallet_id: x.pallet_id })), beforeId: Math.min(...sibs.map(x => x.id)),
+    transporter: await carrierLicense(vehicleId), packages: sibs.map(x => ({ tag: x.tag, lbs: x.lbs, code: x.code, pallet_id: x.pallet_id })), beforeId: Math.min(...sibs.map(x => x.id)),
   }
   const made = await one(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided&select=manifest,packages`)
   if (made && (made.packages ?? []).some(p => up(p.tag) === up(job.tag))) throw new Skip(`Already on METRC manifest ${made.manifest ?? '(number pending)'}`)
@@ -385,7 +397,7 @@ async function sendNurseryRun(job, ctx) {
   if (!driver || !vehicleId) throw new Error('Nursery deliveries have no load in the app: set the driver and truck for runs without a load in Compliance > Settings > METRC through T3')
   const from = await one(`nursery_sites?license=eq.${enc(lic)}&select=address`)
   const spec = { key, kind: 'transfer', typeKey: 'nursery', license: lic, toLicense: d.to_license, toName: d.to, fromAddress: from?.address,
-    driver, driverLicense: dr?.license_no, make: v?.make, model: v?.model, plate: v?.plate, packages: pk, beforeId: job.id }
+    driver, driverLicense: dr?.license_no, make: v?.make, model: v?.model, plate: v?.plate, transporter: await carrierLicense(vehicleId), packages: pk, beforeId: job.id }
   const plan = await planTransfer(ctx, spec)
   return sendTransfer(ctx, spec, plan, job)
 }

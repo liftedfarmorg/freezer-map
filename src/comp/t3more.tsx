@@ -12,7 +12,21 @@ export function T3More({ c, conn, set, save }: { c: Ctx; conn: T3Conn | null; se
   const [drivers, setDrivers] = useState<{ id: number; name: string; license_no: string | null }[]>([])
   const [trucks, setTrucks] = useState<{ id: number; name: string; make: string | null; model: string | null; plate: string | null }[]>([])
   const [text, setText] = useState<Record<string, string>>({})
+  // phone for questions per license (202)
+  const [lics, setLics] = useState<{ license_no: string; site: string | null; kind: string; metrc_phone: string | null }[]>([])
+  const [ph, setPh] = useState<Record<string, string>>({})
+  const loadLics = () => c.api.sb.from('licenses').select('license_no,site,kind,metrc_phone').eq('active', true).order('sort').then(r => setLics((r.data ?? []) as typeof lics))
+  const savePhone = async (l: string) => {
+    const v = ph[l]; if (v === undefined) return
+    const cur = lics.find(x => x.license_no === l)?.metrc_phone ?? ''
+    if (v.trim() !== cur) {
+      const { error } = await c.api.sb.rpc('set_license_phone', { p_license: l, p_phone: v })
+      if (error) c.flash(errText(error), true); else { c.flash(`Phone for ${l} saved`); await loadLics() }
+    }
+    setPh(x => { const n = { ...x }; delete n[l]; return n })
+  }
   useEffect(() => {
+    loadLics()
     c.api.sb.from('fleet_drivers').select('id,name,license_no').eq('active', true).is('carrier_id', null).order('name').then(r => setDrivers(r.data ?? []))
     c.api.sb.from('fleet_assets').select('id,name,make,model,plate').in('kind', ['vehicle', 'trailer']).neq('status', 'retired').order('name').then(r => setTrucks(r.data ?? []))
   }, [])
@@ -25,7 +39,7 @@ export function T3More({ c, conn, set, save }: { c: Ctx; conn: T3Conn | null; se
 
   return <>
     <h3 style={{ marginTop: 14 }}>Transfers and manifests</h3>
-    <p className="muted small">No prices go on manifests, so pick types that aren't Wholesale. Our C13 is the transporter on every manifest. Types come from METRC when you test the connection.</p>
+    <p className="muted small">No prices go on manifests, so pick types that aren't Wholesale. The transporter is our C13, or the carrier's own license when the truck belongs to a carrier that has one (Vehicles &gt; Carriers). Types come from METRC when you test the connection.</p>
     <div className="grid2">
       {TYPES.map(([k, l]) => {
         const key = `comp.metrc_ttype_${k}`; const v = set[key] ?? ''
@@ -35,7 +49,7 @@ export function T3More({ c, conn, set, save }: { c: Ctx; conn: T3Conn | null; se
             : <span className="muted small">{v || 'not set'} (test the connection first)</span>}
         </div>
       })}
-      <div className="field"><label>Phone for questions</label>{inp('comp.metrc_phone', Object.values(tr)[0]?.phone ?? '(831) …')}</div>
+      <div className="field"><label>Phone for questions <span className="muted">(if a license below has none)</span></label>{inp('comp.metrc_phone', Object.values(tr)[0]?.phone ?? '(831) …')}</div>
       <div className="field"><label>Hours on the road (arrival estimate)</label>{inp('comp.metrc_transit_hours', '3')}</div>
       <div className="field"><label>Runs without a load (processor, nursery): driver</label>
         <Select value={set['comp.metrc_proc_driver'] ?? ''} disabled={!c.isAdmin} onChange={e => save('comp.metrc_proc_driver', e.target.value)}>
@@ -44,6 +58,11 @@ export function T3More({ c, conn, set, save }: { c: Ctx; conn: T3Conn | null; se
         <Select value={set['comp.metrc_proc_vehicle'] ?? ''} disabled={!c.isAdmin} onChange={e => save('comp.metrc_proc_vehicle', e.target.value)}>
           <option value="">Pick…</option>{trucks.map(t => <option key={t.id} value={String(t.id)}>{t.name}{t.make && t.model && t.plate ? '' : ' (needs make / model / plate)'}</option>)}</Select></div>
     </div>
+    <h4 style={{ marginTop: 10 }}>Phone for questions, by license</h4>
+    <p className="muted small">Goes on the METRC manifest when the driver has no phone of their own (Vehicles &gt; Drivers or My settings).</p>
+    <div className="grid2">{lics.map(l => <div className="field" key={l.license_no}><label>{l.site ? `${l.site} ` : ''}{l.kind} · {l.license_no}</label>
+      <input type="tel" value={ph[l.license_no] ?? l.metrc_phone ?? ''} disabled={!c.isAdmin} placeholder="831-555-0100"
+        onChange={e => setPh(x => ({ ...x, [l.license_no]: e.target.value }))} onBlur={() => savePhone(l.license_no)} /></div>)}</div>
     {Object.keys(tr).length > 0 && <p className="muted small">Drivers METRC knows: {[...new Set(Object.values(tr).flatMap(x => x.drivers))].join(', ') || 'none'} · Vehicles: {[...new Set(Object.values(tr).flatMap(x => x.vehicles))].join(', ') || 'none'}. The app uses METRC's employee ID for a driver whose name matches; otherwise the driver's license number from Compliance &gt; Vehicles.</p>}
 
     <h3 style={{ marginTop: 14 }}>METRC tags</h3>
