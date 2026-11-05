@@ -397,6 +397,8 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
 }) {
   // Roshi SO # field removed (Aziz 11/4); an SO # already on the order is kept as is
   const so = o.so_number ?? ''
+  const [wantOn, setWantOn] = useState(o.wanted_date ?? '')
+  useEffect(() => { setWantOn(o.wanted_date ?? '') }, [o.wanted_date])
   const [shipOn, setShipOn] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })
   const [edits, setEdits] = useState<Record<number, { lbs: string; price: string; year: number }>>({})
   const cy = new Date().getFullYear()
@@ -479,7 +481,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
             <td className="muted small">{addOver ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}>Only {n0(addMax)} lbs available</span> : 'customer price'}</td>
             <td className="num"><button className="ghost small" disabled={busy || !addPick || !(Number(add.lbs) > 0) || addOver} onClick={() => run(addLine, 'Line added')}>Add</button></td></tr>}
           <tr><td colSpan={open_ ? 4 : 3}>
-            <div className="muted">{total > 0 && <>Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · </>}{o.po_number && <>PO {o.po_number} · </>}{o.wanted_date && <>wanted by {fmtDate(o.wanted_date)} · </>}{o.placed_by && <>placed by {o.placed_by}</>}{o.confirmed_by && <> · confirmed by {o.confirmed_by}</>}</div>
+            <div className="muted">{total > 0 && <>Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · </>}{o.po_number && <>PO {o.po_number} · </>}{o.wanted_date && !open_ && <>requested delivery {fmtDate(o.wanted_date)} · </>}{o.placed_by && <>placed by {o.placed_by}</>}{o.confirmed_by && <> · confirmed by {o.confirmed_by}</>}</div>
             {o.notes && <div className="muted">"{o.notes}"</div>}
           </td></tr>
         </tfoot>
@@ -487,6 +489,10 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
       {open_ && (
         <div className="row reqact">
           {o.status === 'submitted' && <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Order confirmed')}>Confirm</button>}
+          <label className="row muted small" style={{ gap: 6 }}>Requested Delivery Date
+            <input type="date" value={wantOn} disabled={busy} style={{ maxWidth: 150 }} aria-label="Requested Delivery Date"
+              onChange={e => setWantOn(e.target.value)}
+              onBlur={() => { const v = wantOn || null; if (v === (o.wanted_date ?? null) || (v && v < '2020-01-01')) { setWantOn(o.wanted_date ?? ''); return } run(async () => { const { error } = await backend.client()!.rpc('set_order_wanted', { p_order: o.id, p_date: v }); if (error) throw new Error(/set_order_wanted|schema cache/i.test(error.message) ? `${error.message} (run 209_order_wanted_date.sql in Supabase)` : error.message) }, v ? `Requested delivery ${fmtDate(v)}` : 'Requested delivery cleared') }} /></label>
           <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
             <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>
           <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'cancelled', so, ''), 'Order cancelled')}>Cancel order</button>
