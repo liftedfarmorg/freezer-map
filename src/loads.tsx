@@ -410,7 +410,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
           await depart()
         }} />}
 
-      {isPickup(l) && <PickupPanel load={l} canEdit={canEdit} onSave={v => ctx.run(() => rpc(ctx.api.client(), 'set_pickup_driver',
+      {isPickup(l) && <PickupPanel load={l} canEdit={canEdit} sb={ctx.api.client()} carrierId={ctx.customers.find(c => stops.some(s => s.customer_id === c.id))?.pickup_carrier_id ?? null} onSave={v => ctx.run(() => rpc(ctx.api.client(), 'set_pickup_driver',
         { p_load: l.id, p_driver: v.driver, p_dl: v.dl, p_make: v.make, p_model: v.model, p_plate: v.plate, p_license: v.license }), 'Driver saved')} />}
       {!isPickup(l) && v?.carrier_id != null && <div className="dcard row wrap between">
         <span><b>Carrier's cost for this run:</b> {l.carrier_cost != null ? money(l.carrier_cost) : <span className="warn-t">not entered</span>} <span className="muted small">(split across the customer stops)</span></span>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Customer, Load, ShipQuoteRow, ShipSettings, ShipZone, StopShipping } from './types'
+import type { Customer, Load, PickupCarrier, ShipQuoteRow, ShipSettings, ShipZone, StopShipping } from './types'
 import { Select } from './combo'
 
 // 089: shipping (zones, rules, quotes), customer pickups, and the app's own RPC helper for these screens.
@@ -52,17 +52,32 @@ export function ShipLine({ sh, canEdit, onSet }: { sh: StopShipping | undefined;
 }
 
 // ---------- pickup: the customer's driver and truck ----------
-export function PickupPanel({ load, canEdit, onSave }: { load: Load; canEdit: boolean
+export function PickupPanel({ load, canEdit, onSave, sb, carrierId }: { load: Load; canEdit: boolean; sb?: SupabaseClient | null; carrierId?: number | null
   onSave: (v: { driver: string; dl: string; make: string; model: string; plate: string; license: string }) => Promise<unknown> }) {
   const [v, setV] = useState({ driver: load.pickup_driver ?? '', dl: load.pickup_dl ?? '', make: load.pickup_make ?? '', model: load.pickup_model ?? '', plate: load.pickup_plate ?? '', license: load.pickup_license ?? '' })
   useEffect(() => { setV({ driver: load.pickup_driver ?? '', dl: load.pickup_dl ?? '', make: load.pickup_make ?? '', model: load.pickup_model ?? '', plate: load.pickup_plate ?? '', license: load.pickup_license ?? '' }) },
     [load.id, load.pickup_driver, load.pickup_dl, load.pickup_make, load.pickup_model, load.pickup_plate, load.pickup_license])
   const dirty = v.driver !== (load.pickup_driver ?? '') || v.dl !== (load.pickup_dl ?? '') || v.make !== (load.pickup_make ?? '') || v.model !== (load.pickup_model ?? '')
     || v.plate !== (load.pickup_plate ?? '') || v.license !== (load.pickup_license ?? '')
+  // fill in from Vehicles › Carriers (212); the customer's pickup carrier is picked to start
+  const [ks, setKs] = useState<PickupCarrier[]>([])
+  const [kid, setKid] = useState<number | null>(carrierId ?? null)
+  useEffect(() => { sb?.rpc('pickup_carriers').then(({ data }) => setKs((data ?? []) as PickupCarrier[]), () => {}) }, [sb])
+  useEffect(() => { setKid(carrierId ?? null) }, [carrierId])
+  const k = ks.find(x => x.id === kid) ?? null
+  const pickCarrier = (id: number | null) => { setKid(id); const c = ks.find(x => x.id === id); if (c?.license_no) setV(x => ({ ...x, license: c.license_no ?? '' })) }
   const f = (k: keyof typeof v, l: string, ph = '') => <div className="field"><label>{l}</label>
     <input value={v[k]} disabled={!canEdit} placeholder={ph} onChange={e => setV(x => ({ ...x, [k]: e.target.value }))} /></div>
   return <section className="dcard pickup">
     <b>Their driver and truck</b> <span className="muted">(goes on the METRC manifest; they're the transporter)</span>
+    {canEdit && ks.length > 0 && <div className="grid3">
+      <div className="field"><label>Carrier</label><Select value={kid == null ? '' : String(kid)} onChange={e => pickCarrier(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">Type it in</option>{ks.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></div>
+      {k && <div className="field"><label>Driver</label><Select value="" onChange={e => { const d = k.drivers[Number(e.target.value)]; if (d) setV(x => ({ ...x, driver: d.name, dl: d.license_no ?? '' })) }}>
+        <option value="">{k.drivers.length ? 'Pick a driver' : 'No drivers saved'}</option>{k.drivers.map((d, i) => <option key={i} value={i}>{d.name}</option>)}</Select></div>}
+      {k && <div className="field"><label>Truck</label><Select value="" onChange={e => { const t = k.trucks[Number(e.target.value)]; if (t) setV(x => ({ ...x, make: t.make ?? '', model: t.model ?? '', plate: t.plate ?? '' })) }}>
+        <option value="">{k.trucks.length ? 'Pick a truck' : 'No trucks saved'}</option>{k.trucks.map((t, i) => <option key={i} value={i}>{[t.name, t.plate].filter(Boolean).join(' · ')}</option>)}</Select></div>}
+    </div>}
     <div className="grid2">{f('driver', 'Driver name')}{f('dl', "Driver's license #")}</div>
     <div className="grid3">{f('make', 'Make', 'Ford')}{f('model', 'Model', 'Transit')}{f('plate', 'Plate')}</div>
     {f('license', 'Their transport license #', 'Distributor or Type 13')}

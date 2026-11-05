@@ -201,6 +201,8 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const [gen, setGen] = useState(false)
   const sb = backend.client()
   useEffect(() => { if (lists.includes('customers')) backend.paymentTerms().then(t => setTerms(t.filter(x => x.active))).catch(() => {}) }, [])
+  const [carriers, setCarriers] = useState<{ id: number; name: string; license_no: string | null }[]>([])
+  useEffect(() => { if (lists.includes('customers')) sb?.rpc('pickup_carriers').then(({ data }) => setCarriers((data ?? []) as { id: number; name: string; license_no: string | null }[]), () => {}) }, [])
 
   const load = () => backend.loadSettings().then(d => { setData(d); setErr(null) }).catch(e => setErr(String(e?.message ?? e)))
   useEffect(() => { load() }, [])
@@ -306,7 +308,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
         </Fold>
       ))}
 
-      {edit && <EditForm list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms}
+      {edit && <EditForm list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers}
         extra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' ? <>
               {canTerms && <TermsByYear backend={backend} c={edit as Customer} />}
               <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} />
@@ -395,9 +397,9 @@ function summary(list: ListName, r: ListRow, inv: Map<string, number>) {
   return [s.trial ? 'Trial strain' : '', s.show_on_menu === false ? 'Hidden from menu' : '', n ? `${n} pallet${n === 1 ? "" : "s"} in inventory` : 'none in inventory', s.aliases?.length ? `also: ${s.aliases.join(', ')}` : ''].filter(Boolean).join(' · ')
 }
 
-export function EditForm({ list, row, busy, onClose, onSave, extra, terms }: {
+export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers }: {
   list: ListName; row: Partial<ListRow>; busy: boolean; onClose: () => void; onSave: (r: Partial<ListRow>) => void; extra?: React.ReactNode
-  terms?: { code: string; label: string }[]
+  terms?: { code: string; label: string }[]; carriers?: { id: number; name: string; license_no: string | null }[]
 }) {
   const [r, setR] = useState<Record<string, unknown>>(row as Record<string, unknown>)
   const set = (k: string, v: unknown) => setR(x => ({ ...x, [k]: v }))
@@ -450,6 +452,12 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms }: {
           </div>
         ))}
         {!colorOk && <div className="warn-t">Color must look like #A1B2C3</div>}
+        {list === 'customers' && r.kind !== 'internal' && <div className="field">
+          <label>Pickup carrier <span className="muted">(who picks up for them; fills in the driver, truck and transport license on a Customer pickup. Vehicles › Carriers)</span></label>
+          <Select value={r.pickup_carrier_id == null ? '' : String(r.pickup_carrier_id)} onChange={e => set('pickup_carrier_id', e.target.value ? Number(e.target.value) : null)}>
+            <option value="">None</option>
+            {(carriers ?? []).map(k => <option key={k.id} value={k.id}>{k.name}{k.license_no ? ` · ${k.license_no}` : ''}</option>)}
+          </Select></div>}
         {extra}
         {locked && <p className="muted">{String(row.name)} is a Lifted site. You can edit its details but not rename or retire it.</p>}
         <div className="row between">
