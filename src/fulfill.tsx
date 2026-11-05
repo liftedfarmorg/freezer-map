@@ -5,7 +5,8 @@ import { useBack, scrollTop } from './nav'
 import { sameTag, useScanHandler } from './scanroute'
 import { useMemo, useState } from 'react'
 import type { Backend } from './api'
-import type { Customer, FLine, FOrder, FState, Load, LoadStop, Pallet, Vehicle } from './types'
+import type { Customer, FLine, FOrder, FState, Load, LoadDriver, LoadStop, Pallet, Vehicle } from './types'
+import { StageAlerts, StageForm, useStages } from './stage'
 import { Meter } from './dash'
 import { PRODUCT_LABEL } from './types'
 
@@ -23,7 +24,7 @@ export interface FulfillProps {
   pallets: Pallet[]; heldBy: Map<number, FOrder>; onLoad: (id: number) => boolean; inRun?: (id: number) => string | undefined
   where: (p: Pallet) => string; siteOf: (p: Pallet) => string | null; rank: (p: Pallet) => number; canon: (s: string | null | undefined) => string
   loads: Load[]; vehicles: Vehicle[]; isSales: boolean; openLoad: (id: number) => void; openPallet: (id: number) => void
-  stops?: LoadStop[]; customers?: Customer[]
+  stops?: LoadStop[]; customers?: Customer[]; drivers?: LoadDriver[]
   /** which order is open (kept by the app so a load's stop can open an order here) */
   openId?: number | null; setOpenId?: (id: number | null) => void
 }
@@ -37,16 +38,18 @@ export function FulfillView(props: FulfillProps) {
   const [q, setQ] = useState('')
   const [allShipped, setAllShipped] = useState(false)
   useBack(openId != null, () => setOpenId(null))
+  const stage = useStages(props.backend.client())
   if (props.err) return <div className="list fulfill"><h2>Fulfillment</h2><div className="warnbox">{props.err}</div></div>
   if (!orders) return <p className="muted">Loading…</p>
   const cur = orders.find(o => o.id === openId)
-  if (cur) return <OrderPage {...props} o={cur} back={() => setOpenId(null)} />
+  if (cur) return <OrderPage {...props} o={cur} back={() => setOpenId(null)} stage={stage} />
   const ql = q.trim().toLowerCase()
   const shown = orders.filter(o => !ql || `${o.customer} ${o.so ?? ''} ${o.po ?? ''} ${o.lines.map(l => l.strain).join(' ')}`.toLowerCase().includes(ql))
   return (
     <div className="list fulfill">
       <h2>Fulfillment</h2>
       <p className="muted">Confirmed orders. Assign pallets to each line, then put the order on a load. Pallets you assign are held for that customer.</p>
+      <StageAlerts sb={props.backend.client()} stages={stage.stages} refresh={stage.refresh} flash={props.flash} openLoad={props.openLoad} onChanged={props.reload} />
       <div className="row toolbar"><input className="search" type="search" placeholder="Customer, SO # or strain" value={q} onChange={e => setQ(e.target.value)} /></div>
       {!shown.length && <p className="muted">No open orders.</p>}
       {GROUPS.map(g => {
@@ -84,11 +87,12 @@ export function FulfillView(props: FulfillProps) {
   )
 }
 
-function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, inRun, where, siteOf, rank, canon, loads, vehicles, isSales, openLoad, openPallet, stops, customers }: FulfillProps & { o: FOrder; back: () => void }) {
+function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, inRun, where, siteOf, rank, canon, loads, vehicles, isSales, openLoad, openPallet, stops, customers, drivers, stage }: FulfillProps & { o: FOrder; back: () => void; stage: ReturnType<typeof useStages> }) {
   const [adding, setAdding] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadPick, setLoadPick] = useState(false)
   const [sendTo, setSendTo] = useState<string | null>(null)
+  const [staging, setStaging] = useState(false)
   const [combine, setCombine] = useState<FLine | null>(null)
   const [packSel, setPackSel] = useState<number[]>([])
   const [scanRes, setScanRes] = useState<{ p: Pallet; msg: string; line?: FLine } | null>(null)
@@ -246,18 +250,25 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
         </section>
       })()}
 
-      {moving && at.size > 0 && <section className="dcard">
+      {(moving || (onOpenLoad && stage.on && (at.get('GVR') ?? 0) > 0)) && at.size > 0 && <section className="dcard">
         <div className="row between wrap">
           <span><b>Where it is:</b> <span className="muted">{[...at.entries()].map(([s, n]) => `${n} at ${s === 'truck' ? 'on a truck' : s}`).join(' · ')}</span></span>
-          {!sendTo && <div className="row">{['GVR', 'OHR'].filter(s => [...at.keys()].some(k => k !== s && k !== 'truck' && k !== '?')).map(s =>
-            <button key={s} className="ghost small" disabled={busy} onClick={() => setSendTo(s)}>Send to {s}</button>)}</div>}
+          {!sendTo && !staging && <div className="row">{['GVR', 'OHR'].filter(s => [...at.keys()].some(k => k !== s && k !== 'truck' && k !== '?')).filter(s => moving || s === 'OHR').map(s =>
+            // 197: OHR can't receive GVR product in METRC: GVR pallets are staged at OHR instead (manifest straight to the customer)
+            s === 'OHR' && stage.on && (at.get('GVR') ?? 0) > 0
+              ? <button key={s} className="ghost small" disabled={busy} onClick={() => setStaging(true)}>Stage at OHR</button>
+              : <button key={s} className="ghost small" disabled={busy} onClick={() => setSendTo(s)}>Send to {s}</button>)}</div>}
         </div>
-        {sites.length > 1 && <p className="warn-t small-note">This order is at OHR and GVR. Send one side over first, or it ships on two METRC manifests (one per license).</p>}
+        {sites.length > 1 && !stage.on && <p className="warn-t small-note">This order is at OHR and GVR. Send one side over first, or it ships on two METRC manifests (one per license).</p>}
+        {staging && backend.client() && <StageForm sb={backend.client()!} o={o} gvr={at.get('GVR') ?? 0} loads={loads} stops={stops ?? []} customers={customers ?? []} vehicles={vehicles} drivers={drivers ?? []}
+          busy={busy} setBusy={setBusy} close={() => setStaging(false)} flash={flash} done={async () => { await stage.refresh(); await reload() }} />}
         {sendTo && <LoadChooser o={o} loads={loads} vehicles={vehicles} stops={stops} customers={customers} busy={busy} close={() => setSendTo(null)} title={`Send the pallets that aren't at ${sendTo} to ${sendTo}`}
           onPick={id => run(() => backend.orderTransfer(o.id, id, sendTo), `On the load to ${sendTo}`).then(() => setSendTo(null))}
           onNew={(v, d) => run(() => backend.orderTransferNew(o.id, v, d, sendTo), `New load to ${sendTo} made`).then(() => setSendTo(null))} />}
         {sendTo && <p className="muted small-note">They stay held for {o.customer}. When the load is delivered they're received at {sendTo}, and can go straight onto the customer's load from there.</p>}
       </section>}
+
+      <StageAlerts sb={backend.client()} stages={stage.stages} refresh={stage.refresh} flash={flash} openLoad={openLoad} orderId={o.id} onChanged={reload} />
 
       <section className="dcard">
         {o.state === 'ready' && !loadPick && <div className="row between"><span><b>Ready.</b> <span className="muted">Every line has its pallets.</span></span>

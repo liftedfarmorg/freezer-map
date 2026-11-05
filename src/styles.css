@@ -1181,3 +1181,8 @@ html:has(.app.shell), html:has(.app.shell) body { height: 100%; overflow: hidden
 
 /* 159 returns: selects and notes in a .field */
 .field > select, .field > textarea { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: inherit; font-size: 16px; width: 100%; font-family: inherit; }
+
+/* 196 Stage at OHR */
+.stagebox .stagebad { border: 1px solid var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; }
+.stagebox .stagebad b { color: var(--bad); }
+.stageform .field { margin: 6px 0; }

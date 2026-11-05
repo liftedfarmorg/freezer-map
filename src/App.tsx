@@ -59,6 +59,7 @@ import { CatalogButton } from './catalog'
 import { ReceivingView } from './receiving'
 import { FillTolerance, ShippingQuote, ShippingSettings, rpc } from './ship'
 import { metrcRun } from './metrcCall'
+import { StageAlertsAuto } from './stage'
 import { TagSuggestProvider } from './tagSuggest'
 import type { LoadCtx } from './loads'
 import { lang, setLang, t } from './i18n'
@@ -1028,13 +1029,14 @@ export default function App() {
         })()}
         {view === 'fulfill' && cur === 'dist' && <FulfillView err={fErr} backend={backend} orders={forders} reload={async () => { await reload(); await refreshF() }} flash={flash}
           pallets={snap.pallets} heldBy={heldBy} onLoad={id => ix.loadOf.has(id)} inRun={id => snap.inRun?.[id]} where={where} siteOf={siteOf} rank={p => (p.slot_id != null ? ix.slot.get(p.slot_id)?.front_rank : null) ?? 99}
-          canon={canonOf} loads={snap.loads ?? []} vehicles={snap.vehicles ?? []} isSales={isSales} stops={snap.stops ?? []} customers={snap.customers ?? []} openId={fOpen} setOpenId={setFOpen}
+          canon={canonOf} loads={snap.loads ?? []} vehicles={snap.vehicles ?? []} isSales={isSales} stops={snap.stops ?? []} customers={snap.customers ?? []} drivers={snap.drivers ?? []} openId={fOpen} setOpenId={setFOpen}
           openLoad={id => { setLoadId(id); setView('load'); scrollTop() }} openPallet={setPalletId} />}
         {view === 'inbound' && <InboundView sb={backend.client()} flash={flash} onChanged={() => { reload() }} />}
         {view === 'archived' && <ArchivedView key={archQ ?? ''} initialQ={archQ} sb={backend.client()} flash={flash} onChanged={() => { reload() }}
           openPallet={async id => { const { data } = await backend.client()!.from('pallets').select('*').eq('id', id).single(); if (data) { setScanned(data as Pallet); setPalletId(id) } }}
           pickSpot={(r, w, note, done) => { setView('map'); startPlacing({ title: `Putting ${r.code} back`, sub: 'Open a freezer and tap the spot it\'s in.',
             run: slot => act(() => restoreOne(backend.client()!, r.id, note, { slot: slot.id }, w), `${r.code} is back in ${slotLabel(slot)}`).then(done) }) }} />}
+        {view === 'transit' && cur === 'dist' && <StageAlertsAuto sb={backend.client()} flash={flash} openLoad={id => { setLoadId(id); setView('load'); scrollTop() }} onChanged={() => { reload() }} />}
         {view === 'transit' && <TransitView ctx={ctx} onOpen={id => { setLoadId(id); setView('load'); scrollTop() }} onNew={() => setLoadForm({})} />}
         {view === 'load' && loadId != null && <LoadView ctx={ctx} loadId={loadId} onBack={() => setView('transit')} onEdit={() => setLoadForm({ load: (snap.loads ?? []).find(l => l.id === loadId) })} />}
         {view === 'cult' && inCult && cultTab === 'receiving' && <ReceivingView sb={backend.client()} module="cultivation" flash={flash} nurseryLicenses={['CCL24-0000156']} />}

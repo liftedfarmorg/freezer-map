@@ -7,6 +7,9 @@
 //   { action: 'depart', load_id }           Depart: checks, the METRC manifests first, then the load leaves and invoices are made
 //   { action: 'nursery_ship', ref }         the nursery's Ship: the METRC transfer now (taken back if METRC refuses)
 //   { action: 'manifest_pdf', license, manifest } the METRC manifest PDF (base64)
+//   { action: 'stage', order_id, vehicle_id, driver, ship_date, load_id? }  Stage at OHR (197): GVR pallets to OHR in the app, the METRC
+//        manifest from GVR to the customer right away (taken back if METRC refuses it)
+//   { action: 'unstage', stage_id } / { action: 'stage_relink', stage_id }  Move back to GVR (manifest voided or updated) / Use that load
 //   { action: 'incoming', license?, module? } incoming METRC deliveries for our licenses (Inbound / Receiving per module)
 //   { action: 'inbound_receive', license, delivery_id, return_id? }  receive a delivery in METRC (Live) and bring it into the app (a return: its credit memo too)
 //   { action: 'proc_returns' }               processor returns waiting (Processing > Inbound): incoming deliveries from processors,
@@ -135,6 +138,40 @@ export default async function handler(req, res) {
         return send(res, 200, { live, sent: false, undone: true, error: bad.error ?? bad.info ?? bad.state })
       }
       return send(res, 200, { live, sent: true, results: out })
+    }
+    if (body.action === 'stage' || body.action === 'unstage' || body.action === 'stage_relink') {
+      // Stage at OHR (197): the database part as the user, then the METRC manifest right away (make, update or void).
+      // Staging that METRC refuses is taken back, so a GVR pallet never goes to OHR without its manifest.
+      const live = await isLive()
+      let r
+      if (body.action === 'stage') r = await asUser(req, 'stage_at_ohr', { p_order: Number(body.order_id), p_vehicle: Number(body.vehicle_id), p_driver: String(body.driver ?? ''),
+        p_ship_date: body.ship_date || null, p_load: body.load_id ? Number(body.load_id) : null })
+      else if (body.action === 'unstage') r = await asUser(req, 'unstage_to_gvr', { p_stage: Number(body.stage_id) })
+      else r = await asUser(req, 'stage_relink', { p_stage: Number(body.stage_id) })
+      const ids = (r?.todo ?? []).map(Number).filter(Boolean)
+      const out = []
+      if (ids.length) {
+        const jobs = await rpc('metrc_claim', { p_ids: ids, p_limit: ids.length })
+        const ctx = { live, by: me.email, deadline: t0 + 200000 }
+        for (const j of jobs.sort((a, b) => a.id - b.id)) out.push(await runJob(j, ctx))
+        const mine = new Set(jobs.map(j => j.id))
+        const others = ids.filter(id => !mine.has(id))
+        for (let k = 0; others.length && k < 30; k++) {
+          const st = await db(`comp_metrc_actions?select=id,status,push_state,push_error&id=in.(${others.join(',')})`)
+          if (!st.some(x => x.push_state === 'sending' || (x.status === 'todo' && !x.push_state))) {
+            for (const x of st) out.push({ id: x.id, state: x.status === 'done' ? 'sent' : 'failed', error: x.status === 'done' ? null : x.push_error })
+            break
+          }
+          await new Promise(res2 => setTimeout(res2, 3000))
+        }
+      }
+      const bad = out.find(x => x.state !== 'sent' && x.state !== 'checked')
+      if (bad && body.action === 'stage') {
+        await asUser(req, 'stage_undo', { p_todo: ids[0], p_reason: String(bad.error ?? bad.info ?? bad.state).slice(0, 300) }).catch(() => {})
+        return send(res, 200, { live, ok: false, undone: true, ...r, results: out, error: `METRC didn't take the manifest, so nothing was staged: ${bad.error ?? bad.info ?? bad.state}` })
+      }
+      const man = ids.length ? (await db(`metrc_app_transfers?stop_id=eq.${Number(r?.stop_id ?? 0)}&state=neq.voided&select=manifest,license`).catch(() => [])) : []
+      return send(res, 200, { live, ok: !bad, ...r, results: out, manifests: man, error: bad ? `${bad.error ?? bad.info ?? bad.state}` : null })
     }
     if (body.action === 'manifest_pdf') {
       // the manifest PDF straight from METRC, for any manifest one of our licenses shipped or received

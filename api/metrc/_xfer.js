@@ -76,14 +76,22 @@ export async function planTransfer(ctx, spec) {
   const t = await tol()
   const found = [], missing = [], held = [], off = []
   // a few at a time, and a look that errors (T3 busy / rate limit) is tried again before it counts as missing
-  const look = async tag => { try { return await packageByTag(lic, tag) } catch { await new Promise(r => setTimeout(r, 800)); return packageByTag(lic, tag).catch(() => undefined) } }
+  const look1 = async tag => { try { return await packageByTag(lic, tag) } catch { await new Promise(r => setTimeout(r, 800)); return packageByTag(lic, tag).catch(() => undefined) } }
+  // a manifest that's already made (Stage at OHR, 197): its packages may show as in transit in METRC
+  const look = async tag => {
+    const m = await look1(tag)
+    if (m || !spec.allowInTransit) return m
+    const j = await t3('GET', '/v2/packages/intransit', { query: { licenseNumber: lic, filter: `label__eq:${up(tag)}`, pageSize: 5 } }).catch(() => null)
+    const x = list(j).find(p => up(p.label ?? p.packageLabel) === up(tag))
+    return x ? { ...x, id: x.id ?? x.packageId, quantity: x.quantity ?? x.shippedQuantity, unitOfMeasureAbbreviation: x.unitOfMeasureAbbreviation ?? x.shippedUnitOfMeasureAbbreviation, isInTransit: false } : m
+  }
   const unsure = []
   const todo = pk.filter(p => p.tag)
   for (let i = 0; i < todo.length; i += 4) await Promise.all(todo.slice(i, i + 4).map(async p => {
     const m = await look(p.tag)
     if (m === undefined) { unsure.push(`${p.code} ${up(p.tag)}`); return }
     if (!m) { missing.push(`${p.code} ${up(p.tag)}`); return }
-    if (m.isOnHold || m.isOnInvestigationHold || m.isInTransit) held.push(`${p.code} (${m.isInTransit ? 'in transit' : 'on hold'})`)
+    if (m.isOnHold || m.isOnInvestigationHold || (m.isInTransit && !spec.allowInTransit)) held.push(`${p.code} (${m.isInTransit ? 'in transit' : 'on hold'})`)
     if (p.lbs != null && LB.test(m.unitOfMeasureAbbreviation || '') && Math.abs(r4(m.quantity) - r4(p.lbs)) > t) off.push(`${p.code}: METRC ${m.quantity}, app ${r4(p.lbs)}`)
     found.push({ ...p, m })
   }))
@@ -100,8 +108,9 @@ export async function planTransfer(ctx, spec) {
   const unitLb = (inp.unitsOfMeasure ?? []).find(u => /^(lb|pound)/i.test(u.abbreviation ?? u.name ?? ''))?.id
   // the departure time picked at Depart (loaded the night before, leaving early), never earlier than 5 minutes from now
   const planned = spec.loadId ? (await db(`loads?id=eq.${Number(spec.loadId)}&select=depart_planned`).catch(() => []))?.[0]?.depart_planned : null
-  const dep = new Date(Math.max(Date.now() + 5 * 60000, planned ? new Date(planned).getTime() : 0))
-  const arr = new Date(dep.getTime() + (Number(await setting('comp.metrc_transit_hours', '3')) || 3) * 3600000)
+  const dep = spec.depart ?? new Date(Math.max(Date.now() + 5 * 60000, planned ? new Date(planned).getTime() : 0))
+  const transit = (Number(await setting('comp.metrc_transit_hours', '3')) || 3) * 3600000
+  const arr = spec.arrive && spec.arrive.getTime() > dep.getTime() + 30 * 60000 ? spec.arrive : new Date(dep.getTime() + transit)
   const gross = !!type.requiresPackagesGrossWeight, destGross = !!type.requiresDestinationGrossWeight
   const total = r4(found.reduce((s, p) => s + Number(p.m.quantity || 0), 0))
   const body = [{
@@ -154,6 +163,90 @@ async function sendTransfer(ctx, spec, plan, job) {
   return { state: 'sent', request: plan.body, response: resp, info: `METRC manifest ${made.manifestNumber} to ${spec.toName ?? spec.toLicense}` }
 }
 
+// ---------- Stage at OHR (197): one manifest from GVR to the customer, made at staging and updated at Depart ----------
+/** the outgoing transfer as METRC has it now (for its lastModified stamp) */
+async function outgoing(lic, transferId) {
+  for (const path of ['/v2/transfers/outgoing/active', '/v2/transfers/outgoing/inactive']) {
+    const rows = list(await t3('GET', path, { query: { licenseNumber: lic, pageSize: 500, sort: 'createdDateTime:desc' } }).catch(() => null))
+    const t = rows.find(x => Number(x.id) === Number(transferId))
+    if (t) return { ...t, active: path.endsWith('active') }
+  }
+  return null
+}
+
+/** change a manifest the app already made: same packages list as the stop has now, the driver, truck and times in spec */
+async function updateTransfer(ctx, spec, plan, job, made) {
+  const lic = spec.license
+  if (!plan.body) {
+    const bad = plan.checks.filter(c => !c.ok)
+    if (bad.length === 1 && bad[0].key === 'open') throw new Wait(bad[0].detail)
+    throw new Error(bad.map(c => `${c.label}: ${c.detail}`).join(' | '))
+  }
+  const t = await outgoing(lic, made.transfer_id)
+  if (!t) throw new Error(`METRC manifest ${made.manifest ?? made.transfer_id} isn't in ${lic}'s outgoing transfers any more. Check METRC.`)
+  if (t.receivedDateTime || t.receivedByName) throw new Skip(`Manifest ${made.manifest} was already received by ${spec.toName}: not changed`)
+  const body = [{ id: Number(made.transfer_id), ...(t.lastModified ? { lastModified: t.lastModified } : {}), destinations: plan.body[0].destinations }]
+  const resp = await write(ctx, '/v2/transfers/update', lic, body)
+  if (!ctx.live) return { state: 'checked', request: body, response: resp, info: `Dry run OK: update manifest ${made.manifest} (${plan.found.length} packages, ${spec.driver})` }
+  await db(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ packages: plan.found.map(p => ({ tag: up(p.tag), lbs: p.lbs, code: p.code, pallet_id: p.pallet_id ?? null, metrc_id: p.m.id })), request: body }) })
+  if (spec.stopId && made.manifest) {
+    await db(`load_stops?id=eq.${spec.stopId}&manifest=is.null`, { method: 'PATCH', body: JSON.stringify({ manifest: made.manifest }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
+  }
+  return { state: 'sent', request: body, response: resp, info: `METRC manifest ${made.manifest} updated: ${plan.found.length} packages, ${spec.driver}, ${[spec.make, spec.model, spec.plate].filter(Boolean).join(' ')}` }
+}
+
+/** the staging driver and truck (the first version of the manifest, before the load leaves) */
+async function stageSpec(spec, stages) {
+  const g = stages[0]
+  const v = g.stage_vehicle_id ? await one(`fleet_assets?id=eq.${Number(g.stage_vehicle_id)}&select=make,model,plate`) : null
+  const dr = g.stage_driver ? await one(`fleet_drivers?name=ilike.${enc(g.stage_driver)}&active=eq.true&select=license_no`).catch(() => null) : null
+  // arrival: noon on the ship date (California), or the usual transit time if that's too soon
+  const noon = new Date(`${g.ship_date}T12:00:00`)
+  const offset = new Date(noon.toLocaleString('en-US', { timeZone: 'UTC' })).getTime() - new Date(noon.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })).getTime()
+  Object.assign(spec, {
+    driver: g.stage_driver, driverLicense: dr?.license_no ?? null, make: v?.make, model: v?.model, plate: v?.plate,
+    transporter: null,                                    // our C13, whoever drives (outside carriers too)
+    depart: new Date(Date.now() + 5 * 60000), arrive: new Date(noon.getTime() + offset),
+  })
+  return spec
+}
+
+const stagesOn = (stopId, lic) => db(`gvr_stages?stop_id=eq.${Number(stopId)}&license=eq.${enc(lic)}&status=neq.returned&select=id,status,stage_vehicle_id,stage_driver,ship_date&order=id.desc`).catch(() => [])
+
+/** Stage at OHR to-dos: make the manifest (or update it: more staged, one moved back, moved to another load), or void it */
+async function sendStage(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const key = `stop:${Number(d.stop_id)}:${lic}`
+  const made = await one(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided&select=transfer_id,manifest`)
+  if (d.type === 'stage_void') {
+    if (!made) throw new Skip('No manifest to void')
+    if (!made.transfer_id) throw new Error(`Manifest ${made.manifest ?? ''} has no METRC id in the app: void it in METRC by hand`)
+    const left = (await stagesOn(d.stop_id, lic)).filter(g => g.status === 'staged')
+    if (left.length) throw new Skip('Other pallets are still staged on this manifest: not voided')
+    const resp = await write(ctx, '/v2/transfers/void', lic, { id: Number(made.transfer_id) })
+    if (!ctx.live) return { state: 'checked', request: { id: made.transfer_id }, response: resp, info: `Dry run OK: void manifest ${made.manifest}` }
+    await db(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided`, { method: 'PATCH', body: JSON.stringify({ state: 'voided' }), headers: { Prefer: 'return=minimal' } })
+    await db(`load_stops?id=eq.${Number(d.stop_id)}&manifest=eq.${enc(made.manifest ?? '-')}`, { method: 'PATCH', body: JSON.stringify({ manifest: null }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
+    return { state: 'sent', request: { id: made.transfer_id }, response: resp, info: `METRC manifest ${made.manifest} voided (moved back to GVR)` }
+  }
+  const { spec } = await stopSpec(Number(d.stop_id), lic)
+  spec.beforeId = job.id
+  const load = spec.loadId ? await one(`loads?id=eq.${Number(spec.loadId)}&select=status`) : null
+  const left = (await stagesOn(d.stop_id, lic)).filter(g => g.status === 'staged')
+  // before the load leaves: the staging driver and truck; after: the load's own (Depart already updated it)
+  if (!load || ['planning', 'loading'].includes(load.status)) {
+    if (!left.length) throw new Skip('Nothing is staged on this stop any more')
+    await stageSpec(spec, left)
+  }
+  if (!spec.packages.length) throw new Skip('No GVR packages on this stop any more')
+  spec.allowInTransit = !!made
+  const plan = await planTransfer(ctx, spec)
+  if (made && !made.transfer_id) throw new Error(`Manifest ${made.manifest ?? '(number pending)'} has no METRC id in the app yet. Check METRC.`)
+  return made ? updateTransfer(ctx, spec, plan, job, made) : sendTransfer(ctx, spec, plan, job)
+}
+
 // ---------- a load stop ----------
 export async function stopSpec(stopId, license) {
   const s = await rpc('metrc_stop_info', { p_stop: stopId })
@@ -182,9 +275,10 @@ export async function loadChecklist(ctx, loadId) {
     if (!lics.length) { out.push({ stop_id: st.id, seq: st.seq, license: null, ok: false, checks: [{ key: 'packages', label: 'Packages', ok: false, detail: 'Nothing on this stop, or no license for where it ships from' }] }); continue }
     for (const lic of lics) {
       const { spec, s } = await stopSpec(st.id, lic)
-      const plan = await planTransfer(ctx, spec)
       const already = await one(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided&select=manifest`)
-      if (already) plan.checks.unshift({ key: 'made', label: 'Manifest', ok: true, detail: `Already made: ${already.manifest ?? '(number pending)'}` })
+      spec.allowInTransit = !!already
+      const plan = await planTransfer(ctx, spec)
+      if (already) plan.checks.unshift({ key: 'made', label: 'Manifest', ok: true, detail: `Already made: ${already.manifest ?? '(number pending)'}${(await stagesOn(st.id, lic)).length ? ' (staged at OHR: Depart updates it to this load\'s driver, truck and times)' : ''}` })
       if (plan.body && !already) {
         try { await t3('POST', '/v2/transfers/create', { query: { licenseNumber: lic, applyDynamicValidation: 'true' }, body: plan.body }); plan.checks.push({ key: 'dry', label: 'METRC dry run', ok: true, detail: 'METRC would accept it' }) }
         catch (e) { plan.checks.push({ key: 'dry', label: 'METRC dry run', ok: false, detail: e.message }) }
@@ -205,13 +299,23 @@ export async function sendTransfer_(job, ctx) {
   if (d.type === 'stop_departed') {
     const { spec } = await stopSpec(Number(d.stop_id), job.license)
     spec.beforeId = job.id
-    const made = await one(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided&select=manifest`)
+    const made = await one(`metrc_app_transfers?key=eq.${enc(spec.key)}&state=neq.voided&select=manifest,transfer_id`)
+    if (made && (await stagesOn(d.stop_id, job.license)).length) {
+      // staged at OHR (197): the manifest made at staging now gets this load's driver, truck and times
+      if (!made.transfer_id) throw new Error(`Manifest ${made.manifest ?? '(number pending)'} has no METRC id in the app yet. Check METRC.`)
+      spec.allowInTransit = true
+      const plan = await planTransfer(ctx, spec)
+      const r = await updateTransfer(ctx, spec, plan, job, made)
+      if (r.state === 'sent') r.siblings = await shipSiblings(spec.packages.map(p => p.tag), job.id)
+      return r
+    }
     if (made) throw new Skip(`Already on METRC manifest ${made.manifest ?? '(number pending)'}`)
     const plan = await planTransfer(ctx, spec)
     const r = await sendTransfer(ctx, spec, plan, job)
     if (r.state === 'sent') r.siblings = await shipSiblings(spec.packages.map(p => p.tag), job.id)
     return r
   }
+  if (d.type === 'stage_manifest' || d.type === 'stage_void') return sendStage(job, ctx)
   if (d.type === 'proc_sent') return sendProcessorRun(job, ctx)
   if (d.type === 'nursery_shipped') return sendNurseryRun(job, ctx)
   throw new Error(`This to-do (${d.type}) isn't a transfer the app makes. Check it by hand.`)
