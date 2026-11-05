@@ -20,17 +20,19 @@ interface Receiver { id?: number; run_id?: number; strain: string; mother_id: nu
 interface SeedLot {
   id: number; code: string | null; mother_strain: string | null; father_strain: string | null; run_id: number | null; receiver_id: number | null; source: string; breeder: string | null
   harvested_on: string | null; seeds: number | null; germ_pct: number | null; notes: string | null
-  season: number | null; target_plants: number | null; sown: number | null; sown_on: string | null
+  season: number | null; target_plants: number | null; sown: number | null; sown_on: string | null; package_tags: string[]
 }
+interface SeedPkg { label: string; item: string; qty: number | null; uom: string | null }
 interface Hunt { id: number; site: string; season: number; name: string; seed_lot_id: number | null; sown_on: string | null; planted_on: string | null; seeds_sown: number | null; germinated: number | null; room_id: number | null; status: string; notes: string | null }
 interface Pheno {
   id: number; hunt_id: number; seed_lot_id: number | null; number: number; label: string | null; plant_tag: string | null; lot_tag: string | null; room_id: number | null; bed: string | null
   status: string; keeper_strain: string | null; notes: string | null; planted_on: string | null; cut_on: string | null; cut_qty: number | null; cull_reason: string | null; culled_on: string | null
+  tag_confirmed: boolean; tag_source: string | null
 }
 interface Obs { id: number; pheno_id: number; stage: string; observed_on: string; traits: Record<string, string | number | null>; notes: string | null; observer: string | null }
 interface DonorBatch { id: number; project: string; label: string; strains: string | null; plants: number | null; cut_on: string | null; room_id: number | null; to_room_on: string | null; move_in_on: string | null; notes: string | null }
 interface Score { id: number; pheno_id: number; scorer: string; scored_on: string; vigor: number | null; structure: number | null; aroma: number | null; color: number | null; tackiness: number | null; jar: number | null; notes: string | null }
-interface BData { runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[] }
+interface BData { runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg> }
 
 const TRAITS = [['vigor', 'Vigor'], ['structure', 'Structure'], ['aroma', 'Aroma'], ['color', 'Color'], ['tackiness', 'Tackiness'], ['jar', 'Jar test']] as const
 type Trait = typeof TRAITS[number][0]
@@ -69,7 +71,10 @@ export function BreedingTab({ sb, d, c, flash, me }: { sb: SupabaseClient; d: ND
     const bad = r.find(x => x.error)
     if (bad?.error) { setErr(/breed_|seed_lots|pheno/.test(bad.error.message) ? t('Breeding needs 191_breeding_phenohunt.sql run in Supabase.') : bad.error.message); return }
     const [runs, receivers, seeds, hunts, phenos, scores, obs, donors] = r.map(x => x.data ?? [])
-    setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[] }); setErr(null)
+    const want = [...new Set((seeds as SeedLot[]).flatMap(z => z.package_tags ?? []))]
+    const pk = want.length ? await sb.from('metrc_packages').select('label,item,qty,uom').in('label', want) : { data: [] }
+    const pkgs = new Map(((pk.data ?? []) as SeedPkg[]).map(z => [z.label, z]))
+    setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
   const saved = async (m: string) => { await load(); flash(t(m)) }
@@ -107,11 +112,12 @@ export function BreedingTab({ sb, d, c, flash, me }: { sb: SupabaseClient; d: ND
         </Fragment> })}
     </>}
     {tab === 'seeds' && (!b.seeds.length ? <p className="muted">{t('No seed lots yet. They come from harvesting a run\'s receivers, or add bought or traded seeds.')}</p> : <div className="cwrap"><table className="ctable">
-      <thead><tr><th>{t('Code')}</th><th>{t('Cross (seed parent x pollen)')}</th><th>{t('Source')}</th><th>{t('Season')}</th><th className="num">{t('Seeds')}</th><th className="num">{t('Plants wanted')}</th><th className="num">{t('Sown')}</th><th>{t('Sown on')}</th><th className="num">{t('Phenos')}</th><th className="num">{t('Alive')}</th><th className="num">{t('Left')}</th><th /></tr></thead>
+      <thead><tr><th>{t('Code')}</th><th>{t('Cross (seed parent x pollen)')}</th><th>{t('Source')}</th><th>{t('Season')}</th><th className="num">{t('Seeds')}</th><th className="num">{t('Plants wanted')}</th><th className="num">{t('Sown')}</th><th>{t('Sown on')}</th><th className="num">{t('Phenos')}</th><th className="num">{t('Alive')}</th><th className="num">{t('Left')}</th><th>{t('METRC seed package')}</th><th /></tr></thead>
       <tbody>{[...b.seeds].sort((x, y) => (y.season ?? 0) - (x.season ?? 0) || (x.breeder ?? '').localeCompare(y.breeder ?? '') || cross(x).localeCompare(cross(y))).map(s => { const ps = lotPhenos(s.id); return (
         <tr key={s.id} className="tap" onClick={() => setLot(s)}><td><b>{s.code}</b></td><td>{cross(s)}</td><td>{s.source === 'in-house' ? (b.runs.find(r => r.id === s.run_id)?.name ?? t('Lifted (in house)')) : s.breeder ?? cap(s.source)}</td>
           <td>{s.season ?? ''}</td><td className="num">{n0(s.seeds)}</td><td className="num">{n0(s.target_plants)}</td><td className="num">{n0(sown(s)) || ''}</td><td className="nowrap">{fmtD(s.sown_on)}</td>
           <td className="num">{ps.length || ''}</td><td className="num">{ps.length ? n0(ps.filter(p => p.status !== 'culled' && p.status !== 'male').length) : ''}</td><td className="num">{s.seeds != null ? n0(s.seeds - sown(s)) : ''}</td>
+          <td className="small nowrap">{(s.package_tags ?? []).length ? s.package_tags.map(l => { const k = b.pkgs.get(l); return `…${l.slice(-6)}${k ? ` · ${k.qty ?? ''} ${k.uom ?? ''}` : ''}` }).join(', ') : <span className="muted">{t('none')}</span>}</td>
           <td><button className="ghost small" onClick={e => { e.stopPropagation(); setHunt({ season: new Date().getFullYear(), status: 'sown', sown_on: today(), seed_lot_id: s.id, name: `${s.code ?? cross(s)} hunt` }) }}>{t('Hunt…')}</button></td></tr>) })}</tbody>
     </table></div>)}
     {tab === 'hunts' && (!b.hunts.length ? <p className="muted">{t('No pheno hunts yet. Start one from a seed lot.')}</p> : <div className="cwrap"><table className="ctable">
@@ -359,6 +365,8 @@ function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: 
   const [roomF, setRoomF] = useState<number | null>(null)
   const [q, setQ] = useState('')
   const [shown, setShown] = useState(SHOW)
+  const [who_, setWho] = useState<string | null>(null)
+  const [tying, setTying] = useState(false)
   const [addN, setAddN] = useState<number | null>(null)
   const [addLot, setAddLot] = useState<number | null>(h.seed_lot_id)
   const [addRoom, setAddRoom] = useState<number | null>(h.room_id)
@@ -381,12 +389,13 @@ function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: 
   const rows = useMemo(() => ps.filter(p => (f === 'all' || p.status === f || (f === 'culled' && p.status === 'male')) && (lotF == null || lotOf(p)?.id === lotF) && (roomF == null || p.room_id === roomF)
       && (!ql || (p.label ?? '').toLowerCase().includes(ql) || (p.plant_tag ?? '').toLowerCase().includes(ql) || (p.lot_tag ?? '').toLowerCase().endsWith(ql)))
     .map(p => {
-      const sc = scoresBy.get(p.id) ?? []
+      const all = scoresBy.get(p.id) ?? []
+      const sc = who_ ? all.filter(z => z.scorer === who_) : all
       const tr = Object.fromEntries(TRAITS.map(([k]) => [k, avg(sc.map(z => z[k]))])) as Record<Trait, number | null>
       return { p, sc, t: tr, total: avg(TRAITS.map(([k]) => tr[k])), mine: sc.some(z => z.scorer === me) }
     })
     .sort((a, z) => (z.total ?? -1) - (a.total ?? -1) || (c.room(a.p.room_id)).localeCompare(c.room(z.p.room_id), undefined, { numeric: true }) || (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true })),
-  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c])
+  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_])
   useEffect(() => setShown(SHOW), [f, lotF, roomF, ql])
   const add = async () => {
     const l = b.seeds.find(z => z.id === addLot)
@@ -394,6 +403,16 @@ function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: 
     if (error) flash(error.message, true); else { setAddN(null); await onSaved(t('{n} phenos numbered', { n: String(addN) })) }
   }
   const nAll = ps.length, nOut = ps.filter(isOut).length
+  const scorers = useMemo(() => [...new Set(b.scores.filter(z => ps.some(p => p.id === z.pheno_id)).map(z => z.scorer))].sort(), [b.scores, ps])
+  const tie = async () => {
+    setTying(true)
+    const { data, error } = await sb.rpc('pheno_tie_tags', { p_hunt: h.id })
+    setTying(false)
+    if (error) { flash(error.message, true); return }
+    const r = data as { tied: number; short: unknown[]; extra: unknown[] }
+    await onSaved(t('{n} phenos got a METRC tag (unconfirmed). {a} cross/hoops have fewer tags than phenos, {b} have more.', { n: n0(r.tied), a: r.short.length, b: r.extra.length }))
+  }
+  const untagged = ps.filter(p => !isOut(p) && !p.plant_tag).length, unconf = ps.filter(p => p.plant_tag && !p.tag_confirmed).length
   return <div>
     <div className="row toolbar between"><button className="ghost" onClick={onBack}>{t('‹ Hunts')}</button><button className="ghost small" onClick={onEdit}>{t('Edit hunt')}</button></div>
     <h3 className="huntname">{h.name} <span className="muted">· {s ? cross(s) : tn(crosses.length, '{n} cross', '{n} crosses')} · {t('sown')} {fmtD(h.sown_on) || '—'}{h.planted_on ? ` · ${t('planted')} ${fmtD(h.planted_on)}` : ''} · {t('{n} seeds', { n: n0(h.seeds_sown) })}{h.germinated ? `, ${t('{n} up', { n: n0(h.germinated) })}` : ''}{h.room_id ? ` · ${c.room(h.room_id)}` : ''}</span></h3>
@@ -408,19 +427,22 @@ function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: 
       {crosses.length > 1 && <Pick value={lotF} blank={t('All crosses')} options={crosses.map(x => ({ v: x.lot.id, l: cross(x.lot) }))} onChange={setLotF} />}
       {rooms.length > 1 && <Pick value={roomF} blank={t('All hoops')} options={rooms.map(r => ({ v: r, l: c.room(r) }))} onChange={setRoomF} />}
       <input className="search" type="search" placeholder={t('Search pheno or tag')} value={q} onChange={e => setQ(e.target.value)} />
+      <Pick value={who_} blank={t('Group average')} options={scorers.map(z => ({ v: z, l: z === me ? t('My scorecard') : who(z) }))} onChange={setWho} />
     </div>
+    {(untagged > 0 || unconf > 0) && <p className="muted small-note">{t('{a} growing phenos without a METRC tag · {b} tags not confirmed yet', { a: n0(untagged), b: n0(unconf) })}
+      {untagged > 0 && <> <button className="ghost small" disabled={tying} onClick={tie}>{t(tying ? 'Tying…' : 'Tie tags from METRC')}</button></>}</p>}
     <details className="addbox"><summary>{t('+ Number phenos')}</summary><span className="row wrap addpheno">
       {!h.seed_lot_id && <Pick value={addLot} blank={t('Cross…')} options={b.seeds.map(z => ({ v: z.id, l: cross(z) }))} onChange={setAddLot} />}
       <Pick value={addRoom} blank={t('Where…')} options={d.rooms.filter(r => r.active).map(r => ({ v: r.id, l: r.name }))} onChange={setAddRoom} />
       <NumIn value={addN} onChange={setAddN} placeholder={t('How many')} />
       <button className="ghost small" disabled={!addN || (!h.seed_lot_id && !addLot)} onClick={add}>{t('Number them')}</button></span>
       <p className="muted small">{t('They get the next numbers for that cross (#1, #2… in order).')}</p></details>
-    <p className="muted small-note">{t('Everyone scores on their own: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average, best first.')}</p>
+    <p className="muted small-note">{t(who_ ? 'Showing one person\'s scorecard, best first.' : 'Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average, best first; pick a person to see their scorecard.')}</p>
     {!rows.length ? <p className="muted">{t('No phenos match.')}</p> : <div className="cwrap"><table className="ctable">
       <thead><tr><th>{t('Pheno')}</th><th>{t('Where')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l)}</th>)}<th className="num">{t('Avg')}</th><th className="num">{t('Scores')}</th><th className="num">{t('Cuts')}</th><th>{t('Status')}</th></tr></thead>
       <tbody>{rows.slice(0, shown).map(r => <tr key={r.p.id} className={`tap ${isOut(r.p) ? 'done' : ''}`} onClick={() => setOpen(r.p)}>
         <td><b>{r.p.label ?? `#${r.p.number}`}</b>{r.p.keeper_strain && r.p.keeper_strain !== r.p.label ? <span className="muted"> → {r.p.keeper_strain}</span> : ''}{obsBy.get(r.p.id) ? <span className="muted small"> · {t('notes')}</span> : ''}</td>
-        <td className="small nowrap">{c.room(r.p.room_id)}{r.p.bed ? ` · ${r.p.bed}` : ''}</td>
+        <td className="small nowrap">{c.room(r.p.room_id)}{r.p.bed ? ` · ${r.p.bed}` : ''}{r.p.plant_tag ? <span className={r.p.tag_confirmed ? '' : 'muted'}> · …{r.p.plant_tag.slice(-5)}{r.p.tag_confirmed ? '' : '?'}</span> : ''}</td>
         {TRAITS.map(([k]) => <td key={k} className="num">{f1(r.t[k])}</td>)}<td className="num"><b>{f1(r.total)}</b></td>
         <td className="num">{r.sc.length || ''}{r.mine ? ' ✓' : ''}</td><td className="num">{r.p.cut_qty || ''}</td>
         <td><span className={`pill ${r.p.status === 'keeper' ? 'okp' : r.p.status === 'maybe' ? 'warnp' : ''}`}>{t(PSTATUS[r.p.status])}</span>{r.p.cull_reason ? <span className="muted small"> {t(r.p.cull_reason)}</span> : ''}</td></tr>)}</tbody>
@@ -438,7 +460,8 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
   const [reason, setReason] = useState<string | null>(p.cull_reason ?? null)
   const [stage, setStage] = useState<string>(OBS[0].stage)
   const obsAll = b.obs.filter(z => z.pheno_id === p.id)
-  const [ob, setOb] = useState<Record<string, Record<string, string | number | null>>>(() => Object.fromEntries(obsAll.map(z => [z.stage, { ...z.traits, _notes: z.notes }])))
+  const obsMine = obsAll.filter(z => z.observer === me)
+  const [ob, setOb] = useState<Record<string, Record<string, string | number | null>>>(() => Object.fromEntries(obsMine.map(z => [z.stage, { ...z.traits, _notes: z.notes }])))
   const run = async (f: () => PromiseLike<{ error: { message: string } | null }>, ok: string) => {
     setBusy(true)
     const { error } = await f()
@@ -455,8 +478,8 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
     const cur = ob[stage] ?? {}
     const traits = Object.fromEntries(Object.entries(cur).filter(([k, v]) => k !== '_notes' && v != null && v !== ''))
     const notes = (cur._notes as string | null) || null
-    const had = obsAll.find(z => z.stage === stage)
-    return run(() => had ? sb.from('pheno_obs').update({ traits, notes, observed_on: today(), observer: me }).eq('id', had.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage, traits, notes }), 'Notes saved')
+    const had = obsMine.find(z => z.stage === stage)
+    return run(() => had ? sb.from('pheno_obs').update({ traits, notes, observed_on: today() }).eq('id', had.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage, traits, notes }), 'Notes saved')
   }
   const keeper = async () => {
     const name = prompt(t('Name for this keeper (it goes on the Strains list)'), x.keeper_strain ?? x.label ?? ''); if (name == null) return
@@ -478,21 +501,27 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
         <thead><tr><th>{t('Who')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l).slice(0, 5)}</th>)}<th>{t('Notes')}</th></tr></thead>
         <tbody>{scores.filter(z => z.scorer !== me).map(z => <tr key={z.id}><td>{who(z.scorer)}</td>{TRAITS.map(([k]) => <td key={k} className="num">{z[k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>
       </table></div></>}
-      <h3>{t('Grower notes')}</h3>
-      <div className="seg">{OBS.map(o => <button key={o.stage} className={stage === o.stage ? 'on' : ''} onClick={() => setStage(o.stage)}>{t(o.l)}{obsAll.some(z => z.stage === o.stage) ? ' ✓' : ''}</button>)}</div>
+      <h3>{t('Your grower notes')}</h3>
+      <div className="seg">{OBS.map(o => <button key={o.stage} className={stage === o.stage ? 'on' : ''} onClick={() => setStage(o.stage)}>{t(o.l)}{obsMine.some(z => z.stage === o.stage) ? ' ✓' : ''}</button>)}</div>
       <div className="scoregrid">{spec.fields.map(fd => <Fragment key={fd.k}><span>{t(fd.l)}{fd.unit ? <span className="muted small"> ({fd.unit})</span> : ''}</span>
         {fd.kind === 'rate' ? <div className="choices">{[1, 2, 3, 4, 5].map(v => <button key={v} type="button" className={ob[stage]?.[fd.k] === v ? 'on' : ''} onClick={() => setO(fd.k, ob[stage]?.[fd.k] === v ? null : v)}>{v}</button>)}</div>
           : fd.kind === 'num' ? <NumIn value={(ob[stage]?.[fd.k] as number | null) ?? null} onChange={v => setO(fd.k, v)} />
             : <TextIn value={(ob[stage]?.[fd.k] as string | null) ?? null} onChange={v => setO(fd.k, v)} />}</Fragment>)}</div>
       <F label={t('Notes')}><TextIn value={(ob[stage]?._notes as string | null) ?? null} onChange={v => setO('_notes', v)} /></F>
       <button className="ghost" disabled={busy} onClick={saveObs}>{t('Save {s} notes', { s: t(spec.l).toLowerCase() })}</button>
-      {obsAll.find(z => z.stage === stage) && <span className="muted small"> {t('Last by {w} on {d}', { w: who(obsAll.find(z => z.stage === stage)!.observer ?? ''), d: fmtD(obsAll.find(z => z.stage === stage)!.observed_on) })}</span>}
+      {obsMine.find(z => z.stage === stage) && <span className="muted small"> {t('Saved {d}', { d: fmtD(obsMine.find(z => z.stage === stage)!.observed_on) })}</span>}
+      {obsAll.some(z => z.stage === stage && z.observer !== me) && <><h3>{t('Everyone else, {s}', { s: t(spec.l).toLowerCase() })}</h3><div className="cwrap tight"><table className="ctable">
+        <thead><tr><th>{t('Who')}</th>{spec.fields.map(fd => <th key={fd.k} className="num">{t(fd.l).split(/[ ,]/)[0]}</th>)}<th>{t('Notes')}</th></tr></thead>
+        <tbody>{obsAll.filter(z => z.stage === stage && z.observer !== me).map(z => <tr key={z.id}><td>{who(z.observer ?? '')}<span className="muted small"> {fmtD(z.observed_on)}</span></td>
+          {spec.fields.map(fd => <td key={fd.k} className="num">{z.traits[fd.k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>
+      </table></div></>}
       <h3>{t('Plant')}</h3>
       <div className="grid3">
         <F label={t('Label')}><TextIn value={x.label} onChange={v => setX({ ...x, label: v })} /></F>
         <F label={t('Where')}><Pick value={x.room_id} blank="—" options={d.rooms.filter(r => r.active || r.id === x.room_id).map(r => ({ v: r.id, l: r.name }))} onChange={v => setX({ ...x, room_id: v })} /></F>
         <F label={t('Bed / row')}><TextIn value={x.bed} onChange={v => setX({ ...x, bed: v })} /></F>
-        <F label={t('METRC plant tag')}><TagInput value={x.plant_tag ?? ''} onChange={v => setX({ ...x, plant_tag: v || null })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} keep={p.plant_tag ?? null} /></F>
+        <F label={x.plant_tag && !x.tag_confirmed ? <>{t('METRC plant tag')} <span className="pill warnp">{t('not confirmed')}</span></> : t('METRC plant tag')}
+          hint={x.plant_tag && !x.tag_confirmed ? t('Tied by number order from METRC. Check the tag on the plant.') : undefined}><TagInput value={x.plant_tag ?? ''} onChange={v => setX({ ...x, plant_tag: v || null })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} keep={p.plant_tag ?? null} /></F>
         <F label={t('Came from lot (METRC)')}><input value={x.lot_tag ? `…${x.lot_tag.slice(-6)}` : '—'} readOnly title={x.lot_tag ?? ''} /></F>
         <F label={t('Planted')}><input value={fmtD(x.planted_on) || '—'} readOnly /></F>
         <F label={t('Cuttings taken')}><DateIn value={x.cut_on} onChange={v => setX({ ...x, cut_on: v })} /></F>
@@ -501,6 +530,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
       <F label={t('Notes')}><TextIn value={x.notes} onChange={v => setX({ ...x, notes: v })} /></F>
       <div className="row wrap docact">
         <button className="ghost" disabled={busy} onClick={() => savePheno(x, 'Saved')}>{t('Save plant details')}</button>
+        {p.plant_tag && !p.tag_confirmed && x.plant_tag === p.plant_tag && <button className="ghost" disabled={busy} onClick={() => run(() => sb.from('phenos').update({ tag_confirmed: true }).eq('id', p.id), 'Tag confirmed')}>{t('Tag is right on the plant')}</button>}
         {!out && <button className="primary" disabled={busy} onClick={keeper}>{t(x.status === 'keeper' ? 'Rename keeper…' : 'Keeper…')}</button>}
         {!out && x.status !== 'maybe' && <button className="ghost" disabled={busy} onClick={() => savePheno({ status: 'maybe' }, 'Marked maybe')}>{t('Maybe')}</button>}
         {x.status !== 'growing' && <button className="ghost" disabled={busy} onClick={() => savePheno({ status: 'growing', cull_reason: null }, 'Back to growing')}>{t('Back to growing')}</button>}
