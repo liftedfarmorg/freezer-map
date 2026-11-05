@@ -13,6 +13,7 @@ import { DistInventory, SalesInventory } from './inventory'
 import type { InvCtx } from './inventory'
 import { MergeForm, MergeHere, MixedBuilder, NewPackageForm, NewPalletChooser, PickMixed, SingleForm, TagForm, WeightForm, lbs } from './forms'
 import { SettingsView } from './settings'
+import { AllCustomerLogins } from './custlogins'
 import { ModulePeople, UsersTab } from './users'
 import { PermissionsPanel } from './perms'
 import { AdminDashboard, AdminReview, AppSettingsPanel } from './admin'
@@ -798,7 +799,8 @@ export default function App() {
   const distSettings = <SettingsView key="dist-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Distribution settings" lists={['strains']}
     extra={[{ k: 'locations', l: 'Locations', node: <DistLocations sb={backend.client()} flash={flash} onChanged={() => { reload() }} /> }, { k: 'vehicles', l: 'Vehicles', node: <CompFleet sb={backend.client()} flash={flash} dept="distribution" /> }, { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="distribution" flash={flash} /> }]} />
   const salesSettings = <SettingsView key="sales-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Sales settings" focus="sales"
-    lists={['customers', 'strains']} canTerms={salesAdmin} extra={[{ k: 'terms', l: 'Payment terms', node: <TermsPanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
+    lists={['customers', 'strains']} canTerms={salesAdmin} extra={[{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
+      { k: 'terms', l: 'Payment terms', node: <TermsPanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'market', l: 'Market price', node: <MarketPricePanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'contract', l: 'Contract product prices', node: <ContractProductPrices backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'deadlines', l: 'Reserve deadlines', node: <DeadlinesPanel backend={backend} flash={flash} /> },
