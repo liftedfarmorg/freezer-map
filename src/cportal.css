@@ -488,3 +488,9 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 /* never clip: if a table still doesn't fit, it scrolls sideways inside its card */
 .cp-desk .cp-dorder .cp-olists > .cp-card { overflow-x: auto; }
 .cp-desk .cp-dorder .cp-odt, .cp-desk .cp-dorder .cp-oom { min-width: 640px; }
+/* 196: desktop Home Contract Reserves table gets Grade + Type */
+.cp-desk .cp-htb.cp-gt { grid-template-columns: minmax(130px, 1fr) 44px 66px 66px 62px 76px 76px; column-gap: 6px; height: 44px; }
+.cp-desk .cp-htb.cp-gt.cp-total { height: 44px; }
+.cp-desk .cp-htb.cp-head.cp-gt { height: auto; }
+.cp-desk .cp-htb.cp-head.cp-gt > :nth-child(2) { justify-content: center; text-align: center; }
+.cp-desk .cp-htb .cp-tagstack .cp-gtag, .cp-desk .cp-htb .cp-tagstack .cp-ttag { font-size: 10px; padding: 0 6px; line-height: 15px; }
