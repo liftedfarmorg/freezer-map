@@ -227,6 +227,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [editQ, setEditQ] = useState('')
   const [orderQ, setOrderQ] = useState('')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
+  const [gradeF, setGradeF] = useState<'all' | 'SHO' | 'BHO'>('all')   // grade filter on Reserves & Menu (desktop) and Open Menu (phones)
   // phones: a one-time tip to add the portal to the home screen (an icon keeps them signed in and they never need the link again)
   const [a2hs, setA2hs] = useState<'ios' | 'android' | null>(() => {
     try {
@@ -658,7 +659,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const all = keys.map(k => { const r = resRow(k), m = menuRow(k); return { k, s: r?.s ?? m!.s, y: r?.y ?? m!.y, r, m, t: editNew.find(x => x.k === k) } })
       .sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const years = [...new Set(all.map(x => x.y))].sort((a, b) => b - a)
-    const list = sortRows('rm', all.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear)
+    const list = sortRows('rm', all.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)
       && (rmRes === 'all' || (rmRes === 'res' ? !!x.r : !x.r))), { res: x => x.r?.res ?? 0, ful: x => x.r?.ful ?? 0, so: x => x.r?.so ?? 0, rem: x => x.r?.res ? x.r.rem : 0, open: x => x.m?.open ?? 0, g: x => gradeN(x.s), t: x => typeN(x.s) })
     const menuBad = editNew.some(n => n.lbs > 0 && !!newErr(n)) || reserves.some(r => !!resErr(r))
     const menuTotal = menuItems.reduce((a, m) => a + m.open, 0)
@@ -680,10 +681,12 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <section className={c('card rmcard')}>
           <div className={c('rmbar')}>
             <div className={c('filters')} role="group" aria-label="Filter strains">
-              {fb(rmRes === 'all' && menuYear === 'all', 'All', () => { setRmRes('all'); setMenuYear('all') })}
+              {fb(rmRes === 'all' && menuYear === 'all' && gradeF === 'all', 'All', () => { setRmRes('all'); setMenuYear('all'); setGradeF('all') })}
               {fb(rmRes === 'res', 'Reserved', () => setRmRes(rmRes === 'res' ? 'all' : 'res'))}
               {fb(rmRes === 'not', 'Not reserved', () => setRmRes(rmRes === 'not' ? 'all' : 'not'))}
               {years.map(y => fb(menuYear === y, String(y), () => setMenuYear(menuYear === y ? 'all' : y)))}
+              {fb(gradeF === 'SHO', 'SHO', () => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO'))}
+              {fb(gradeF === 'BHO', 'BHO', () => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO'))}
             </div>
             {stepSet()}
             <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
@@ -1017,7 +1020,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   function MenuScreen() {
     const ql = q.toLowerCase()
     const shown = menuItems.filter(m => m.open > 0 || (contract && !!resRow(m.k)))
-    const list = shown.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear) && (!notRes || !resRow(m.k))).sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
+    const list = shown.filter(m => (!ql || m.s.toLowerCase().includes(ql)) && (menuYear === 'all' || m.y === menuYear) && (gradeF === 'all' || tagOf(m.s).g === gradeF) && (!notRes || !resRow(m.k))).sort((a, b) => a.s.localeCompare(b.s) || b.y - a.y)
     const total = menuItems.reduce((a, m) => a + m.open, 0)
     const years = [...new Set(shown.map(m => m.y))].sort((a, b) => b - a)
     // strains just picked with no lbs yet aren't errors here (their red line only shows once a number is typed)
@@ -1034,10 +1037,12 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
         </header>
         <main className={c('main')} style={{ paddingTop: 12 }}>
-          {(years.length > 1 || contract) && <div className={c('filters')} role="group" aria-label="Filter the menu">
-            <button aria-pressed={menuYear === 'all' && !notRes} onClick={() => { setMenuYear('all'); setNotRes(false) }}>All</button>
+          {<div className={c('filters')} role="group" aria-label="Filter the menu">
+            <button aria-pressed={menuYear === 'all' && !notRes && gradeF === 'all'} onClick={() => { setMenuYear('all'); setNotRes(false); setGradeF('all') }}>All</button>
             {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
-            {contract && <button aria-pressed={notRes} onClick={() => setNotRes(!notRes)}>Not reserved</button>}</div>}
+            {contract && <button aria-pressed={notRes} onClick={() => setNotRes(!notRes)}>Not reserved</button>}
+            <button aria-pressed={gradeF === 'SHO'} onClick={() => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO')}>SHO</button>
+            <button aria-pressed={gradeF === 'BHO'} onClick={() => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>}
           <section className={c('card')}>
             <div className={c(`mg mg-head ${contract ? '' : 'nc'}`)}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span>{contract && <span style={{ textAlign: 'right' }}>Your reserve</span>}</div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 14 }}>{menuItems.length ? 'Nothing matches.' : 'Nothing on the menu right now.'}</p>}
