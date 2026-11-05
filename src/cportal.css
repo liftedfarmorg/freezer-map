@@ -458,7 +458,7 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-act-mmeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .cp .cp-act-reply .cp-chip { margin-right: 4px; vertical-align: 1px; }
 
-/* 195: strain grade (SHO / BHO) and type (S, S/H, H, I/H, I): columns on desktop, one small pill on phones */
+/* 196: strain grade (SHO / BHO) and type (S, S/H, H, I/H, I): columns on desktop, one small pill on phones */
 .cp .cp-gtag, .cp .cp-ttag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .02em; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .cp .cp-gtag.cp-g-sho { background: var(--teal-bg); color: var(--teal-ink); }
 .cp .cp-gtag.cp-g-bho { background: var(--gold-bg); color: var(--gold); }
@@ -472,3 +472,19 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-odt.cp-head > :nth-child(2), .cp-desk .cp-oom.cp-head > :nth-child(2) { justify-content: center; text-align: center; }
 .cp-desk .cp-tagstack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .cp-desk .cp-odt .cp-gtag, .cp-desk .cp-odt .cp-ttag, .cp-desk .cp-oom .cp-gtag, .cp-desk .cp-oom .cp-ttag { font-size: 10px; padding: 0 6px; line-height: 16px; }
+/* desktop New order on laptop screens: tighter columns so nothing gets cut off; under 1360px the order summary moves below the lists */
+@media (max-width: 1599px) {
+  .cp-desk .cp-oside2 { grid-template-columns: minmax(0, 1fr) 290px; }
+  .cp-desk .cp-odt { grid-template-columns: minmax(110px, 1fr) 50px 58px 62px 58px 66px 66px 104px 72px; }
+  .cp-desk .cp-oom { grid-template-columns: minmax(110px, 1fr) 50px 76px 104px 56px 104px 72px; }
+  .cp-desk .cp-odt .cp-stepper button, .cp-desk .cp-oom .cp-stepper button { width: 26px; }
+  .cp-desk .cp-odt .cp-stepper input, .cp-desk .cp-oom .cp-stepper input { width: 42px; }
+  .cp-desk .cp-odt, .cp-desk .cp-oom { font-size: 14px; }
+}
+@media (max-width: 1359px) {
+  .cp-desk .cp-oside2 { grid-template-columns: minmax(0, 1fr); }
+  .cp-desk .cp-opanel2 { position: static; max-height: none; }
+}
+/* never clip: if a table still doesn't fit, it scrolls sideways inside its card */
+.cp-desk .cp-dorder .cp-olists > .cp-card { overflow-x: auto; }
+.cp-desk .cp-dorder .cp-odt, .cp-desk .cp-dorder .cp-oom { min-width: 640px; }

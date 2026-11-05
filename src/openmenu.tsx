@@ -8,14 +8,14 @@ import './openmenu.css'
 
 export interface MenuLine { product: 'FF' | 'ST' | 'SM'; strain: string; crop_year: number; open_lbs: number; price: number | null; strain_type: string | null
   lineage: string | null; sho: number | null; bho: number | null; thc: number | null; photo_url: string | null; note: string | null
-  /** 195: strain's default grade (SHO / BHO); missing until 195 is run */
+  /** 196: strain's default grade (SHO / BHO); missing until 196 is run */
   grade?: string | null }
 type Group = 'ff' | 'df'
 const GROUP: Record<Group, string> = { ff: 'Fresh Frozen', df: 'Dry Flower' }
 const PROD: Record<MenuLine['product'], string> = { FF: 'Fresh Frozen', ST: 'Standards', SM: 'Smalls' }
 const SALES = 'sales@lifted-organics.com'
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
-// 195: type short codes (S, S/H, H, I/H, I); grade + type are columns on wide screens, one small pill on phones
+// 196: type short codes (S, S/H, H, I/H, I); grade + type are columns on wide screens, one small pill on phones
 const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
 const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
 const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null

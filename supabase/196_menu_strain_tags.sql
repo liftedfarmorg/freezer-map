@@ -1,6 +1,6 @@
--- Migration 195: customer portal menu shows each strain's grade (SHO / BHO) and type (S, S/H, H, I/H, I).
+-- Migration 196: customer portal menu shows each strain's grade (SHO / BHO) and type (S, S/H, H, I/H, I).
 -- Customers can't read the strains table, so this hands them just name, aliases, type and default grade.
--- Also adds the grade to the public open menu link and Sales > Open menu. Read only. Safe to re-run. Run after 194.
+-- Also adds the grade to the public open menu link and Sales > Open menu. Read only. Safe to re-run. Run after 195 (view as per tab).
 set client_min_messages = warning;
 
 create or replace function menu_strain_tags()

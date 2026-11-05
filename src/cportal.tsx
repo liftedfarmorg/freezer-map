@@ -108,7 +108,7 @@ export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
   st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; acts: Act[]; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
-  /** 195: strain (lowercase name or alias) -> grade SHO/BHO and type short code (S, S/H, H, I/H, I) */
+  /** 196: strain (lowercase name or alias) -> grade SHO/BHO and type short code (S, S/H, H, I/H, I) */
   tags: Record<string, Tag>
 }
 /** strain grade + type as the menu shows them */
@@ -144,7 +144,7 @@ async function loadAll(backend: Backend): Promise<Data> {
   // 175: this customer's price per strain + crop year (contract, else item card, else market), same as place_order uses
   const lp = await safe(Promise.resolve(backend.client()?.rpc('my_line_prices')).then(r => (r?.data ?? []) as { strain: string; crop_year: number; price: number | null }[]), [])
   const linePrices: Record<string, number | null> = Object.fromEntries(lp.map(x => [`${x.strain}|${x.crop_year}`, x.price != null ? Number(x.price) : null]))
-  // 195: grade + type per strain (until 195 is run this comes back empty and the columns show –)
+  // 196: grade + type per strain (until 196 is run this comes back empty and the columns show –)
   const tg = await safe(Promise.resolve(backend.client()?.rpc('menu_strain_tags')).then(r => (r?.data ?? []) as { strain: string; aliases: string[] | null; strain_type: string | null; grade: string | null }[]), [])
   const tags: Record<string, Tag> = {}
   for (const x of tg) { const v = { g: x.grade ?? null, t: x.strain_type ? TYPE_SHORT[x.strain_type] ?? null : null }
@@ -286,7 +286,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const cy = d?.cy ?? new Date().getFullYear()
   const contract = !!d?.contract
   const yrTag = (y: number) => y < cy ? <span className={c('yr old')}>{y} crop</span> : null
-  // 195: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns, phones a small pill
+  // 196: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns, phones a small pill
   const tagOf = (s: string): Tag => d?.tags[s.toLowerCase().trim()] ?? { g: null, t: null }
   const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}</span> }
   const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : <span className={c('muted')}>–</span>}</span> }
