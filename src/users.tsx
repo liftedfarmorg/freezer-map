@@ -141,12 +141,13 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
           <div className="seg">{LANGS.map(([v, l]) => <button key={v} className={(u.prefs?.lang ?? 'en') === v ? 'on' : ''} disabled={locked} onClick={() => set({ prefs: { ...u.prefs, lang: v } })}>{l}</button>)}</div></div>}
         <div className="field"><label>Type</label>
           <div className="choices col">
-            {KINDS.map(k => (
+            {KINDS.filter(k => k.k !== 'customer' || kindOf(user) === 'customer').map(k => (
               <button key={k.k} className={kind === k.k ? 'on' : ''} disabled={kindLocked || (isMe && k.k !== 'staff')} onClick={() => setKind(k.k)}>
                 <b>{k.label}</b> <span className="muted">{k.what}</span>
               </button>
             ))}
           </div>
+          {kindOf(user) !== 'customer' && <p className="muted small">Customer portal logins are added in the Customer logins tab or on the customer's card.</p>}
         </div>
         {kind === 'customer' && (
           <div className="field"><label>Customer account</label>
