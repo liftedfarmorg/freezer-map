@@ -455,7 +455,12 @@ async function deliveryWith(ctx, license, tag) {
 
 export async function sendReceive(job, ctx) {
   const d = job.details || {}
-  const tag = up(job.tag ?? d.new_tag ?? d.tag)
+  let tag = up(job.tag ?? d.new_tag ?? d.tag)
+  // a mixed pallet has no tag of its own: any package on it finds the same manifest (receiving takes the whole manifest)
+  if (!tag && job.pallet_id) {
+    const inside = await db(`pallets?select=package_tag&container_id=eq.${job.pallet_id}&package_tag=not.is.null&limit=1`).catch(() => [])
+    tag = up(inside?.[0]?.package_tag)
+  }
   if (!tag) throw new Error('No tag on this to-do')
   const site = d.site ?? d.to_site
   const lic = d.to_license ?? (site ? (await rpc('site_license', { p_site: site }).catch(() => null)) : null) ?? job.license
@@ -472,6 +477,8 @@ export async function sendReceive(job, ctx) {
   await db(`metrc_app_transfers?delivery_id=eq.${del.delivery_id}`, { method: 'PATCH', body: JSON.stringify({ state: 'received', received_at: new Date().toISOString(), received_by: ctx.by }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
   const tags = del.items.map(p => up(p.tag))
   const sibs = await db(`comp_metrc_actions?select=id&kind=eq.receive&status=in.(todo,error)&tag=in.(${tags.map(enc).join(',')})&id=neq.${job.id}`)
-  return { state: 'sent', request: body, response: resp, info: `Received in METRC: ${what}`, siblings: sibs.map(x => x.id) }
+  // mixed pallets on the same manifest (their to-dos have no tag) were received with it too
+  const mixed = del.manifest ? await db(`comp_metrc_actions?select=id&kind=eq.receive&status=in.(todo,error)&tag=is.null&details->>manifest=eq.${enc(del.manifest)}&id=neq.${job.id}`).catch(() => []) : []
+  return { state: 'sent', request: body, response: resp, info: `Received in METRC: ${what}`, siblings: [...sibs, ...mixed].map(x => x.id) }
 }
 
