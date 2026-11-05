@@ -1,7 +1,7 @@
-import { ListInput, Select } from './combo'
+import { Select } from './combo'
 import { useEffect, useMemo, useState } from 'react'
 import type { Backend } from './api'
-import type { Customer, Invoice, NewOrderLine, PaymentTerm, Product, Strain } from './types'
+import type { Balance, Customer, Invoice, NewOrderLine, PaymentTerm, Product, Strain } from './types'
 import { PRODUCT_LABEL, SALE_PRODUCTS } from './types'
 import type { SalesDoc } from './docs'
 import { dfmt, docTitle, downloadPdf, emailHref, makePdf, money, shareUrl, textHref } from './docs'
@@ -247,7 +247,36 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     if (!sb || cust == null) return
     sb.rpc('ship_quote', { p_customers: [cust], p_class: 'box', p_carrier_cost: null }).then(({ data }) => { const r = (data ?? [])[0]; if (r) setEst(r) })
   }, [cust])
-  const ok = cust != null && lines.some(l => l.strain.trim() && Number(l.lbs) > 0)
+  // Strain pick list (Aziz 11/4, same as the order editor): fresh frozen / standards / smalls = the open menu (+ this customer's
+  // reserves on fresh frozen); other products aren't on the menu, so they list what's on hand. One option per strain + crop year.
+  const [menu, setMenu] = useState<{ product: string; strain: string; crop_year: number; open_lbs: number }[] | null>(null)
+  const [bal, setBal] = useState<Balance[]>([])
+  useEffect(() => { backend.client()?.rpc('staff_menu').then(({ data }) => setMenu((data ?? []) as { product: string; strain: string; crop_year: number; open_lbs: number }[]), () => setMenu([])) }, [])
+  useEffect(() => { backend.listBalances().then(setBal).catch(() => {}) }, [])
+  const MENU_CODE: Partial<Record<Product, string>> = { fresh_frozen: 'FF', standards: 'ST', smalls: 'SM' }
+  const optionsFor = (product: Product) => {
+    const m = new Map<string, { k: string; strain: string; year: number; open: number; res: number }>()
+    const at = (strain: string, year: number) => { const k = `${strain.toLowerCase()}|${year}`; let x = m.get(k); if (!x) { x = { k, strain, year, open: 0, res: 0 }; m.set(k, x) } return x }
+    const code = MENU_CODE[product]
+    if (code) for (const r of menu ?? []) { if (r.product === code && Number(r.open_lbs) > 0) at(r.strain, r.crop_year).open += Number(r.open_lbs) }
+    else if (stock) for (const [k, ys] of stock) { const [name, prod] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)]
+      if (prod !== product) continue
+      const shown = strains.find(s => s.name.toLowerCase() === name)?.name ?? name
+      for (const [y, v] of ys) if (v > 0) at(shown, y).open += Math.floor(v) }
+    if (product === 'fresh_frozen' && cust != null) for (const b of bal) if (b.customer_id === cust && Number(b.remaining) > 0) at(b.strain, b.crop_year ?? CUR_YEAR).res += Number(b.remaining)
+    return [...m.values()].sort((a, b) => a.strain.localeCompare(b.strain) || b.year - a.year)
+  }
+  const lineKey = (l: { strain: string; year: number }) => `${l.strain.trim().toLowerCase()}|${l.year}`
+  // blocked past what's available: all lines of the same product + strain + crop year together
+  const lineAvail = (l: typeof lines[number]) => optionsFor(l.product).find(x => x.k === lineKey(l))
+  const lineOver = (l: typeof lines[number]) => {
+    if (!l.strain.trim() || !(Number(l.lbs) > 0)) return null
+    const a = lineAvail(l), max = a ? a.open + a.res : 0
+    const used = lines.filter(x => x.product === l.product && lineKey(x) === lineKey(l)).reduce((t, x) => t + (Number(x.lbs) || 0), 0)
+    return used > max ? max : null
+  }
+  const anyOver = lines.some(l => lineOver(l) != null)
+  const ok = cust != null && lines.some(l => l.strain.trim() && Number(l.lbs) > 0) && !anyOver
   async function save() {
     setBusy(true)
     try {
@@ -281,23 +310,22 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
           {c && <span className="muted">{c.price_per_lb != null ? `Contract price ${money(Number(c.price_per_lb))}/lb` : `No contract price: market price ${[...new Set(lines.filter(l => l.product === 'fresh_frozen').map(l => l.year))].map(y => market.has(y) ? `${money(market.get(y)!)}/lb (${y} crop)` : `not set for ${y}`).join(', ') || 'applies'}`} · {terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}</span>}
           {c && licenseWarning(c) && <div className="warnbox">{licenseWarning(c)} Compliance keeps customer licenses in Compliance › Library › Customer licenses.</div>}</div>
         <div className="field"><label>Lines <span className="muted">(price blank = their contract price for fresh frozen, or the market price if they have none; dry products get priced on the invoice)</span></label>
-          <datalist id="no-strains">{strains.filter(s => s.active).map(s => <option key={s.id} value={s.name} />)}</datalist>
           {lines.map((l, i) => (<div key={i} className="nolinewrap">
             <div className="row noline">
-              <Select value={l.product} aria-label="Product" onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, product: e.target.value as Product, year: x.yearSet ? x.year : pickYear(stock, x.strain, e.target.value) } : x))}>
+              <Select value={l.product} aria-label="Product" onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, product: e.target.value as Product, strain: '', year: CUR_YEAR, yearSet: false } : x))}>
                 {SALE_PRODUCTS.map(p => <option key={p} value={p}>{PRODUCT_LABEL[p]}</option>)}</Select>
-              <ListInput list="no-strains" placeholder="Strain" value={l.strain} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, strain: e.target.value, year: x.yearSet ? x.year : pickYear(stock, e.target.value, x.product) } : x))} />
-              <Select value={l.year} aria-label="Crop year" title="Crop year" onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, year: Number(e.target.value), yearSet: true } : x))}>
-                {[...new Set([CUR_YEAR, CUR_YEAR - 1, CUR_YEAR - 2, ...(stock?.get(sk(l.strain, l.product))?.keys() ?? [])])].sort((a, b) => b - a).map(y => <option key={y} value={y}>{y}</option>)}</Select>
+              {(() => { const opts = optionsFor(l.product), cur = l.strain.trim() ? lineKey(l) : ''
+                return <Select value={cur} aria-label="Strain" disabled={!menu || !stock} onChange={e => { const o = opts.find(x => x.k === e.target.value)
+                  setLines(ls => ls.map((x, j) => j === i ? { ...x, strain: o?.strain ?? '', year: o?.year ?? CUR_YEAR, yearSet: true } : x)) }}>
+                  <option value="">{!menu || !stock ? 'Loading…' : opts.length ? 'Strain' : 'Nothing available'}</option>
+                  {cur && !opts.some(x => x.k === cur) && <option value={cur}>{l.strain} ({l.year}) · not available</option>}
+                  {opts.map(x => <option key={x.k} value={x.k}>{x.strain}{x.year !== CUR_YEAR ? ` (${x.year} crop)` : ''} · {Math.round(x.open + x.res).toLocaleString()} lbs available{x.res > 0 ? ` (${Math.round(x.res).toLocaleString()} reserve${x.open > 0 ? ` + ${Math.round(x.open).toLocaleString()} open` : ''})` : ''}</option>)}
+                </Select> })()}
               <input type="number" placeholder="lbs" value={l.lbs} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, lbs: e.target.value } : x))} />
               <input type="number" placeholder="$/lb" value={l.price} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} />
               {lines.length > 1 && <button className="ghost small" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>✕</button>}
             </div>
-            {l.strain.trim() && stock && (() => {
-              const y = stock.get(sk(l.strain, l.product)); const here = y?.get(l.year) ?? 0
-              const txt = y ? [...y.entries()].filter(([, v]) => v > 0).sort((a, b) => b[0] - a[0]).map(([yr, v]) => `${yr}: ${Math.round(v).toLocaleString()} lb`).join(' · ') : ''
-              return <div className={`small-note ${here > 0 ? 'muted' : 'warn-t'}`}>{txt ? `In stock: ${txt}` : 'None in stock'}{here > 0 ? '' : ` · none from ${l.year}`}</div>
-            })()}
+            {lineOver(l) != null && <div className="small-note" style={{ color: 'var(--bad)', fontWeight: 600 }}>Only {Math.round(lineOver(l)!).toLocaleString()} lbs of {l.strain} ({l.year}) available{lines.filter(x => x.product === l.product && lineKey(x) === lineKey(l)).length > 1 ? ' across these lines' : ''}</div>}
             {l.product === 'fresh_frozen' && <div className="row nosample">
               <label className="check"><input type="checkbox" checked={!!l.sample} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, sample: e.target.checked } : x))} /> Sample</label>
               {l.sample && <><input type="number" step="10" min="0" placeholder="hold lbs" value={l.hold ?? ''} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, hold: e.target.value } : x))} />
