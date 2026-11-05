@@ -625,7 +625,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <div className={c('dcard-h')}><h2>Orders in progress</h2><button className={c('linkish')} style={{ minWidth: 0 }} onClick={() => { setFilter('all'); go('orders') }}>All orders</button></div>
               {open.length === 0 && <p className={c('meta')} style={{ padding: '0 18px 16px', margin: 0 }}>Nothing in progress. <button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => newOrder()}>Place an order</button></p>}
               {open.map(o => <button key={o.key} className={c('li btnrow')} style={{ borderTop: '1px solid var(--line-2)' }} onClick={() => { setFilter('all'); setOpenRow(o.key); go('orders') }}>
-                <div className={c('grow')}><p className={c('name')}>{o.label} {chip(o)}</p><p className={c('meta')}>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Wanted by {niceDate(o.wanted)}</b></> : ' · no date requested'}</p></div>
+                <div className={c('grow')}><p className={c('name')}>{o.label} {chip(o)}</p><p className={c('meta')}>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Requested delivery {niceDate(o.wanted)}</b></> : ' · no date requested'}</p></div>
                 <div className={c('r')}><b className={c('num')}>{o.amount != null ? money(o.amount) : ''}</b><p className={c('meta')}>{fmt(o.lines.reduce((a, l) => a + (l.lbs ?? 0), 0))} lbs</p></div></button>)}
             </section>
             {hs.length > 0 && <section className={c('card')} style={{ background: 'var(--gold-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1109,7 +1109,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     return <>
       <div className={c('scrim')} onClick={() => setCal(null)} />
       <div className={c('sheet')} role="dialog" aria-modal="true" aria-labelledby="cp-cal-t">
-        <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 id="cp-cal-t" style={{ margin: 0, fontSize: 20 }}>Wanted by</h2>
+        <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 id="cp-cal-t" style={{ margin: 0, fontSize: 20 }}>Requested Delivery Date</h2>
           <button className={c('iconbtn')} style={{ color: 'var(--ink)', borderColor: 'var(--line)' }} onClick={() => setCal(null)} aria-label="Close">{I.close}</button></div>
         <div className={c('row')} style={{ justifyContent: 'space-between' }}><button className={c('calnav')} onClick={() => nav(-1)} disabled={!canPrev} aria-label="Previous month">{I.back}</button>
           <b style={{ fontSize: 16 }}>{first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</b>
@@ -1210,9 +1210,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               </div>
               <div style={{ padding: '14px 18px', background: '#f7f9f6', borderTop: '1px solid var(--line-2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <p className={c('num')} style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{fmt(oTot.lbs)} lbs{oTot.amount != null && oTot.lbs ? ` · ${money(oTot.amount)}` : ''}</p>
-                <div className={c('field')} style={{ marginTop: 8 }}><span id="cp-wanted-l">When do you want it?</span>
+                <div className={c('field')} style={{ marginTop: 8 }}><span id="cp-wanted-l">Requested Delivery Date</span>
                   <button type="button" className={c('datebtn')} aria-labelledby="cp-wanted-l" aria-haspopup="dialog" onClick={() => { const b = wanted ? new Date(wanted + 'T12:00') : today0(); setCal({ y: b.getFullYear(), m: b.getMonth() }) }}>
-                    {wanted ? niceDate(wanted) : <span style={{ color: '#8a948d' }}>Choose a wanted-by date</span>}{I.cal}</button></div>
+                    {wanted ? niceDate(wanted) : <span style={{ color: '#8a948d' }}>Choose a delivery date</span>}{I.cal}</button></div>
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button className={c('btn full')} disabled={!oTot.lbs || oTot.bad} onClick={() => go('review')}>{label}</button>
                   {detail.length > 0 && <button className={c('linkish')} style={{ minWidth: 0, textAlign: 'center' }} onClick={() => { setOrd({}); setSmp({}); setHoldAsk({}) }}>Clear order</button>}
@@ -1249,7 +1249,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             {section(orderable.others) ?? <p className={c('meta')} style={{ margin: '0 4px' }}>Nothing open on the menu right now.</p>}</>
           const fields = <section className={c('card')} style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className={c('grid2')}><label className={c('field')}>PO # <span className={c('meta')} style={{ marginTop: -6 }}>optional</span><input type="text" value={po} onChange={e => setPo(e.target.value)} /></label>
-              <div className={c('field')}><span id="cp-wanted-l">Wanted by</span><span className={c('meta')} style={{ marginTop: -6 }}>optional</span>
+              <div className={c('field')}><span id="cp-wanted-l">Requested Delivery Date</span><span className={c('meta')} style={{ marginTop: -6 }}>optional</span>
                 <button type="button" className={c('datebtn')} aria-labelledby="cp-wanted-l" aria-haspopup="dialog" onClick={() => { const b = wanted ? new Date(wanted + 'T12:00') : today0(); setCal({ y: b.getFullYear(), m: b.getMonth() }) }}>
                   {wanted ? niceDate(wanted) : <span style={{ color: '#8a948d' }}>Choose a date</span>}{I.cal}</button></div></div>
             <label className={c('field')}>Note <span className={c('meta')} style={{ marginTop: -6 }}>optional</span><input type="text" placeholder="Pickup or delivery details" value={note} onChange={e => setNote(e.target.value)} /></label>
@@ -1313,7 +1313,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           </section>}
           {(po || wanted || note) && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {po && <span><span className={c('meta')} style={{ display: 'inline' }}>PO</span> {po}</span>}
-            {wanted && <span><span className={c('meta')} style={{ display: 'inline' }}>Wanted by</span> {niceDate(wanted)}</span>}
+            {wanted && <span><span className={c('meta')} style={{ display: 'inline' }}>Requested delivery</span> {niceDate(wanted)}</span>}
             {note && <span><span className={c('meta')} style={{ display: 'inline' }}>Note</span> {note}</span>}</section>}
           {detail.filter(x => x.hold).map(x => <div key={'h' + x.k} className={c('note gold')}><b>Sample hold:</b> we'll hold {fmt(x.hold)} lbs of {x.s} for you for <b>{d?.holdDays ?? 10} days after this order ships</b>, so you can try the sample first. The hold starts once Lifted confirms the order. {contract ? 'Reserve' : 'Order'} them any time before it ends.</div>)}
           <p className={c('meta')} style={{ margin: '0 4px' }}>Lifted confirms every order before it ships.</p>
@@ -1335,7 +1335,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {desk ? <>{orderTable(o.detail, o)}
             {(o.po || o.wanted || o.note) && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {o.po && <span><span className={c('meta')} style={{ display: 'inline' }}>PO</span> {o.po}</span>}
-              {o.wanted && <span><span className={c('meta')} style={{ display: 'inline' }}>Wanted by</span> {niceDate(o.wanted)}</span>}
+              {o.wanted && <span><span className={c('meta')} style={{ display: 'inline' }}>Requested delivery</span> {niceDate(o.wanted)}</span>}
               {o.note && <span><span className={c('meta')} style={{ display: 'inline' }}>Note</span> {o.note}</span>}</section>}
             {o.detail.filter(x => x.hold).map(x => <div key={'h' + x.k} className={c('note gold')}><b>Sample hold:</b> we'll hold {fmt(x.hold)} lbs of {x.s} for you for <b>{d?.holdDays ?? 10} days after this order ships</b>. The hold starts once Lifted confirms the order.</div>)}</>
           : <section className={c('card')}>{o.detail.map(x => <div key={x.k} className={c('li')}><div className={c('grow')}><p className={c('name')}>{x.s} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</p>
@@ -1368,7 +1368,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             const tags = o.status === 'submitted' ? <span className={c('chip c-sub')}>Submitted</span> : o.status === 'approved' ? <span className={c('chip c-ok')}>Approved</span> : o.status === 'fulfillment' ? <span className={c('chip c-ful')}>In fulfillment</span>
               : <><span className={c('chip c-ship')}>Shipped</span>{o.paid != null && <> <span className={c(`chip ${o.paid ? 'c-paid' : 'c-unpaid'}`)}>{o.paid ? 'Paid' : 'Unpaid'}</span></>}</>
             const sub = o.status !== 'shipped'
-              ? <>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Wanted by {niceDate(o.wanted)}</b></> : ' · no date requested'}</>
+              ? <>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Requested delivery {niceDate(o.wanted)}</b></> : ' · no date requested'}</>
               : <>Shipped {shortDate(o.date)}{o.paid === false && o.due ? ` · due ${shortDate(o.due)}` : ''}</>
             return <div key={o.key} style={{ borderBottom: '1px solid var(--line-2)', background: isOpen ? '#fbfcfb' : undefined }}>
               <button className={c('li btnrow')} onClick={() => setOpenRow(isOpen ? null : o.key)} aria-expanded={isOpen}>
@@ -1395,7 +1395,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         {cx && <><div className={c('scrim')} onClick={() => setConfirmCancel(null)} />
           <div className={c('sheet')} role="alertdialog" aria-modal="true" aria-labelledby="cp-cx-t">
             <h2 id="cp-cx-t" style={{ margin: 0, fontSize: 22 }}>Cancel {cx.label}?</h2>
-            <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>{fmt(cx.lines.reduce((a, l) => a + (l.lbs ?? 0), 0))} lbs{cx.amount != null ? ` · ${money(cx.amount)}` : ''}, placed {shortDate(cx.date)}{cx.wanted ? `, wanted by ${niceDate(cx.wanted)}` : ''}. Any reserve lbs on this order go back to your reserve. This can't be undone.</p>
+            <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>{fmt(cx.lines.reduce((a, l) => a + (l.lbs ?? 0), 0))} lbs{cx.amount != null ? ` · ${money(cx.amount)}` : ''}, placed {shortDate(cx.date)}{cx.wanted ? `, requested delivery ${niceDate(cx.wanted)}` : ''}. Any reserve lbs on this order go back to your reserve. This can't be undone.</p>
             <div className={c('card')} style={{ background: '#f7f9f6' }}>{cx.lines.map((l, i) => <div key={i} className={c('li')}><span className={c('grow')}>{l.s} {l.y != null && yrTag(l.y)}</span><b className={c('num')}>{fmt(l.lbs)} lbs</b></div>)}</div>
             <button className={c('btn full')} style={{ background: 'var(--red)' }} disabled={busy} onClick={async () => {
               const ok = await run(() => backend.cancelMyOrder(cx.order!.id).then(() => true)); setConfirmCancel(null)

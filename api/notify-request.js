@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     subject = `${changed ? 'Changed order' : 'New order'}: ${q.customer} · ${lbs(total)} lbs`
     html = wrap(`<p><b>${esc(q.customer)}</b> ${changed ? 'changed an order. It now has' : 'placed an order for'} ${lbs(total)} lbs${changed ? ' and is back to Submitted for you to confirm again' : ''}.</p>
       <table style="border-collapse:collapse">${rows}</table>
-      <p>Placed by ${esc(who)}${q.po ? `<br>PO: ${esc(q.po)}` : ''}${q.wanted ? `<br>Wanted by: ${esc(q.wanted)}` : ''}${q.note ? `<br>Note: "${esc(q.note)}"` : ''}</p>
+      <p>Placed by ${esc(who)}${q.po ? `<br>PO: ${esc(q.po)}` : ''}${q.wanted ? `<br>Requested Delivery Date: ${esc(q.wanted)}` : ''}${q.note ? `<br>Note: "${esc(q.note)}"` : ''}</p>
       <p><a href="${esc(app)}/?go=orders">Review and confirm in Lifted Inventory Management</a> (Sales &gt; Orders).</p>`)
   } else {
     const up = Number(q.to) > Number(q.from)
