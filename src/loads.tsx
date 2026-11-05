@@ -240,6 +240,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const [xfers, setXfers] = useState<AppTransfer[]>([])
   const [modes, setModes] = useState<Record<string, string>>({})
   const [checking, setChecking] = useState(false)
+  const [bump, setBump] = useState(0)
   const [openCheck, setOpenCheck] = useState<number | null>(null)
   const [blockers, setBlockers] = useState<LoadBlocker[] | null>(null)
   const [ship, setShip] = useState<Map<number, StopShipping>>(new Map())
@@ -263,7 +264,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const sig = JSON.stringify([lNow?.status, lNow?.carrier_cost, lNow?.pickup_driver, lNow?.pickup_dl, lNow?.pickup_make, lNow?.pickup_model, lNow?.pickup_plate,
     ctx.items.filter(i => i.load_id === loadId).map(i => [i.id, i.loaded, i.stop_id]),
     ctx.stops.filter(s => s.load_id === loadId).map(s => [s.id, s.status, s.ship_override, s.manifest]),
-    (ctx.orders ?? []).filter(o => o.stop?.load_id === loadId).map(o => [o.id, o.fill, o.shipping, o.lines.map(l => l.picks.map(p => [p.pallet_id, p.lbs]))])])
+    (ctx.orders ?? []).filter(o => o.stop?.load_id === loadId).map(o => [o.id, o.fill, o.shipping, o.lines.map(l => l.picks.map(p => [p.pallet_id, p.lbs]))]), bump])
   useEffect(() => {
     const sb = ctx.api.client()
     if (!sb || !lNow || !['planning', 'loading', 'departing'].includes(lNow.status)) { setBlockers(null); setShip(new Map()); return }
@@ -273,6 +274,21 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
       .then(rs => { if (!gone) setShip(new Map(rs.filter((x): x is readonly [number, StopShipping] => !!x))) })
     return () => { gone = true }
   }, [sig])
+  // 207: a pallet not received in METRC yet blocks Depart; send that receive right from here (Aziz 11/4)
+  async function sendReceive(id: number) {
+    const sb = ctx.api.client(); if (!sb) return
+    await ctx.run(async () => {
+      type R = { live: boolean; results: { id: number; state: string; error?: string; info?: string }[]; not_sent?: number[] }
+      const r = await metrcRun<R>(sb, { action: 'send', ids: [id] })
+      const x = r.results.find(y => y.id === id)
+      setBump(n => n + 1)
+      if (r.not_sent?.includes(id)) throw new Error('Receiving isn\'t switched on for the app (Compliance › Settings › METRC through T3). Receive it in METRC, then click Done on the to-do.')
+      if (!x) throw new Error('Not sent: run out of time, try again')
+      if (x.state === 'failed') throw new Error(x.error ?? 'Receive failed')
+      if (x.state === 'waiting') throw new Error(x.error ?? 'METRC has nothing to receive yet')
+      if (!r.live) throw new Error('METRC sending is on dry run (not Live), so nothing was received. Receive it in METRC, then click Done on the to-do.')
+    }, 'Received in METRC')
+  }
   async function runChecks() {
     const sb = ctx.api.client(); if (!sb || !l) return
     setChecking(true)
@@ -523,7 +539,9 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
 
       {canEdit && blockers && blockers.length > 0 && <div className="warnbox blockers">
         <b>Before it can leave:</b>
-        <ul>{blockers.map((b, k) => <li key={k}>{b.seq ? `Stop ${b.seq}: ` : ''}{b.order_id ? <a onClick={() => ctx.openOrder?.(b.order_id!)}>{b.text}</a> : b.text}</li>)}</ul></div>}
+        <ul>{blockers.map((b, k) => { const rcv = /isn't received in METRC yet \(to-do #(\d+)\)/.exec(b.text)
+          return <li key={k}>{b.seq ? `Stop ${b.seq}: ` : ''}{b.order_id ? <a onClick={() => ctx.openOrder?.(b.order_id!)}>{b.text}</a> : b.text}
+            {rcv && <> <button className="primary small" disabled={ctx.busy} onClick={() => sendReceive(Number(rcv[1]))}>Send receive</button></>}</li> })}</ul></div>}
       <div className="row actions">
         {canEdit && !isPickup(l) && <button className="ghost" disabled={ctx.busy || !items.length} onClick={() => ctx.run(() => ctx.api.arrangeLoad(l.id), 'Arranged: last stop at the nose')}>Auto-arrange</button>}
         {canEdit && items.length > 0 && <button className="ghost" disabled={ctx.busy || checking} onClick={runChecks}>{checking ? 'Checking METRC…' : 'Check METRC'}</button>}
