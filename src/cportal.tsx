@@ -291,6 +291,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}</span> }
   const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : <span className={c('muted')}>–</span>}</span> }
   const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpill')} title={[g, t && TYPE_LONG[t]].filter(Boolean).join(' · ')}>{[g, t].filter(Boolean).join(' · ')}</span> : null }
+  // order screens are tight: grade over type in one narrow column
+  const stackCell = (s: string) => { const { g, t } = tagOf(s); return <span className={c('tagcell tagstack')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : <span className={c('muted')}>–</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> }
   const gradeN = (s: string) => ({ SHO: 1, BHO: 2 } as Record<string, number>)[tagOf(s).g ?? ''] ?? 9
   const typeN = (s: string) => TYPE_ORDER[tagOf(s).t ?? ''] ?? 9
 
@@ -1073,7 +1075,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const sub = l.resLeft ? <>{fmt(l.resLeft)} reserve + {fmt(l.open)} open</> : l.hold ? <span style={{ color: 'var(--gold)' }}>incl. {fmt(l.hold)} held for you</span> : null
     const unpick = () => { const o = { ...ord }; delete o[l.k]; setOrd(o); const s = { ...smp }; delete s[l.k]; setSmp(s); const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) }
     const head = <div className={c('mg')}>
-      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}</div>
+      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s} {tagPill(l.s)}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}</div>
       <b className={c('num mg-a')}>{fmt(sp.max)}</b>
       <div style={{ textAlign: 'right' }}>{picked ? <button className={c('linkish')} style={{ color: 'var(--red)' }} onClick={unpick}>Remove</button>
         : <button className={c('outline-btn')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+ Add</button>}</div></div>
@@ -1129,18 +1131,19 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const show = (l: OLine) => (!oq || l.s.toLowerCase().includes(oq) || l.k in ord) && (menuYear === 'all' || l.y === menuYear)
     const years = [...new Set(allLines.map(l => l.y))].sort((a, b) => b - a)
     const rg = (l: OLine) => resRow(l.k)
-    const resd = sortRows('ores', orderable.resd.filter(show), { res: l => rg(l)?.res ?? 0, ful: l => rg(l)?.ful ?? 0, so: l => rg(l)?.so ?? 0, rem: l => rg(l)?.rem ?? 0, open: l => l.open })
-    const others = sortRows('oom', orderable.others.filter(show), { open: l => l.open })
+    const resd = sortRows('ores', orderable.resd.filter(show), { g: l => gradeN(l.s), t: l => typeN(l.s), res: l => rg(l)?.res ?? 0, ful: l => rg(l)?.ful ?? 0, so: l => rg(l)?.so ?? 0, rem: l => rg(l)?.rem ?? 0, open: l => l.open })
+    const others = sortRows('oom', orderable.others.filter(show), { open: l => l.open, g: l => gradeN(l.s), t: l => typeN(l.s) })
     const clearLine = (k: string) => { const o = { ...ord }; delete o[k]; setOrd(o); const s0 = { ...smp }; delete s0[k]; setSmp(s0); const h = { ...holdAsk }; delete h[k]; setHoldAsk(h) }
     const setQ0 = (k: string, n: number) => { if (n > 0) setOrd({ ...ord, [k]: n }); else clearLine(k) }
     const money0 = (l: OLine, qv: number) => { const p0 = priceOf(l.y, l.s); return qv > 0 && p0 != null ? money(qv * p0) : '' }
     const label = oTot.bad ? 'Fix the red lines' : editing ? 'Review changes' : 'Review order'
-    const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
+    const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'g', <>Grade<br />Type</>)}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
     const line = (l: OLine) => {
       const r = resRow(l.k), qv = ord[l.k] ?? 0, sp = lineSplit(l, qv), isSmp = !!smp[l.k], e = qv && !isSmp ? lineError(l, qv) : ''
       const split = qv > 0 && !e && !not10(qv) ? <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} open menu</span>}</> : null
       return <div key={l.k} className={c(`odt ${qv && !isSmp ? (e ? 'bad' : 'on') : ''}`)}>
         <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
+        {stackCell(l.s)}
         {r?.res ? <><span>{fmt(r.res)}</span><span>{fmt(r.ful)}</span><span>{fmt(r.so)}</span><b>{fmt(r.rem)}</b></> : <><span className={c('muted')}>–</span><span className={c('muted')}>–</span><span className={c('muted')}>–</span><span className={c('muted')}>–</span></>}
         <span className={c('muted')}>{fmt(l.open)}</span>
         <span>{isSmp ? <span className={c('muted')} style={{ fontSize: 13 }}>In samples ↓</span>
@@ -1155,6 +1158,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       const split = qv > 0 && !e ? <>{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held for you</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} from open menu</span>}</> : null
       return <div key={l.k} className={c(`oom ${qv ? (e ? 'bad' : 'on') : ''}`)}>
         <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && !qv && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}{isSmp && <span className={c('chip c-wait')}>Sample</span>}{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
+        {stackCell(l.s)}
         <span className={c('muted')}>{fmt(l.open)}</span>
         <span><AdjStepper plain what="to order" val={qv} step={isSmp ? 10 : rmStep} min={0} max={sp.max} bad={!!lineError(l, qv) && qv > 0} label={l.s} onChange={n => setQ0(l.k, n)} /></span>
         <span>{canSmp && <input type="checkbox" className={c('smpchk')} checked={isSmp} aria-label={`Order ${l.s} as a sample`}
@@ -1188,7 +1192,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </section>}
             <section className={c('card')}>
               <div className={c('dcard-h')}><h2>From the open menu</h2><span className={c('meta')} style={{ margin: 0 }}>Tick Sample to try a strain first. If you like it, we hold it for you for {d?.holdDays ?? 10} days after the sample ships.</span></div>
-              <div className={c('oom head')}>{sh('oom', 's', 'Strain')}{sh('oom', 'open', <>Open menu<br />available</>)}<span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
+              <div className={c('oom head')}>{sh('oom', 's', 'Strain')}{sh('oom', 'g', <>Grade<br />Type</>)}{sh('oom', 'open', <>Open menu<br />available</>)}<span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
               {others.length ? others.map(openLine) : <p className={c('meta')} style={{ padding: '12px 18px', margin: 0 }}>{oq ? 'Nothing on the open menu matches.' : 'Nothing open on the menu right now.'}</p>}
             </section>
           </div>
@@ -1199,7 +1203,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               {detail.length === 0 && <p className={c('meta')} style={{ padding: '0 18px 16px', margin: 0 }}>Use + or type lbs on any strain to start your order.</p>}
               <div className={c('olines')}>
                 {detail.map(x => <div key={x.k} className={c('oline')}>
-                  <div className={c('row')} style={{ gap: 8 }}><span className={c('grow')} style={{ fontWeight: 600, minWidth: 0 }}>{x.s} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</span>
+                  <div className={c('row')} style={{ gap: 8 }}><span className={c('grow')} style={{ fontWeight: 600, minWidth: 0 }}>{x.s} {tagPill(x.s)} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</span>
                     <span className={c('num')}>{fmt(x.q)} lbs</span>{x.price != null && <b className={c('num')} style={{ width: 78, textAlign: 'right' }}>{money(x.q * x.price)}</b>}</div>
                   {x.sample && x.hold > 0 && <p className={c('meta')} style={{ margin: '2px 0 0', fontSize: 12 }}>Hold {fmt(x.hold)} lbs if you like it</p>}
                 </div>)}
