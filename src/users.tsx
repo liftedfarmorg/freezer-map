@@ -136,7 +136,7 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
           <input type="email" value={u.email ?? ''} disabled={!isNew} autoFocus={isNew} onChange={e => set({ email: e.target.value })} placeholder="name@company.com" /></div>
         <div className="field"><label>Name <span className="muted">(what the app shows)</span></label>
           <input value={u.display_name ?? ''} disabled={locked} onChange={e => set({ display_name: e.target.value })} /></div>
-        {kind === 'staff' && <div className="field"><label>Phone <span className="muted">(goes on METRC manifests when they drive)</span></label>
+        {kind === 'staff' && <div className="field"><label>Phone <span className="muted">(contact number)</span></label>
           <input type="tel" value={u.phone ?? ''} onChange={e => set({ phone: e.target.value })} placeholder="831-555-0100" /></div>}
         {kind === 'staff' && <div className="field"><label>Language <span className="muted">(they can change it in My settings too)</span></label>
           <div className="seg">{LANGS.map(([v, l]) => <button key={v} className={(u.prefs?.lang ?? 'en') === v ? 'on' : ''} disabled={locked} onClick={() => set({ prefs: { ...u.prefs, lang: v } })}>{l}</button>)}</div></div>}

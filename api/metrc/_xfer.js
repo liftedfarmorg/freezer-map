@@ -46,13 +46,12 @@ export async function planTransfer(ctx, spec) {
       : !type ? `"${typeName}" isn't one of ${lic}'s transfer types in METRC (${types.map(t => t.name).join(', ')})`
         : wholesale ? `"${type.name}" is a wholesale type (needs prices). We don't put prices on manifests: pick another type.` : type.name)
 
-  // the driver's phone (Vehicles > Drivers, else their person in the app, SQL 200), else the default in Settings, else METRC's default
-  const drvPhone = spec.driver ? String((await rpc('metrc_driver_phone', { p_name: spec.driver }).catch(() => null)) ?? '').trim() : ''
+  // the shipping license's phone (Compliance > Settings, 202), always (Aziz 11/4); else the default in Settings, else METRC's default
   const licPhone = String((await one(`licenses?license_no=eq.${enc(lic)}&select=metrc_phone`).catch(() => null))?.metrc_phone ?? '').trim()
   const dflt = String(await setting('comp.metrc_phone', '') ?? '').trim()
-  const phone = drvPhone || licPhone || dflt || inp.defaultPhoneNumberForQuestions || ''
-  add('phone', 'Phone for questions', phone, phone ? `${phone}${drvPhone ? ` (${spec.driver})` : licPhone ? ` (${lic})` : ' (default)'}`
-    : spec.driver ? `Add ${spec.driver}'s phone in Compliance > Vehicles > Drivers` : 'Pick the driver on the load (their phone goes on the manifest)')
+  const phone = licPhone || dflt || inp.defaultPhoneNumberForQuestions || ''
+  add('phone', 'Phone for questions', phone, phone ? `${phone}${licPhone ? ` (${lic})` : ' (default)'}`
+    : `Add a phone for ${lic} in Compliance > Settings > METRC through T3`)
 
   const dest = spec.toLicense ? await facility(ctx, '/v2/transfers/create/destinations', lic, spec.toLicense) : null
   add('destination', 'Destination license', dest, !spec.toLicense ? `${spec.toName ?? 'The destination'} has no license number in the app`

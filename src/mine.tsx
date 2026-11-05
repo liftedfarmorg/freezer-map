@@ -47,7 +47,7 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
       <section className="dcard"><h3>{t('Phone')}</h3>
         <div className="row"><input type="tel" value={phone} placeholder="831-555-0100" onChange={e => setPhone(e.target.value)} />
           <button className="primary small" disabled={busy || phone.trim() === phone0} onClick={savePhone}>{t('Save')}</button></div>
-        <p className="muted">{t('Goes on METRC manifests as the phone for questions when you drive a load.')}</p></section>
+        <p className="muted">{t('So people in the app can reach you.')}</p></section>
 
       <section className="dcard"><h3>{lang() === 'es' ? 'Idioma · Language' : 'Language · Idioma'}</h3>
         {seg(p.lang ?? 'en', LANGS, v => savePref({ lang: v }, v === 'es' ? 'Idioma: español' : 'Language: English'))}

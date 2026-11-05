@@ -59,7 +59,7 @@ export function T3More({ c, conn, set, save }: { c: Ctx; conn: T3Conn | null; se
           <option value="">Pick…</option>{trucks.map(t => <option key={t.id} value={String(t.id)}>{t.name}{t.make && t.model && t.plate ? '' : ' (needs make / model / plate)'}</option>)}</Select></div>
     </div>
     <h4 style={{ marginTop: 10 }}>Phone for questions, by license</h4>
-    <p className="muted small">Goes on the METRC manifest when the driver has no phone of their own (Vehicles &gt; Drivers or My settings).</p>
+    <p className="muted small">Goes on every METRC manifest from that license.</p>
     <div className="grid2">{lics.map(l => <div className="field" key={l.license_no}><label>{l.site ? `${l.site} ` : ''}{l.kind} · {l.license_no}</label>
       <input type="tel" value={ph[l.license_no] ?? l.metrc_phone ?? ''} disabled={!c.isAdmin} placeholder="831-555-0100"
         onChange={e => setPh(x => ({ ...x, [l.license_no]: e.target.value }))} onBlur={() => savePhone(l.license_no)} /></div>)}</div>
