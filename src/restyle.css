@@ -190,3 +190,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 @media (max-width: 767px) { .is-preview body::before { bottom: calc(76px + env(safe-area-inset-bottom)); } }
 
 @media (max-width: 999px) { .invcards { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px, 1fr); grid-template-columns: none; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; } .invcards::-webkit-scrollbar { display: none; } }
+
+/* stat strips (Map and others): one row, card look */
+.app.shell .stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+.app.shell .stats > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--r-shadow); }
