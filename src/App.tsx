@@ -84,15 +84,15 @@ type Mod = 'dist' | 'sales' | 'cult' | 'nurs' | 'proc' | 'acct' | 'comp' | 'admi
 const MOD_KEY: Record<Mod, ModKey> = { dist: 'distribution', sales: 'sales', cult: 'cultivation', nurs: 'nursery', proc: 'processing', acct: 'accounting', comp: 'compliance', admin: 'admin' }
 const KEY_MOD: Record<ModKey, Mod> = { distribution: 'dist', sales: 'sales', cultivation: 'cult', nursery: 'nurs', processing: 'proc', accounting: 'acct', compliance: 'comp', admin: 'admin' }
 /** Admin > Settings: every module's settings in one place */
-const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distribution'], ['sales', 'Sales'], ['cult', 'Production'], ['nurs', 'Nursery'], ['proc', 'Processing'], ['acct', 'Accounting'], ['comp', 'Compliance']]
-const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Production', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
+const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distribution'], ['sales', 'Sales'], ['cult', 'Cultivation'], ['nurs', 'Nursery'], ['proc', 'Processing'], ['acct', 'Accounting'], ['comp', 'Compliance']]
+const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Cultivation', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
 type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
 type AdminTab = 'dash' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
-const MOD_SHORT: Record<Mod, string> = { dist: 'Dist', sales: 'Sales', cult: 'Prod', nurs: 'Nursery', proc: 'Proc', acct: 'Acct', comp: 'Comp', admin: 'Admin' }
+const MOD_SHORT: Record<Mod, string> = { dist: 'Dist', sales: 'Sales', cult: 'Cult', nurs: 'Nursery', proc: 'Proc', acct: 'Acct', comp: 'Comp', admin: 'Admin' }
 const MOD_ICON: Record<Mod, ReactNode> = {
   dist: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="1" y="7" width="14" height="10" /><path d="M15 10h4l3 3v4h-7" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /></svg>,
   sales: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>,
@@ -305,7 +305,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       if (e.type === 'fulfill_unloaded') return `${o} taken off ${d?.load}`
       return `${o}: Sales OK'd ${d?.strain} at ${lbs(Number(d?.to ?? 0))} (ordered ${lbs(Number(d?.from ?? 0))})` }
     case 'user_access': { const d = e.details as { email?: string; owner?: boolean; kind?: string; access?: Record<string, string> } | null
-      return `${d?.email}: ${d?.kind !== 'staff' ? d?.kind : d?.owner ? 'Owner' : Object.entries(d?.access ?? {}).map(([m, l]) => `${m === 'cultivation' ? 'production' : m} ${l}`).join(', ') || 'no modules'}` }
+      return `${d?.email}: ${d?.kind !== 'staff' ? d?.kind : d?.owner ? 'Owner' : Object.entries(d?.access ?? {}).map(([m, l]) => `${m} ${l}`).join(', ') || 'no modules'}` }
     case 'app_setting': { const d = e.details as { key?: string; value?: string } | null; return `App setting ${d?.key} set to ${d?.value}` }
     case 'user_hidden_modules': { const d = e.details as { email?: string; hidden?: string[] } | null
       return `${d?.email} hidden modules: ${(d?.hidden ?? []).join(', ') || 'none'}` }
@@ -417,6 +417,7 @@ export default function App() {
   const [acctTab, setAcctTabS] = useState<ATab>(GO_ACCT ? (QBO_BACK || GO_ACCT_SETTINGS ? 'settings' : 'dashboard') : 'dashboard')
   const [nurTab, setNurTabS] = useState<NTab>(() => ([...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === stored('nur.tab'))?.t ?? 'dashboard'))
   const [modMenu, setModMenu] = useState(false)
+  const [railMenu, setRailMenu] = useState(false)
   const [more, setMore] = useState(false)
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
@@ -905,19 +906,35 @@ export default function App() {
 
   return (
     <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${modCount > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
-      style={{ ['--navw' as string]: modCount > 1 ? '284px' : '200px' }}>
+      style={{ ['--navw' as string]: '248px' }}>
       {viewBar}
       {!noMods && (
         <aside className="rail" aria-label="Navigation">
-          {modCount > 1 && <div className="rail-mods">
+          <div className="rail-head">
             <img className="rail-logo" src="/logo-dark.svg" alt="Lifted Farms" />
-            {myMods.map(x => (
-              <button key={x.m} className={`rail-mod ${cur === x.m && !inDrv ? 'on' : ''}`} onClick={() => goMod(x.m)}>
-                {MOD_ICON[x.m]}<span>{x.l}</span>
+            {modCount > 1 && <div className="rail-pick">
+              <button className="rail-pickbtn" aria-haspopup="menu" aria-expanded={railMenu} onClick={() => setRailMenu(!railMenu)}>
+                <span className="rail-pick-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}</span>
+                <span className="rail-pick-l"><small>{t('Module')}</small><b>{inDrv ? t('Driver') : ML(cur)}</b></span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
               </button>
-            ))}
-            {isDrv && <button className={`rail-mod ${inDrv ? 'on' : ''}`} onClick={() => go('driver')}>{DRV_ICON}<span>{t('Driver')}</span></button>}
-          </div>}
+              {railMenu && <>
+                <div className="modscrim" onClick={() => setRailMenu(false)} />
+                <div className="rail-menu" role="menu">
+                  {myMods.map(x => <button key={x.m} role="menuitem" className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => { setRailMenu(false); goMod(x.m) }}>
+                    {MOD_ICON[x.m]}<span><b>{x.l}</b><small>{t(MOD_WHAT[x.m])}</small></span></button>)}
+                  {isDrv && <button role="menuitem" className={inDrv ? 'on' : ''} onClick={() => { setRailMenu(false); go('driver') }}>
+                    {DRV_ICON}<span><b>{t('Driver')}</b><small>{t('My loads and stops')}</small></span></button>}
+                </div>
+              </>}
+            </div>}
+          </div>
+          {/* tablet (768 to 999px): module icons only, the screens sit in a tab row under the header */}
+          <div className="rail-icons" role="group" aria-label={t('Modules')}>
+            {modCount > 1 && myMods.map(x => <button key={x.m} className={cur === x.m && !inDrv ? 'on' : ''} title={x.l} onClick={() => goMod(x.m)}>{MOD_ICON[x.m]}<span>{t(MOD_SHORT[x.m])}</span></button>)}
+            {modCount > 1 && isDrv && <button className={inDrv ? 'on' : ''} title={t('Driver')} onClick={() => go('driver')}>{DRV_ICON}<span>{t('Driver')}</span></button>}
+            {canScan && !inDrv && <button className="rail-iscan" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>{SCAN_ICON}<span>{t('Scan')}</span></button>}
+          </div>
           {inDrv ? <nav className="rail-screens" aria-label={t('Driver')}>
             <div className="rail-h">{t('Driver').toUpperCase()}</div>
             <button className={drvTab === 'loads' ? 'on' : ''} onClick={() => setDrvTab('loads')}>{t('My loads')}</button>
@@ -930,6 +947,11 @@ export default function App() {
             {nav.tail.length > 0 && <div className="rail-sep" />}
             {nav.tail.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
           </nav>}
+          <div className="rail-acct">
+            <button className={view === 'mine' ? 'on' : ''} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>
+              <span className="rail-av">{(who(user) || '?').slice(0, 2).toUpperCase()}</span><span className="rail-acct-l"><b>{who(user)}</b><small>{t('My settings')}</small></span></button>
+            <button className="rail-out" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} aria-label={t('Sign out')} onClick={() => backend.signOut().then(() => setUser(null))}>⏏</button>
+          </div>
         </aside>
       )}
       <header className="top">
@@ -962,10 +984,16 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
-        <button className={`ghost small ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
-        <button className="ghost small" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
+        <button className={`ghost small hdr-acct ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
+        <button className="ghost small hdr-acct" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
       </header>
 
+      {!noMods && <nav className="tabrow" aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
+        {inDrv ? <>
+          <button className={drvTab === 'loads' ? 'on' : ''} onClick={() => setDrvTab('loads')}>{t('My loads')}</button>
+          <button className={drvTab === 'vehicles' ? 'on' : ''} onClick={() => setDrvTab('vehicles')}>{t('Trucks and inspections')}</button>
+        </> : [...nav.main, ...nav.tail].map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
+      </nav>}
       {banner && (
         <div className="movebar">
           <div><b>{banner.title}</b><div className="muted">{banner.sub}</div></div>
@@ -1721,7 +1749,7 @@ function eventModule(e: InvEvent): 'distribution' | 'sales' | 'admin' | 'nursery
   return 'distribution'
 }
 const CULT_TBL: Record<string, string> = { cult_harvests: 'Harvest', cult_plantings: 'Planting', cult_tests: 'Test', cult_flower_picks: 'Dry flower pick', cult_demand: 'Plan strain',
-  cult_plan: 'Plan row', cult_nursery_orders: 'Nursery delivery', cult_receipts: 'Plants received', app_settings: 'Production setting' }
+  cult_plan: 'Plan row', cult_nursery_orders: 'Nursery delivery', cult_receipts: 'Plants received', app_settings: 'Cultivation setting' }
 interface Line { id: string; at: string; who: string | null; text: ReactNode; note?: string | null; mod: 'distribution' | 'sales' | 'admin' | 'cultivation' | 'nursery' | 'processing' | 'accounting' | 'compliance' }
 
 /** Activity: each module shows its own; Admin shows everything with a filter */
@@ -1751,7 +1779,7 @@ function ActivityView({ ix, module }: { ix: Index; module: 'distribution' | 'sal
   const lines: Line[] = [...(events ?? []).map(e => ({ id: `e${e.id}`, at: e.at, who: e.user_email, text: describe(ix, e, names), note: e.note, mod: eventModule(e) } as Line)), ...cult]
     .filter(l => module === 'all' ? only === 'all' || l.mod === only : l.mod === module)
     .sort((a, b) => b.at.localeCompare(a.at))
-  const CH: [string, string][] = [['all', 'Everything'], ['distribution', 'Distribution'], ['sales', 'Sales'], ['cultivation', 'Production'], ['nursery', 'Nursery'], ['processing', 'Processing'], ['accounting', 'Accounting'], ['compliance', 'Compliance'], ['admin', 'Admin']]
+  const CH: [string, string][] = [['all', 'Everything'], ['distribution', 'Distribution'], ['sales', 'Sales'], ['cultivation', 'Cultivation'], ['nursery', 'Nursery'], ['processing', 'Processing'], ['accounting', 'Accounting'], ['compliance', 'Compliance'], ['admin', 'Admin']]
   return (
     <div className="list">
       <h2>Activity</h2>

@@ -12,7 +12,7 @@ import { can } from '../fold'
 import { nextTag } from './schedule'
 import { HarvestDayCard } from './harvestday'
 
-// Production > Harvest: log a harvest as it happens. Built for a phone in the field or the pack shed.
+// Cultivation > Harvest: log a harvest as it happens. Built for a phone in the field or the pack shed.
 // Fresh frozen: raw bins, then each pallet as it's made (it lands in Staging on the freezer map right away).
 // Dry flower: raw weight only (bucking and trimming belong to Processing later).
 // Combine biomass: each tote's dry weight. Stripper header: log the cut, it dries, then enter the dry weight.
@@ -212,7 +212,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
 
       {!done && (h.kind !== 'strip' || h.stage === 'drying') && <Finish h={h} busy={busy} run={run} api={api} back={back} raw={raw} pallets={pallets}
         ready={h.kind === 'ff' ? pallets.length > 0 : h.kind === 'dry' ? raw.length > 0 || h.raw_bins.length > 0 : h.kind === 'combine' ? pallets.length > 0 || totes.length > 0 : dry.length > 0} />}
-      {done && !canFix && <p className="cnote">Finished. Only a Production Admin can change a finished harvest.</p>}
+      {done && !canFix && <p className="cnote">Finished. Only a Cultivation Admin can change a finished harvest.</p>}
       {done && canFix && !editing && <div className="row hfin"><button className="ghost" onClick={() => setEditing(true)}>Edit finished harvest…</button>
         <span className="muted">Fix totals, add a forgotten bin or pallet, or remove one logged by mistake.</span></div>}
       {done && canFix && editing && <FixTotals flash={flash} h={h} api={api} busy={busy} run={run} k={k} onDone={() => setEditing(false)} />}
@@ -221,7 +221,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   )
 }
 
-/** the METRC harvest name: saved once the plants go to METRC; before that, what it will be. Production Admins can change it until then. */
+/** the METRC harvest name: saved once the plants go to METRC; before that, what it will be. Cultivation Admins can change it until then. */
 function BatchName({ h, api, busy, run }: { h: Harvest; api: CultApi; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const [b, setB] = useState<{ name: string; saved: boolean; generated: string | null; in_metrc: boolean; metrc_date?: string | null } | null>(null)
   const [ed, setEd] = useState<string | null>(null)
@@ -399,7 +399,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
           <button className="primary" disabled={busy} onClick={() => push(null)}>Push all {waiting.length} to METRC</button>
           {pick.size > 0 && pick.size < waiting.length && <button className="ghost" disabled={busy} onClick={() => push([...pick])}>Push {pick.size} picked</button>}
         </div>}
-        {!done && !canPush && <p className="cnote">A Production lead pushes these to METRC.</p>}
+        {!done && !canPush && <p className="cnote">A Cultivation lead pushes these to METRC.</p>}
         <p className="cnote">Push puts the plants and the raw bins into the METRC batch, then makes a package for each pallet (on the Compliance METRC to-do list).</p>
       </>}
 
@@ -571,13 +571,13 @@ function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: 
   )
 }
 
-/** Production Admins: fix a finished harvest's totals, or reopen it */
+/** Cultivation Admins: fix a finished harvest's totals, or reopen it */
 function FixTotals({ h, api, busy, run, k, onDone, flash }: { h: Harvest; api: CultApi; flash: Flash; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void>; k: ReturnType<typeof calcHarvest>; onDone: () => void }) {
   const [x, setX] = useState<Partial<Harvest>>(h)
   const set = (v: Partial<Harvest>) => setX(s => ({ ...s, ...v }))
   return (
     <section className="dcard">
-      <div className="dcard-h"><h3>Fix the totals</h3><span className="muted small">Production Admins only · every change is in Activity</span></div>
+      <div className="dcard-h"><h3>Fix the totals</h3><span className="muted small">Cultivation Admins only · every change is in Activity</span></div>
       <div className="grid3">
         <F label="Harvested on"><DateIn value={x.harvested_on} onChange={v => set({ harvested_on: v })} /></F>
         <F label="Plants harvested"><NumIn value={x.plants_harvested} onChange={v => set({ plants_harvested: v })} /></F>

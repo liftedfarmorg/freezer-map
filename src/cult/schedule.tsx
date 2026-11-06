@@ -249,7 +249,7 @@ export function HarvestSheet({ d, c, harvest, api, flash, onClose, onSaved, onLo
           {h.kind === 'ff' && <><span>Fresh frozen</span><b>{n0(h.ff_lbs ?? k.palletLbs)} lbs</b></>}
           {h.kind === 'dry' && <><span>Bucked / trim / mold</span><b>{[h.bucked_lbs, h.trim_lbs, h.mold_lbs].map(v => (v == null ? '—' : n0(v))).join(' / ')} lbs</b></>}
         </div>
-        <p className="cnote">Results are logged and fixed in the harvest log (fixing a finished harvest is for Production Admins).</p>
+        <p className="cnote">Results are logged and fixed in the harvest log (fixing a finished harvest is for Cultivation Admins).</p>
         {h.kind === 'ff' && k.actFF != null && k.actPlants ? <p className="cnote">{n2(k.actFF / k.actPlants)} lbs/plant fresh frozen{h.est_lbs_per_plant ? ` (estimate was ${n2(h.est_lbs_per_plant)})` : ''}{k.actRaw ? ` · ${pct(k.actFF / k.actRaw)} of raw` : ''}</p> : null}
 
         {h.kind === 'ff' && !isNew && <>

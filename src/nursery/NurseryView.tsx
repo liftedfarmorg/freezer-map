@@ -119,7 +119,7 @@ function NurseryDashboard({ d, c, go, onOrder, onBatch }: { d: NData; c: NCtx; g
             <tbody>{next.map(o => { const s = c.byStrain.get(strainKey(o.strain)); return (
               <tr key={o.id} className="tap" onClick={() => onOrder(o)}><td className="nowrap">{fmtD(o.deliver_on, true) || '—'}</td><td>{o.strain}</td><td>{c.to(o)}</td>
                 <td className="num">{n0(c.owed(o))}</td><td className="num">{s?.ready ? n0(s.ready) : <span className="muted">0</span>}</td><td>{statusPill(o, c)}</td></tr>) })}</tbody>
-          </table></div> : <Empty>{t('No open orders. Production\'s nursery deliveries show up here when it plans them.')}</Empty>}
+          </table></div> : <Empty>{t('No open orders. Cultivation\'s nursery deliveries show up here when it plans them.')}</Empty>}
         </Card>
         <Card title={t('Cuttings to take')} badge={toCut.length} action={t('Batches')} onAction={() => go('batches')}>
           {toCut.length ? <div className="dlist">{toCut.slice(0, 8).map(o => (
@@ -175,7 +175,7 @@ function NurseryReview({ d, c, onOrder, onBatch, onMother, go }: { d: NData; c: 
       {sec('Late deliveries', late.length, 'The delivery date has passed and plants are still owed.', late.map(o => oRow(o, fmtD(o.deliver_on, true))))}
       {sec('Short for upcoming deliveries', shortStrains.length, 'Ready plus rooting isn\'t enough for what\'s owed in the next two weeks. Take more cuttings.',
         shortStrains.map(o => oRow(o, `${t('{n} short', { n: n0(c.short.get(o.id)) })} · ${fmtD(o.deliver_on, true)}`)))}
-      {sec('Not confirmed yet', unconfirmed.length, 'Production planned these but they aren\'t confirmed. Confirm them to give them an SO number.', unconfirmed.map(o => oRow(o, fmtD(o.deliver_on, true), false)))}
+      {sec('Not confirmed yet', unconfirmed.length, 'Cultivation planned these but they aren\'t confirmed. Confirm them to give them an SO number.', unconfirmed.map(o => oRow(o, fmtD(o.deliver_on, true), false)))}
       {sec('Past their ready date', stuck.length, 'Still rooting after the ready-by date. Mark them ready, or record losses.', stuck.map(b => bRow(b, t('ready by {date}', { date: fmtD(b.ready_on, true) }))))}
       {sec('Ready for a while', stale.length, 'Ready more than {n} days and not delivered.', stale.map(b => bRow(b, `${t('ready')} ${fmtD(b.ready_on, true)}`)))}
       {sec('Batches with no METRC tag', noTags.length, 'Every immature plant batch needs a tag (one per 100 plants).', noTags.map(b => bRow(b, t('no tag'))))}

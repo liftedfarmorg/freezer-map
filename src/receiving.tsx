@@ -4,9 +4,9 @@ import { metrcRun } from './metrcCall'
 import { rpc } from './ship'
 import type { AppAlert } from './types'
 
-// 090: Production > Receiving and Nursery > Receiving. Each module takes in its own deliveries.
-//  - From 1PN (made in the app): Production counts each line. Match = received (planting receipt, METRC receive to-do).
-//    Off = held, and every Nursery Admin gets an alert to fix the manifest in METRC; Nursery presses "Manifest fixed"; Production recounts.
+// 090: Cultivation > Receiving and Nursery > Receiving. Each module takes in its own deliveries.
+//  - From 1PN (made in the app): Cultivation counts each line. Match = received (planting receipt, METRC receive to-do).
+//    Off = held, and every Nursery Admin gets an alert to fix the manifest in METRC; Nursery presses "Manifest fixed"; Cultivation recounts.
 //  - From outside (METRC deliveries to our licenses): count each package; match = Receive in METRC; off = alert + email to them.
 //  - Dead or damaged on arrival: received in full, then logged as a loss.
 
@@ -55,7 +55,7 @@ export function ReceivingView({ sb, module, flash, nurseryLicenses = [] }: { sb:
         <button className="ghost small" disabled={!!busy} onClick={() => { load(); loadMetrc() }}>{busy ?? 'Refresh'}</button></div></div>
     <p className="muted">{module === 'cultivation'
       ? 'Clones and plants coming to OHR and GVR. Count what came off the truck against the manifest. If it matches, receive it. If not, the nursery is told to fix the manifest first. Dead or damaged plants: receive the full count, then they\'re logged as a loss.'
-      : 'Deliveries to 1PN, and nursery deliveries Production counted short or over: fix the manifest in METRC, then press Manifest fixed.'}</p>
+      : 'Deliveries to 1PN, and nursery deliveries Cultivation counted short or over: fix the manifest in METRC, then press Manifest fixed.'}</p>
 
     {alerts.length > 0 && <section className="dcard alerts">
       {alerts.map(a => <div key={a.id} className="alertrow">
@@ -76,7 +76,7 @@ export function ReceivingView({ sb, module, flash, nurseryLicenses = [] }: { sb:
             await load()
           } catch (e) { flash((e as Error).message, true) } finally { setBusy(null) }
         }} />
-      : <FixCard key={c.ref} c={c} busy={!!busy} onFixed={(note, counts) => run(() => rpc(sb, 'delivery_fixed', { p_ref: c.ref, p_note: note || null, p_counts: counts }, '090_receiving'), 'Production has been told to recount')} />)}
+      : <FixCard key={c.ref} c={c} busy={!!busy} onFixed={(note, counts) => run(() => rpc(sb, 'delivery_fixed', { p_ref: c.ref, p_note: note || null, p_counts: counts }, '090_receiving'), 'Cultivation has been told to recount')} />)}
 
     <h3>From outside {outside.length > 0 && <span className="muted">{outside.length}</span>}</h3>
     {inc && !outside.length && !busy && <p className="muted">Nothing incoming from outside.</p>}
@@ -135,13 +135,13 @@ function FixCard({ c, busy, onFixed }: { c: Check; busy: boolean; onFixed: (note
       <div><b>{c.strain}</b> <span className="muted">to {c.site}{c.so ? ` · ${c.so}` : ''}{c.manifest ? ` · manifest ${c.manifest}` : ''}</span></div>
       <span className={`pill ${c.status === 'counts_off' ? 'm-bad' : 'm-warn'}`}>{STATUS[c.status]}</span>
     </div>
-    {c.status === 'in_transit' && <div className="muted small">Waiting for Production to count it.</div>}
-    {c.status === 'recount' && <div className="muted small">Production is recounting.</div>}
+    {c.status === 'in_transit' && <div className="muted small">Waiting for Cultivation to count it.</div>}
+    {c.status === 'recount' && <div className="muted small">Cultivation is recounting.</div>}
     {c.status === 'counts_off' && c.counted && <>
-      {c.counted.map(x => <div key={x.id} className={`small ${x.counted !== x.plants ? 'warn-t' : ''}`}>{x.name} ({x.strain}): manifest {x.plants}, Production counted {x.counted}</div>)}
-      {c.note && <div className="small">Production: {c.note}</div>}
-      <label className="check"><input type="checkbox" checked={useCounted} onChange={e => setUseCounted(e.target.checked)} /> I changed the manifest to Production's counts (the app's delivery changes to match)</label>
-      <div className="field"><label>Note for Production</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. manifest updated, 2 short" /></div>
+      {c.counted.map(x => <div key={x.id} className={`small ${x.counted !== x.plants ? 'warn-t' : ''}`}>{x.name} ({x.strain}): manifest {x.plants}, Cultivation counted {x.counted}</div>)}
+      {c.note && <div className="small">Cultivation: {c.note}</div>}
+      <label className="check"><input type="checkbox" checked={useCounted} onChange={e => setUseCounted(e.target.checked)} /> I changed the manifest to Cultivation's counts (the app's delivery changes to match)</label>
+      <div className="field"><label>Note for Cultivation</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. manifest updated, 2 short" /></div>
       <div className="row end"><button className="primary" disabled={busy} onClick={() => onFixed(note, useCounted ? c.counted!.map(x => ({ id: x.id, plants: x.counted })) : null)}>Manifest fixed</button></div>
     </>}
   </div>

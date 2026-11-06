@@ -314,7 +314,7 @@ function WeatherPanel({ sb, w, siteId, setSiteId, canEdit, flash, onClose }: {
   )
 }
 
-// ---------- flag settings (Owners + Production Admins) ----------
+// ---------- flag settings (Owners + Cultivation Admins) ----------
 const FIELDS: Record<string, [string, string][]> = {
   botrytis: [['rh', 'Humidity % at or above'], ['dewgap', 'or dew point within °F'], ['tmin', 'Temp from °F'], ['tmax', 'Temp to °F'], ['watch_hrs', 'Watch: hours in a row'], ['warn_hrs', 'Warning: hours in a row']],
   mildew: [['day_tmin', 'Day temp from °F'], ['day_tmax', 'Day temp to °F'], ['rh_min', 'Day humidity from %'], ['rh_max', 'Day humidity to %'], ['day_hrs', 'Warm hours needed'], ['night_rh', 'Night humidity % at or above'], ['warn_days', 'Warning: days in a row']],

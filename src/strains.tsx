@@ -53,7 +53,7 @@ const GROUPS: { m: 'nursery' | 'cultivation' | 'sales'; l: string; fields: Field
     { k: 'rooting_pct', l: 'Rooting rate', unit: '%', auto: a => a.rooting_pct != null ? `${f1(a.rooting_pct)}% from ${a.rooting_n} sorted batch${a.rooting_n === 1 ? '' : 'es'}` : '' },
     { k: 'cuts_per_plant', l: 'Cuts per plant', auto: a => a.cuts_per_plant != null ? `${f1(a.cuts_per_plant)} from ${a.cuts_src}` : '' },
   ] },
-  { m: 'cultivation', l: 'Production', fields: [
+  { m: 'cultivation', l: 'Cultivation', fields: [
     { k: 'yield_lbs_plant', l: 'Fresh frozen per plant', unit: 'lbs', auto: a => a.yield_lbs_plant != null ? `${f1(a.yield_lbs_plant, 2)} lbs from ${a.yield_n} harvest${a.yield_n === 1 ? '' : 's'}` : '' },
     { k: 'harvest_mmdd', l: 'Typical harvest date', text: true, hint: 'MM-DD', auto: a => a.harvest_mmdd ? `${mmdd(a.harvest_mmdd)} (average of ${a.harvest_n})` : '' },
   ] },

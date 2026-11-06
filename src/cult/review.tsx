@@ -6,7 +6,7 @@ import type { CultData, Harvest, LogRow } from './types'
 import type { CultTab } from './tabs'
 import { describeLog } from './setup'
 
-/** Production > Review: things that need someone's attention */
+/** Cultivation > Review: things that need someone's attention */
 export function ReviewTab({ d, c, site, onOpen, go }: { d: CultData; c: Ctx; site: string | null; onOpen: (h: Harvest) => void; go: (t: CultTab) => void }) {
   const now = today()
   const live = d.harvests.filter(h => h.status !== 'cancelled' && (!site || h.site === site))
@@ -42,7 +42,7 @@ export function ReviewTab({ d, c, site, onOpen, go }: { d: CultData; c: Ctx; sit
   )
 }
 
-/** Production > Activity: every change made in Production */
+/** Cultivation > Activity: every change made in Cultivation */
 export function ActivityTab({ api }: { api: CultApi }) {
   const [log, setLog] = useState<LogRow[] | null>(null)
   useEffect(() => { api.log(300).then(setLog).catch(() => setLog([])) }, [api])

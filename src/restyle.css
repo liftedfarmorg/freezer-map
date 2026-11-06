@@ -1,0 +1,155 @@
+/* Restyle (restyle-preview branch, Msg #264): the staff app in the customer portal's look.
+   Portal palette + Outfit, ink sidebar, light cards. Look only: no screen changes what it does.
+   Scoped away from the customer portal (.cp keeps its own tokens) so it stays exactly as it is. */
+
+:root:not(:has(.cp)) {
+  --bg: #f1f3ef;
+  --panel: #ffffff;
+  --ink: #231f20;
+  --muted: #5f6b64;
+  --line: #e3e8e3;
+  --brand: #2b7a5e;
+  --brand-ink: #ffffff;
+  --empty: #eef1ed;
+  --r-ink: #231f20; --r-ink-2: #3a3436; --r-ink-3: #2e292a; --r-line: #4a4446;
+  --r-teal: #45a584; --r-teal-ink: #1f5c46; --r-teal-bg: #e6f3ee; --r-mint: #8fd4b8; --r-soft: #b9c2bc;
+  --r-shadow: 0 2px 10px rgb(0 0 0 / .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(:has(.cp)) {
+    --bg: #141716; --panel: #1c201e; --ink: #eceeed; --muted: #9aa59f; --line: #2d3330;
+    --brand: #45a584; --brand-ink: #0f241b; --empty: #232826;
+    --r-teal-bg: #183a2d; --r-teal-ink: #8fd4b8; --r-shadow: none;
+  }
+}
+:root[data-theme="dark"]:not(:has(.cp)) {
+  --bg: #141716; --panel: #1c201e; --ink: #eceeed; --muted: #9aa59f; --line: #2d3330;
+  --brand: #45a584; --brand-ink: #0f241b; --empty: #232826;
+  --r-teal-bg: #183a2d; --r-teal-ink: #8fd4b8; --r-shadow: none;
+}
+
+html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+/* ---------- shared pieces ---------- */
+.app.shell .primary { border-radius: 12px; min-height: 40px; padding: 9px 18px; }
+.app.shell .primary:hover:not(:disabled) { background: var(--r-teal-ink); }
+.app.shell .ghost { border-radius: 12px; }
+.app.shell .ghost.small, .app.shell .primary.small { border-radius: 10px; }
+.app.shell .card { border-radius: 14px; box-shadow: var(--r-shadow); }
+.app.shell .dcard { border-radius: 18px; box-shadow: var(--r-shadow); padding: 14px 16px; }
+.app.shell .seg { border: 0; background: var(--empty); border-radius: 12px; padding: 3px; gap: 2px; }
+.app.shell .seg button { border-radius: 10px; padding: 6px 14px; color: var(--muted); }
+.app.shell .seg button.on { background: var(--r-ink); color: #fff; }
+.app.shell .search { border-radius: 12px; background: var(--panel); }
+.app.shell .chip { font-weight: 600; }
+.sheet { border-radius: 18px 18px 0 0; }
+@media (min-width: 600px) { .sheet { border-radius: 18px; } }
+.app.shell .viewbanner { border-radius: 12px; }
+.toast { border-radius: 12px; }
+
+/* top bar */
+.app.shell .top { padding: 10px 20px; min-height: 60px; }
+.app.shell .top .brand .app-name { font-weight: 700; letter-spacing: -.2px; }
+
+/* the tablet screen tabs: hidden unless tablet */
+.tabrow { display: none; }
+.rail-icons { display: none; }
+
+/* ---------- computer (1000px and up): one ink sidebar ---------- */
+@media (min-width: 1000px) {
+  .app.with-rail .top .logo-img { display: none !important; }
+  .app.with-rail .hdr-acct { display: none; }
+  .app.with-rail .modpick { display: none; }
+  .rail { width: var(--navw); flex-direction: column; background: var(--r-ink); color: #fff; }
+  .rail-head { padding: 18px 14px 8px; display: grid; gap: 14px; }
+  .rail-logo { width: 116px; margin: 0 0 0 6px; }
+  .rail-pick { position: relative; }
+  .rail-pickbtn { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px;
+    border: 1px solid var(--r-line); background: var(--r-ink-3); color: #fff; text-align: left; }
+  .rail-pickbtn:hover { border-color: var(--r-soft); }
+  .rail-pick-i { flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--r-teal); color: #10251d; display: inline-flex; align-items: center; justify-content: center; }
+  .rail-pick-i svg { width: 20px; height: 20px; }
+  .rail-pick-l { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+  .rail-pick-l small { font-size: 11px; color: var(--r-soft); }
+  .rail-pick-l b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rail-menu { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: 300px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgb(0 0 0 / .22); padding: 6px; display: grid; gap: 2px; }
+  .rail-menu button { display: flex; align-items: center; gap: 12px; text-align: left; padding: 9px 10px; border-radius: 12px; border: 0; background: transparent; color: var(--ink); }
+  .rail-menu button svg { flex: none; width: 20px; height: 20px; color: var(--muted); }
+  .rail-menu button span { display: grid; line-height: 1.25; }
+  .rail-menu button small { font-size: 12px; color: var(--muted); }
+  .rail-menu button:hover { background: var(--bg); }
+  .rail-menu button.on { background: var(--r-teal-bg); }
+  .rail-menu button.on svg, .rail-menu button.on b { color: var(--r-teal-ink); }
+  .rail-screens { width: auto; flex: 1; background: transparent; border: 0; padding: 10px 12px; }
+  .rail-h { color: #8d968f; letter-spacing: .06em; padding: 4px 10px 8px; font-size: 11px; }
+  .rail-screens button { color: #d9dfdb; font-size: 15px; padding: 9px 12px; }
+  .rail-screens button:hover:not(.on) { background: var(--r-ink-3); }
+  .rail-screens button.on { background: var(--r-ink-2); color: #fff; box-shadow: inset 3px 0 0 var(--r-teal); }
+  .rail-screens .rail-scan { border-color: var(--r-line); color: var(--r-mint); }
+  .rail-sep { background: var(--r-ink-2); }
+  .rail-acct { display: flex; align-items: center; gap: 4px; padding: 10px 12px 14px; border-top: 1px solid var(--r-ink-2); }
+  .rail-acct > button { border: 0; background: transparent; color: #fff; border-radius: 12px; }
+  .rail-acct > button:hover, .rail-acct > button.on { background: var(--r-ink-3); }
+  .rail-acct > button:first-child { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; text-align: left; }
+  .rail-av { flex: none; width: 32px; height: 32px; border-radius: 16px; background: var(--r-teal); color: #10251d; font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .rail-acct-l { display: grid; min-width: 0; line-height: 1.2; }
+  .rail-acct-l b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rail-acct-l small { font-size: 12px; color: var(--r-soft); }
+  .rail-out { width: 40px; height: 40px; font-size: 16px; color: var(--r-soft) !important; }
+}
+
+/* ---------- tablet (768 to 999px): icon rail + a tab row of screens ---------- */
+@media (min-width: 768px) and (max-width: 999px) {
+  .app.shell.with-rail { --navw: 84px !important; padding-left: var(--navw); padding-bottom: 20px; }
+  .app.shell.with-rail .bottom { display: none; }
+  .app.shell.with-rail .hdr-acct { display: none; }
+  .app.shell.with-rail .top .logo-img { display: none !important; }
+  .app.shell.with-rail .planbar { left: var(--navw); bottom: 0; }
+  .app.shell.with-rail .undo-pill { bottom: 72px; }
+  .app.shell.with-rail .toast { bottom: 24px; }
+  .rail { display: flex; flex-direction: column; align-items: center; position: fixed; top: 0; bottom: 0; left: 0; z-index: 7; width: var(--navw);
+    background: var(--r-ink); color: #fff; padding: 14px 0 12px; }
+  .rail-head { display: block; }
+  .rail-logo { display: block; width: 60px; margin: 0 auto 14px; }
+  .rail-pick, .rail-screens, .rail-acct-l { display: none; }
+  .rail-icons { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; overflow-y: auto; }
+  .rail-icons button { width: 70px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 0; border-radius: 14px; border: 0;
+    background: transparent; color: #c9cfcb; font-size: 11px; font-weight: 600; }
+  .rail-icons button svg { width: 22px; height: 22px; }
+  .rail-icons button:hover { background: var(--r-ink-3); color: #fff; }
+  .rail-icons button.on { background: var(--r-teal); color: #10251d; }
+  .rail-icons .rail-iscan { margin-top: 10px; border: 1px solid var(--r-line); color: var(--r-mint); }
+  .rail-acct { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .rail-acct > button { border: 0; background: transparent; color: #fff; border-radius: 12px; padding: 4px; }
+  .rail-av { width: 36px; height: 36px; border-radius: 18px; background: var(--r-teal); color: #10251d; font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .rail-out { width: 40px; height: 36px; color: var(--r-soft) !important; }
+  .tabrow { display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line);
+    position: sticky; top: 60px; z-index: 4; scrollbar-width: none; }
+  .tabrow::-webkit-scrollbar { display: none; }
+  .tabrow button { flex: none; border: 0; background: transparent; padding: 10px 12px 12px; font-weight: 600; font-size: 14px; color: var(--muted);
+    border-bottom: 3px solid transparent; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+  .tabrow button.on { color: var(--ink); border-bottom-color: var(--r-teal); }
+  .app.shell .top .brand .app-name { display: none; }
+  .app.shell .top .brand .ptitle { display: inline; font-size: 18px; }
+}
+
+/* ---------- phone (767px and under): ink header, bottom tabs ---------- */
+@media (max-width: 767px) {
+  .app.shell .top { background: var(--r-ink); color: #fff; border-bottom: 0; padding: 10px 12px 12px;
+    --ink: #ffffff; --muted: #b9c2bc; --line: #4a4446; --bg: #3a3436; --panel: #231f20; --empty: #3a3436; }
+  .app.shell .top .logo-l { display: none !important; }
+  .app.shell .top .logo-d { display: block !important; }
+  .app.shell .top .ghost { color: #fff; border-color: var(--r-line); }
+  .app.shell .top .seg button.on { background: #fff; color: var(--r-ink); }
+  .app.shell .top .search { background: var(--r-ink-2); border-color: transparent; color: #fff; font-size: 16px; }
+  .app.shell .top .search::placeholder { color: var(--r-soft); }
+  .app.shell .bottom { border-top: 1px solid var(--line); background: var(--panel); }
+  .pbar button.on { color: var(--ink); }
+  .ptab.on .pti { background: var(--r-teal-bg); color: var(--r-teal-ink); }
+  .pmod-i { background: var(--r-ink); color: #fff; }
+  .pbar .pmod { color: var(--ink); }
+  .pbar .pscan { background: var(--r-teal); color: #10251d; }
+}

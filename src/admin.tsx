@@ -52,7 +52,7 @@ export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: 
               [o.sales.to_confirm, 'Orders to confirm', 'Sales', 'sales.orders'],
               [o.sales.requests, 'Reserve requests to approve', 'Sales', 'sales.requests'],
               [o.needs_spot, 'Pallets that need a spot', 'Distribution', 'dist.review'],
-              [o.season.unlogged, 'Harvests not logged', 'Production', 'cult.review'],
+              [o.season.unlogged, 'Harvests not logged', 'Cultivation', 'cult.review'],
               ...(N ? [[N.late, 'Late clone deliveries', 'Nursery', 'nurs.review'], [N.positive_tests, 'Positive lab tests, nothing culled', 'Nursery', 'nurs.review'],
                 [N.no_tag, 'Clone batches with no METRC tag', 'Nursery', 'nurs.review']] : []),
               ...(B ? [[B.overdue, 'Overdue invoices', 'Billing', 'sales.invoices'], [B.not_sent, 'Open invoices not emailed yet', 'Billing', 'sales.invoices']] : []),
@@ -88,9 +88,9 @@ export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: 
             {B.nursery_open_amt > 0 && <button className="drow click" onClick={() => open('nurs.invoices')}><span><b>Clone invoices open</b><span className="muted"> · Nursery</span></span><b>{money(B.nursery_open_amt)}</b></button>}
           </div>
         </Card>}
-        {L && <Card title={`Field logs · ${month}`} action="Production logs" onAction={() => open('cult.logs')}>
+        {L && <Card title={`Field logs · ${month}`} action="Cultivation logs" onAction={() => open('cult.logs')}>
           <div className="dlist">
-            {([['cultivation', 'Production', 'cult.logs'], ['nursery', 'Nursery', 'nurs.logs']] as const).map(([m, l, j]) => (
+            {([['cultivation', 'Cultivation', 'cult.logs'], ['nursery', 'Nursery', 'nurs.logs']] as const).map(([m, l, j]) => (
               <button key={m} className="drow click" onClick={() => open(j)}><span><b>{l}</b><span className="muted"> · {(['spray', 'feed', 'labor'] as const).map(k => `${L.by[`${m}.${k}`] ?? 0} ${k}`).join(' · ')}</span></span>
                 <b>{(['spray', 'feed', 'labor'] as const).reduce((a, k) => a + (L.by[`${m}.${k}`] ?? 0), 0)}</b></button>))}
             <div className="drow"><span><b>Pesticide sprays</b><span className="muted"> · for the use report</span></span><b className={L.pesticide_month ? 'warn-t' : ''}>{L.pesticide_month}</b></div>
@@ -174,7 +174,7 @@ export function AdminReview({ backend, open }: { backend: Backend; open: (j: Jum
     [o.sales.to_confirm, 'Orders to confirm', 'Sales', 'sales.orders'],
     [o.sales.requests, 'Reserve requests to approve', 'Sales', 'sales.requests'],
     [o.needs_spot, 'Pallets that need a spot', 'Distribution', 'dist.review'],
-    [o.season.unlogged, 'Harvests not logged', 'Production', 'cult.review'],
+    [o.season.unlogged, 'Harvests not logged', 'Cultivation', 'cult.review'],
   ]
   const stuck = work.filter(w => w[0] > 0)
   const people: [AppUser[], string, string][] = [

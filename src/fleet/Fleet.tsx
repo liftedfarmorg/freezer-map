@@ -95,7 +95,7 @@ export function CrewFleet({ sb, flash, dept, title, driver }: { sb: SupabaseClie
 // =====================================================================================================
 // Compliance › Vehicles
 // =====================================================================================================
-export const DEPT_L: Record<Dept, string> = { distribution: 'Distribution', cultivation: 'Production', nursery: 'Nursery', processing: 'Processing', company: 'Company-wide' }
+export const DEPT_L: Record<Dept, string> = { distribution: 'Distribution', cultivation: 'Cultivation', nursery: 'Nursery', processing: 'Processing', company: 'Company-wide' }
 const DEPTS: Dept[] = ['distribution', 'cultivation', 'nursery', 'processing', 'company']
 type FTab = 'assets' | 'drivers' | 'carriers' | 'reports'
 

@@ -52,13 +52,13 @@ export default function CultView({ backend, flash, onPalletsChanged, tab, go }: 
   return (
     <div className="cult">
       <div className="chead">
-        {tab === 'dashboard' ? <span className="dev">{t('in development')}</span> : <h2>{tab === 'setup' ? t('Production settings') : t(cultLabel(tab))} <span className="dev">{t('in development')}</span></h2>}
+        {tab === 'dashboard' ? <span className="dev">{t('in development')}</span> : <h2>{tab === 'setup' ? t('Cultivation settings') : t(cultLabel(tab))} <span className="dev">{t('in development')}</span></h2>}
         <div className="row">
           {tab !== 'plan' && tab !== 'setup' && tab !== 'activity' && tab !== 'logs' && <Select value={d.year} onChange={e => setYear(Number(e.target.value))}>
             {[...new Set([...d.years, d.currentYear + 1])].sort((a, b) => b - a).map(y => <option key={y} value={y}>{y} season</option>)}
           </Select>}
           {tab !== 'plan' && tab !== 'setup' && tab !== 'activity' && tab !== 'logs' && <div className="seg">
-            {[null, ...d.sites.map(s => s.code)].map(s => <button key={s ?? 'all'} className={site === s ? 'on' : ''} onClick={() => setSite(s)}>{s ?? 'Both'}</button>)}
+            {[null, ...d.sites.map(s => s.code)].map(s => <button key={s ?? 'all'} className={site === s ? 'on' : ''} onClick={() => setSite(s)}>{s ?? 'All'}</button>)}
           </div>}
         </div>
       </div>

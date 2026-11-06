@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles.css'
+import './restyle.css'
 import { applyTheme, savedTheme } from './theme'
 import { UpdateBanner } from './update'
 import { installTabHeader } from './tabid'
@@ -12,8 +13,8 @@ installTabHeader()
 applyTheme(savedTheme())
 
 // After a new version ships, a phone still running the old page asks for code files that no longer exist
-// (catalog/invoice PDFs, the scanner, Production/Nursery). Reload once to get the new version instead of failing.
-// A screen opened for the first time after a deploy (a lazy page like Production) fails with "Failed to fetch dynamically
+// (catalog/invoice PDFs, the scanner, Cultivation/Nursery). Reload once to get the new version instead of failing.
+// A screen opened for the first time after a deploy (a lazy page like Cultivation) fails with "Failed to fetch dynamically
 // imported module" without going through vite:preloadError, so the error screen catches it too (Msg R-201, 11/4).
 const STALE = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS/i
 function reloadOnce(): boolean {

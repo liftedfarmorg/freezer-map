@@ -4,7 +4,7 @@ import { clock, computeBonus, hm, SPEED_MAX, SPEED_RED, SPEED_YELLOW, speedLevel
 import type { BonusData, BonusView, Level } from './cult/bonuscalc'
 import './bonus.css'
 
-// Live Bonus: the TV screen in the pack shed. Public link /?bonus=<token> (one per site, from Production > Harvest).
+// Live Bonus: the TV screen in the pack shed. Public link /?bonus=<token> (one per site, from Cultivation > Harvest).
 // No login. Refreshes every 20 seconds; the clock ticks in between. Spanish on purpose: it's for the crew.
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -52,7 +52,7 @@ export function BonusScreen({ backend, token }: { backend: Backend; token: strin
   }, [])
 
   if (d === undefined) return <div className="bz-wrap"><p className="bz-msg">Cargando…</p></div>
-  if (!d) return <div className="bz-wrap"><p className="bz-msg">Este enlace no funciona. Pide uno nuevo en Producción › Cosecha.</p></div>
+  if (!d) return <div className="bz-wrap"><p className="bz-msg">Este enlace no funciona. Pide uno nuevo en Cultivo › Cosecha.</p></div>
   const nowMin = d.now_min + (d.is_today ? (Date.now() - at) / 60000 : 0)
   const v = computeBonus(d, nowMin)
   return (
@@ -87,7 +87,7 @@ function Hero({ v }: { v: BonusView }) {
   const big = over ? money(0) : money(rate)
   const sub = over ? (v.corr != null && v.hurdle != null ? `Faltaron ${n0(v.hurdle - v.corr)} libras por persona.` : '')
     : v.ended && v.won ? `Día terminado. ${n0(v.packed)} libras empacadas.`
-    : v.level === 'wait' ? (v.pallets ? 'Completen la tarjeta del día en Producción › Cosecha.' : 'Los números empiezan con la primera tarima.')
+    : v.level === 'wait' ? (v.pallets ? 'Completen la tarjeta del día en Cultivo › Cosecha.' : 'Los números empiezan con la primera tarima.')
     : v.won ? 'Sube con cada libra que empaquen.'
     : v.corr != null && v.hurdle != null ? `Se gana al llegar a la meta: faltan ${n0(v.hurdle - v.corr)} libras por persona.` : ''
   return (
