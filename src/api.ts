@@ -132,7 +132,7 @@ export interface Backend {
   palletEvents(palletId: number): Promise<InvEvent[]>
   recentEvents(limit: number): Promise<InvEvent[]>
   search(q: string): Promise<Pallet[]>
-  subscribe(onChange: () => void): () => void
+  subscribe(onChange: () => void, onOrders?: () => void): () => void
   /** Admin module > Users: save a person (kind, customer, level per module, Owner) */
   saveUser(u: SaveUser): Promise<void>
   /** top bar ⚙: your own settings */
@@ -849,15 +849,18 @@ class SupaBackend implements Backend {
     return (data ?? []) as Pallet[]
   }
   client() { return this.sb }
-  subscribe(onChange: () => void) {
-    let t: number | undefined
+  subscribe(onChange: () => void, onOrders?: () => void) {
+    let t: number | undefined, to: number | undefined
     const bump = () => { clearTimeout(t); t = window.setTimeout(onChange, 400) }
+    // Msg #282: an order confirmed (or changed) anywhere shows up in Fulfillment without a refresh
+    const bumpOrders = () => { clearTimeout(to); to = window.setTimeout(() => onOrders?.(), 600) }
     const ch = this.sb.channel('inv')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pallets' }, bump)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'freezers' }, bump)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'loads' }, bump)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'load_items' }, bump)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'load_stops' }, bump)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, bumpOrders)
       .subscribe()
     return () => { this.sb.removeChannel(ch) }
   }

@@ -531,7 +531,7 @@ export default function App() {
     if (!staff || (noMods && me?.access?.driver)) return
     reload().then(() => setLoadError(null)).catch(e => setLoadError(String(e?.message ?? e)))
     refreshF()
-    return backend.subscribe(() => { reload(); refreshF() })
+    return backend.subscribe(() => { reload(); refreshF() }, () => refreshF())
   }, [staff, reload, refreshF, noMods])
 
   // search outside the live set (archived / old pallets) once the query is specific
