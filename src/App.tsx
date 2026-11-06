@@ -949,7 +949,7 @@ export default function App() {
           </nav>}
           <div className="rail-acct">
             <button className={view === 'mine' ? 'on' : ''} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>
-              <span className="rail-av">{(who(user) || '?').slice(0, 2).toUpperCase()}</span><span className="rail-acct-l"><b>{who(user)}</b><small>{t('My settings')}</small></span></button>
+              <span className="rail-av">{((me?.display_name || who(user) || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || '?').toUpperCase()}</span><span className="rail-acct-l"><b>{me?.display_name || who(user)}</b><small>{user}</small></span></button>
             <button className="rail-out" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} aria-label={t('Sign out')} onClick={() => backend.signOut().then(() => setUser(null))}>⏏</button>
           </div>
         </aside>
