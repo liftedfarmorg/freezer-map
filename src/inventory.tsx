@@ -75,7 +75,6 @@ export function DistInventory({ c, onMove, flash }: { c: InvCtx; onMove: (ids: n
     { k: 'grade', l: 'Grade', key: p => c.grade(p).grade },
   ]
   const chips: Chip<Pallet>[] = [
-    { k: 'site', l: 'Site', get: p => c.site(p) ?? 'No site' },
     { k: 'year', l: 'Crop year', get: p => String(yearOf(c, p) ?? '') },
     { k: 'form', l: 'Form', get: p => PRODUCT_LABEL[prodOf(p)] },
     { k: 'grade', l: 'Grade', get: p => c.grade(p).grade },
@@ -86,7 +85,20 @@ export function DistInventory({ c, onMove, flash }: { c: InvCtx; onMove: (ids: n
     if (on.length) { const codes = on.map(id => c.pallet(id)!.code); flash(`${codes.join(', ')} ${codes.length === 1 ? 'is' : 'are'} on a mixed pallet. Open the package and use Take off, or move the mixed pallet itself.`, true); return }
     onMove(ids)
   } }]
+  const cards = (rs: Pallet[]) => {
+    const w = (xs: Pallet[]) => xs.reduce((a, p) => a + Number(p.current_weight ?? 0), 0)
+    const needs = rs.filter(p => p.slot_id == null && !p.container_id && p.status === 'unslotted')
+    const held = rs.filter(p => c.held(p.id)), flagged = rs.filter(p => p.needs_review)
+    return <>
+      <div className="icard"><span>On hand</span><b>{n0(w(rs))}</b><small>lbs · {n0(new Set(rs.map(p => p.container_id ?? p.id)).size)} pallets</small></div>
+      <div className="icard"><span>Packages</span><b>{n0(rs.length)}</b><small>{rs.filter(p => c.grade(p).grade === 'BHO').length} BHO</small></div>
+      <div className={`icard ${needs.length ? 'warn' : ''}`}><span>Needs a spot</span><b>{n0(needs.length)}</b><small>{n0(w(needs))} lbs</small></div>
+      <div className="icard"><span>Held for orders</span><b>{n0(held.length)}</b><small>{n0(w(held))} lbs</small></div>
+      <div className={`icard ${flagged.length ? 'bad' : ''}`}><span>Flagged</span><b>{n0(flagged.length)}</b><small>need a look</small></div>
+    </>
+  }
   return <InvTable id="dist" title="Inventory" rows={rows} rowId={p => p.id} cols={cols} groups={groups} defaultGroup="freezer" defaultSort="where" chips={chips}
+    site={{ opts: ['OHR', 'GVR', '1PN'], get: p => c.site(p) }} cards={cards}
     text={p => `${p.code} ${p.strain ?? ''} ${p.package_tag ?? ''} ${c.lot(p.lot_id)?.code ?? ''} ${c.where(p)}`}
     lbs={p => Number(p.current_weight ?? 0)} onOpen={p => c.open(p.id)} actions={actions}
     note={<>Every package in inventory. Packages on a mixed pallet are listed one by one; group by Spot to see the mixed pallet. Sort by Days for the oldest product.</>}

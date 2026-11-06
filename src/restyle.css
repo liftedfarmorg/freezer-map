@@ -158,3 +158,18 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .mtag { white-space: nowrap; letter-spacing: 0; }
 .mtag-short { display: none; }
 @media (max-width: 767px) { .mtag-full { display: none; } .mtag-short { display: inline; } }
+
+/* inventory: site switch, summary cards, export menu */
+.invsite { display: inline-flex; margin: 4px 0 12px; }
+.invcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.icard { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: grid; gap: 2px; box-shadow: var(--r-shadow); min-width: 0; }
+.icard > span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.icard > b { font-size: 24px; font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.icard > small { font-size: 12px; color: var(--muted); }
+.icard.warn { background: var(--heads-bg); border-color: var(--heads-line); }
+.icard.bad { background: var(--act-bg); border-color: var(--act-line); }
+.expmenu { right: 0; left: auto; min-width: 160px; display: grid; gap: 2px; }
+.expmenu button { text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; color: var(--ink); }
+.expmenu button:hover { background: var(--bg); }
+@media (max-width: 767px) { .invcards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .icard > b { font-size: 20px; } }
+.app.shell .ctable th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
