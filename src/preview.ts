@@ -59,7 +59,7 @@ export function installPreviewGuard() {
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
     if (blocked(url, method)) {
       try { (window as unknown as { __previewBlocked?: string[] }).__previewBlocked = [...((window as unknown as { __previewBlocked?: string[] }).__previewBlocked ?? []), `${method} ${new URL(url, location.href).pathname}`].slice(-50) } catch { /* ignore */ }
-      if (!/\/rpc\/(dash_record)\b/.test(url)) toast()   // the dashboard's own background snapshot: blocked quietly
+      if (!/\/rpc\/dash_record\b|\/api\/metrc\/run\b/.test(url)) toast()   // background calls on load (dashboard snapshot, METRC status check): still blocked, just no pop-up
       return new Response(JSON.stringify({ message: PREVIEW_MSG, code: 'PREVIEW', details: null, hint: null }),
         { status: 403, headers: { 'Content-Type': 'application/json' } })
     }
