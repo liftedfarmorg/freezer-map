@@ -74,6 +74,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [result, setResult] = useState<ImportResult | null>(null)
   const [sampleOf, setSampleOf] = useState<Order | null>(null)
   const [holdRev, setHoldRev] = useState(0)
+  const [ost, setOst] = useState<string>('all')   // Orders table: status filter (restyle)
   const load = () => Promise.all([backend.listBalances(), backend.listOrders().catch(() => [] as Order[]),
       backend.listRequests().catch(() => [] as ReserveRequest[]), backend.menuNumbers().catch(() => [] as MenuNumbers[])])
     .then(([b, o, r, m]) => {
@@ -272,23 +273,30 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 
       {mode === 'orders' && (
         <>
-          {shownOrders.length === 0 && <p className="muted">No orders yet. Export sales orders from Roshi and import the file here.</p>}
-          {shownOrders.map(o => (
-            <div key={o.id} className="rescard">
-              <button className="li setrow" onClick={() => setOpen(open === -o.id ? null : -o.id)}>
-                <div className="grow"><b>{o.so_number ?? `Order #${o.id}`}</b> <span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span>{o.is_sample && <span className="pill sample">Sample</span>}
-                  {o.status === 'pending' && fulfil?.get(o.id) && <span className={`pill fs-${fulfil.get(o.id)!.state}`}>{STATE_LABEL[fulfil.get(o.id)!.state]}{fulfil.get(o.id)!.stop ? ` · ${fulfil.get(o.id)!.stop!.load}` : ''}</span>}
-                  <div className="muted">{cname(o.customer_id)} · {fmtDate(o.order_date)}{o.source === 'portal' ? ' · from portal' : ''}{o.roshi_status && o.roshi_status !== 'Fulfilled' ? ` · Roshi: ${o.roshi_status}` : ''}</div></div>
-                <b className="num">{n0(orderLbs(o))} lbs</b>
-              </button>
-              {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
-              {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
-                <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
-                {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
-              {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
-              {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
-            </div>
-          ))}
+          {orders.length === 0 && <p className="muted">No orders yet. Export sales orders from Roshi and import the file here.</p>}
+          {orders.length > 0 && <div className="seg ostat" role="group" aria-label="Status">{['all', 'submitted', 'pending', 'shipped', 'draft', 'cancelled'].filter(k => k === 'all' || shownOrders.some(o => o.status === k)).map(k =>
+            <button key={k} className={ost === k ? 'on' : ''} onClick={() => setOst(k)}>{k === 'all' ? 'All' : STATUS_LABEL[k]} <span className="segn">{k === 'all' ? shownOrders.length : shownOrders.filter(o => o.status === k).length}</span></button>)}</div>}
+          {orders.length > 0 && <div className="cwrap"><table className="ctable otable">
+            <thead><tr><th>Order</th><th>Customer</th><th className="hide-s">Date</th><th>Status</th><th className="hide-s">Fulfillment</th><th className="num">Lbs</th></tr></thead>
+            <tbody>{shownOrders.filter(o => ost === 'all' || o.status === ost).map(o => [
+              <tr key={o.id} className={`tap ${open === -o.id ? 'open' : ''}`} onClick={() => setOpen(open === -o.id ? null : -o.id)}>
+                <td className="nw"><b>{o.so_number ?? `Order #${o.id}`}</b>{o.is_sample && <> <span className="pill sample">Sample</span></>}</td>
+                <td>{cname(o.customer_id)}<div className="muted small">{o.source === 'portal' ? 'from portal' : ''}{o.roshi_status && o.roshi_status !== 'Fulfilled' ? `${o.source === 'portal' ? ' · ' : ''}Roshi: ${o.roshi_status}` : ''}</div></td>
+                <td className="hide-s nw">{fmtDate(o.order_date)}</td>
+                <td><span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span></td>
+                <td className="hide-s">{o.status === 'pending' && fulfil?.get(o.id) && <span className={`pill fs-${fulfil.get(o.id)!.state}`}>{STATE_LABEL[fulfil.get(o.id)!.state]}{fulfil.get(o.id)!.stop ? ` · ${fulfil.get(o.id)!.stop!.load}` : ''}</span>}</td>
+                <td className="num"><b>{n0(orderLbs(o))}</b></td>
+              </tr>,
+              open === -o.id ? <tr key={`x-${o.id}`} className="xrow"><td colSpan={6}><div className="rescard odetail">
+                    {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
+                    {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
+                      <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
+                      {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
+                    {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
+                    {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
+              </div></td></tr> : null,
+            ])}</tbody>
+          </table></div>}
           <p className="muted">Import the Roshi sales order export (the same one the menu engine uses) any time. New orders are added and existing ones are updated. Only 2026 fresh frozen lines, plus open 2025 ones, are used.</p>
         </>
       )}

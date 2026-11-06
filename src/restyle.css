@@ -194,3 +194,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 /* stat strips (Map and others): one row, card look */
 .app.shell .stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
 .app.shell .stats > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--r-shadow); }
+
+.ostat { display: inline-flex; flex-wrap: wrap; margin: 4px 0 10px; }
+.otable tr.open td { background: var(--r-teal-bg); }
+.odetail { border: 0; padding: 4px 0; background: transparent; box-shadow: none; }
