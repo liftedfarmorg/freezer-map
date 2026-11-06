@@ -16,7 +16,7 @@ set client_min_messages = notice;
 
 do $$
 declare
-  v_code text := null;              -- e.g. 'L-1105-2' to pick the load by hand; null = the only 11/5 load in transit
+  v_code text := 'L-1104-5';            -- e.g. 'L-1105-2' to pick the load by hand; null = the only 11/5 load in transit
   l loads; s load_stops; m pallets; o orders; n int; pos int; cap int; mx bigint; n_skip int; listed text;
   tags text[] := array['1A4060300030F35000007086','1A4060300030F35000007088','1A4060300030F35000007089',
                        '1A4060300030F35000007090','1A4060300030F35000007098','1A4060300030F35000007100'];
