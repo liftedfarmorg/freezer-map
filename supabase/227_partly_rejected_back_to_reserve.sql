@@ -8,7 +8,7 @@
 --    Reserve History ("Rejected at delivery: back on your reserve"). Safe to re-run.
 begin;
 
-create or replace view reserve_balances as
+create or replace view reserve_balances with (security_invoker = true) as   -- keep: customers only see their own reserves (RLS on reserves)
 WITH sold AS (
          SELECT o.customer_id,
             l.strain,
