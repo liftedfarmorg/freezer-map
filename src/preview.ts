@@ -58,7 +58,7 @@ export function installPreviewGuard() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
     if (blocked(url, method)) {
-      toast()
+      if (!/\/rpc\/(dash_record)\b/.test(url)) toast()   // the dashboard's own background snapshot: blocked quietly
       return new Response(JSON.stringify({ message: PREVIEW_MSG, code: 'PREVIEW', details: null, hint: null }),
         { status: 403, headers: { 'Content-Type': 'application/json' } })
     }
