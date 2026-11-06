@@ -269,6 +269,10 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
     case 'load_cancelled': return `Load ${(e.details as { load?: string } | null)?.load} cancelled`
     case 'stop_outcome': case 'stop_outcome_fixed': { const d = e.details as { load?: string; customer?: string; seq?: number; label?: string; receiver?: string; back?: number; via?: string; was?: string } | null
       return `${d?.load} stop ${d?.seq} ${d?.customer}: ${e.type === 'stop_outcome_fixed' ? `changed to ${d?.label} (was ${d?.was ?? 'nothing'})` : d?.label}${d?.receiver ? `, received by ${d.receiver}` : ''}${d?.back ? `, ${d.back} coming back` : ''}${d?.via === 'link' ? ' (carrier link)' : d?.via === 'office' ? ' (office)' : ''}` }
+    case 'reserve_back': { const d = e.details as { customer?: string; load?: string; seq?: number; so?: string; lines?: { strain: string; lbs: number }[] } | null
+      return `${d?.customer}: ${(d?.lines ?? []).map(x => `${x.strain} ${lbs(x.lbs)}`).join(', ')} rejected at delivery (${d?.so ?? ''} ${d?.load} stop ${d?.seq}), back on their reserve. Lower the reserve if they shouldn't get it back` }
+    case 'reserve_back_undone': { const d = e.details as { customer?: string; load?: string; seq?: number; now?: string } | null
+      return `${d?.customer}: ${d?.load} stop ${d?.seq} changed to ${(d?.now ?? '').replace('_', ' ')}, rejected lbs no longer back on their reserve` }
     case 'order_back_ready': { const d = e.details as { so?: string; load?: string } | null; return `${d?.so ?? 'Order'} back to Ready (rescheduled, received back from ${d?.load})` }
     case 'returned_back': { const d = e.details as { load?: string; customer?: string; site?: string; reason?: string } | null
       return `${code} came back from ${d?.customer} on ${d?.load}${d?.reason ? ` (${d.reason.replace('_', ' ')})` : ''}, received at ${d?.site}` }

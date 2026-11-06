@@ -102,7 +102,7 @@ type Screen = 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit'
 export interface ActLine { s: string; y: number; from: number; to: number; ok?: number | null
   /** reserve after Lifted's decision on this line (null while waiting); when present it wins over the entry's status */
   after?: number | null }
-export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string; kind: 'request' | 'adjust' | 'setup'
+export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string; kind: 'request' | 'adjust' | 'setup' | 'rejected'
   status?: 'waiting' | 'approved' | 'partly' | 'declined' | 'cancelled'; decidedAt?: string | null; decidedBy?: string | null
   lines: ActLine[]; note?: string | null; reply?: string | null; fromHold?: boolean }
 interface Data {
@@ -829,10 +829,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const months: [string, Act[]][] = []
     for (const a of list) { const m = new Date(a.at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), g = months.find(x => x[0] === m); if (g) g[1].push(a); else months.push([m, [a]]) }
     const sign = (n: number) => n === 0 ? '0' : (n > 0 ? '+' : '−') + fmt(Math.abs(n))
-    const title = (a: Act) => a.kind === 'setup' ? `Lifted set up your ${a.lines[0]?.y ?? cy} reserves`
+    const title = (a: Act) => a.kind === 'rejected' ? 'Rejected at delivery: back on your reserve' : a.kind === 'setup' ? `Lifted set up your ${a.lines[0]?.y ?? cy} reserves`
       : a.kind === 'adjust' ? `Lifted changed ${a.lines.length === 1 ? 'your reserve' : `${a.lines.length} of your reserves`}`
       : a.fromHold ? 'You asked to reserve a sample hold' : `You asked to change ${plural(a.lines.length, 'reserve')}`
-    const chip = (a: Act) => a.kind !== 'request' ? <span className={c('chip c-lifted')}>{a.kind === 'setup' ? 'Contract set up' : 'Changed by Lifted'}</span>
+    const chip = (a: Act) => a.kind === 'rejected' ? <span className={c('chip c-ok')}>Back on reserve</span> : a.kind !== 'request' ? <span className={c('chip c-lifted')}>{a.kind === 'setup' ? 'Contract set up' : 'Changed by Lifted'}</span>
       : a.status === 'waiting' ? <span className={c('chip c-wait')}>Waiting on Lifted</span> : a.status === 'approved' ? <span className={c('chip c-ok')}>Approved</span>
       : a.status === 'partly' ? <span className={c('chip c-part')}>Partly approved</span> : a.status === 'declined' ? <span className={c('chip c-no')}>Not approved</span> : <span className={c('chip')}>Cancelled</span>
     const entry = (a: Act) => {
@@ -849,6 +849,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <p className={c('meta')} style={{ margin: '2px 0 0' }}>{actWhen(a.at)} · {a.who}</p></div>
           {chip(a)}
         </div>
+        {a.kind === 'rejected' ? <>
+          <div className={c('actt head nr')}><span>Strain</span><span></span><span></span><span>Back on reserve</span></div>
+          {lines.map(l => <div key={l.s + l.y} className={c('actt nr')}><span className={c('rmname')}>{l.s} {yrTag(l.y)}</span><span></span><span></span><span className={c('up')}>+{fmt(l.to)}</span></div>)}
+        </> : <>
         <div className={c(`actt head ${req ? '' : 'nr'}`)}><span>Strain</span><span>Before</span>{req && <span>Asked for</span>}<span>After</span><span>Change</span></div>
         {lines.map(l => {
           const after = afterOf(l)
@@ -860,6 +864,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <span className={c(after == null || after === l.from ? 'muted' : after > l.from ? 'up' : 'down')}>{after == null ? '–' : sign(after - l.from)}</span>
           </div>
         })}
+        </>}
         {more}
         {(a.note || decided) && <div className={c(`act-notes ${a.by === 'lifted' && a.kind === 'adjust' ? 'gold' : ''}`)}>
           {a.note && <p><span className={c('meta')} style={{ display: 'inline' }}>{noteLbl}: </span>{a.note}</p>}
