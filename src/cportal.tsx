@@ -105,10 +105,11 @@ export interface ActLine { s: string; y: number; from: number; to: number; ok?: 
 export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string; kind: 'request' | 'adjust' | 'setup' | 'rejected'
   status?: 'waiting' | 'approved' | 'partly' | 'declined' | 'cancelled'; decidedAt?: string | null; decidedBy?: string | null
   lines: ActLine[]; note?: string | null; reply?: string | null; fromHold?: boolean }
-/** yields (mockup): what the customer got from each strain on a shipped order. Fresh frozen -> hash -> rosin */
+/** yields (mockup): what the customer got from each strain on a shipped order. Fresh frozen -> hash -> rosin, or fresh frozen -> BHO */
 export type YUnit = 'g' | 'kg' | 'lb' | '%'
-export interface YieldLine { s: string; y: number; shipped: number; ff: number | null; made: { hash: boolean; rosin: boolean }
-  hashV: number | null; hashU: YUnit; rosinV: number | null; rosinU: YUnit; rating: number | null; note: string }
+/** one way a strain was run: washed to hash (and maybe pressed to rosin), or run to BHO. A strain can be split into several parts */
+export interface YPart { bho: boolean; rosin: boolean; ff: number | null; outV: number | null; outU: YUnit; rosinV: number | null; rosinU: YUnit }
+export interface YieldLine { s: string; y: number; shipped: number; parts: YPart[]; note: string }
 export interface YieldReport { orderId: number; lines: YieldLine[]; sentAt: string | null; savedAt: string | null }
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
@@ -1377,8 +1378,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   // ---------- yields (mockup) ----------
+  // A strain on an order can be split into parts: some fresh frozen washed to hash (and maybe pressed to rosin), some run to BHO.
   const G_PER: Record<YUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0 }
   const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '%']]
+  const newPart = (ff: number | null): YPart => ({ bho: false, rosin: true, ff, outV: null, outU: 'g', rosinV: null, rosinU: 'g' })
   // shipped orders made in the app, newest first, with their report (if any)
   const yOrders = useMemo(() => (d?.yields ? orows.filter(o => o.status === 'shipped' && o.order && o.order.order_lines.length) : [])
     .map(o => ({ o, rep: d?.yields?.find(r => r.orderId === o.order!.id) ?? null })), [orows, d])
@@ -1388,25 +1391,28 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [yTxt, setYTxt] = useState<Record<string, string>>({})   // what's typed in each amount box, so "3." and "0.50" stay as typed
   const openYield = (orderId: number) => {
     const x = yOrders.find(z => z.o.order!.id === orderId); if (!x) return
-    // one line per strain + crop year on the order (samples included); fresh frozen run starts at what shipped
+    // one line per strain + crop year on the order (samples included); the first part starts with everything that shipped
     const by = new Map<string, YieldLine>()
     for (const l of x.o.order!.order_lines) { const y0 = l.crop_year ?? cy, k = l.strain + '|' + y0, v = by.get(k)
-      if (v) v.shipped += Number(l.lbs); else by.set(k, { s: l.strain, y: y0, shipped: Number(l.lbs), ff: null, made: { hash: true, rosin: true }, hashV: null, hashU: 'g', rosinV: null, rosinU: 'g', rating: null, note: '' }) }
+      if (v) v.shipped += Number(l.lbs); else by.set(k, { s: l.strain, y: y0, shipped: Number(l.lbs), parts: [], note: '' }) }
     const saved = x.rep?.lines ?? []
-    setYDraft([...by.values()].map(l => ({ ...l, ...(saved.find(z => z.s === l.s && z.y === l.y) ?? {}), shipped: l.shipped })).map(l => ({ ...l, ff: l.ff ?? l.shipped })))
+    setYDraft([...by.values()].map(l => { const sv = saved.find(z => z.s === l.s && z.y === l.y)
+      return { ...l, note: sv?.note ?? '', parts: sv?.parts?.length ? sv.parts.map(p => ({ ...p })) : [newPart(l.shipped)] } }))
     setYTxt({}); setYOrder(orderId); go('yield')
   }
-  // grams for each step, and the yields worked out from them
-  const yCalc = (l: YieldLine) => {
-    const ffG = (l.ff ?? 0) * G_PER.lb
-    const hashG = !l.made.hash || l.hashV == null ? null : l.hashU === '%' ? ffG * l.hashV / 100 : l.hashV * G_PER[l.hashU]
-    const rosinG = !l.made.rosin || l.rosinV == null ? null : l.rosinU === '%' ? (hashG == null ? null : hashG * l.rosinV / 100) : l.rosinV * G_PER[l.rosinU]
-    return { ffG, hashG, rosinG, hashPct: hashG != null && ffG > 0 ? hashG / ffG * 100 : null,
-      rosinOfHash: rosinG != null && hashG ? rosinG / hashG * 100 : null, rosinOfFF: rosinG != null && ffG > 0 ? rosinG / ffG * 100 : null }
+  // grams for each step of one part, and the yields worked out from them
+  const yCalc = (p: YPart) => {
+    const ffG = (p.ff ?? 0) * G_PER.lb
+    const outG = p.outV == null ? null : p.outU === '%' ? ffG * p.outV / 100 : p.outV * G_PER[p.outU]
+    const hashG = p.bho ? null : outG, bhoG = p.bho ? outG : null
+    const rosinG = p.bho || !p.rosin || p.rosinV == null ? null : p.rosinU === '%' ? (hashG == null ? null : hashG * p.rosinV / 100) : p.rosinV * G_PER[p.rosinU]
+    const of = (g: number | null, base: number | null) => g != null && base ? g / base * 100 : null
+    return { ffG, hashG, bhoG, rosinG, hashPct: of(hashG, ffG), bhoPct: of(bhoG, ffG), rosinOfHash: of(rosinG, hashG), rosinOfFF: of(rosinG, ffG) }
   }
   const pct = (n: number | null) => n == null ? '–' : `${n < 10 ? n.toFixed(2) : n.toFixed(1)}%`
   const gFmt = (g: number | null) => g == null ? '' : g >= 1000 ? `${(g / 1000).toFixed(2)} kg` : `${Math.round(g).toLocaleString()} g`
-  const yDone = (l: YieldLine) => l.hashV != null || l.rosinV != null
+  const pDone = (p: YPart) => p.outV != null || (!p.bho && p.rosinV != null)
+  const yDone = (l: YieldLine) => l.parts.some(pDone)
   async function saveYields(send: boolean) {
     if (yOrder == null) return
     const fn = (backend as unknown as { saveYields?: (id: number, lines: YieldLine[], send: boolean) => Promise<void> }).saveYields
@@ -1415,27 +1421,28 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     toast(send ? 'Yields sent to Lifted. Thank you!' : 'Saved. You can finish later.'); await reload(); go('yields')
   }
 
-  // one row per strain + crop year: every run they've reported, totals and lbs-weighted yields
-  type YRun = { orderId: number; label: string; date: string | null; l: YieldLine; k: ReturnType<typeof yCalc>; draft: boolean }
-  type YStrain = { s: string; y: number; runs: YRun[]; lbs: number; hashPct: number | null; rosinOfHash: number | null; rosinOfFF: number | null; rating: number | null }
+  // one row per strain + crop year: every part they've reported, totals and lbs-weighted yields
+  type YRun = { orderId: number; label: string; date: string | null; p: YPart; note: string; k: ReturnType<typeof yCalc>; draft: boolean }
+  type YStrain = { s: string; y: number; runs: YRun[]; lbs: number; hashPct: number | null; rosinOfHash: number | null; rosinOfFF: number | null; bhoPct: number | null }
+  // lbs-weighted yields over a set of parts
+  const yAgg = (rs: YRun[]) => {
+    const sumG = (f: (r: YRun) => number | null) => rs.reduce((a, r) => a + (f(r) ?? 0), 0)
+    const hashRs = rs.filter(r => r.k.hashG != null), bhoRs = rs.filter(r => r.k.bhoG != null), rosRs = rs.filter(r => r.k.rosinG != null), both = rosRs.filter(r => r.k.hashG != null)
+    const ff = (xs: YRun[]) => xs.reduce((a, r) => a + r.k.ffG, 0)
+    const div = (a: number, b: number) => b > 0 ? a / b * 100 : null
+    return { hashPct: div(sumG(r => r.k.hashG), ff(hashRs)), bhoPct: div(sumG(r => r.k.bhoG), ff(bhoRs)),
+      rosinOfFF: div(sumG(r => r.k.rosinG), ff(rosRs)), rosinOfHash: div(both.reduce((a, r) => a + (r.k.rosinG ?? 0), 0), both.reduce((a, r) => a + (r.k.hashG ?? 0), 0)) }
+  }
   const yStrains = useMemo((): YStrain[] => {
     const m = new Map<string, YStrain>()
     for (const r of d?.yields ?? []) {
       const o = orows.find(x => x.order?.id === r.orderId)
-      for (const l of r.lines) { if (!yDone(l)) continue
-        const key = l.s + '|' + l.y, v = m.get(key) ?? { s: l.s, y: l.y, runs: [], lbs: 0, hashPct: null, rosinOfHash: null, rosinOfFF: null, rating: null }
-        v.runs.push({ orderId: r.orderId, label: o?.label ?? `Order ${r.orderId}`, date: o?.date ?? r.savedAt, l, k: yCalc(l), draft: !r.sentAt }); m.set(key, v) }
+      for (const l of r.lines) for (const p of l.parts ?? []) { if (!pDone(p)) continue
+        const key = l.s + '|' + l.y, v = m.get(key) ?? { s: l.s, y: l.y, runs: [], lbs: 0, hashPct: null, rosinOfHash: null, rosinOfFF: null, bhoPct: null }
+        v.runs.push({ orderId: r.orderId, label: o?.label ?? `Order ${r.orderId}`, date: o?.date ?? r.savedAt, p, note: l.note, k: yCalc(p), draft: !r.sentAt }); m.set(key, v) }
     }
     for (const v of m.values()) {
-      const sum = (f: (k: YRun) => number | null) => v.runs.reduce((a, x) => a + (f(x) ?? 0), 0)
-      const withHash = v.runs.filter(x => x.k.hashG != null), withRosin = v.runs.filter(x => x.k.rosinG != null), both = withRosin.filter(x => x.k.hashG != null)
-      v.lbs = sum(x => x.l.ff)
-      const ffH = withHash.reduce((a, x) => a + x.k.ffG, 0), ffR = withRosin.reduce((a, x) => a + x.k.ffG, 0)
-      v.hashPct = ffH > 0 ? withHash.reduce((a, x) => a + (x.k.hashG ?? 0), 0) / ffH * 100 : null
-      v.rosinOfFF = ffR > 0 ? withRosin.reduce((a, x) => a + (x.k.rosinG ?? 0), 0) / ffR * 100 : null
-      const hB = both.reduce((a, x) => a + (x.k.hashG ?? 0), 0)
-      v.rosinOfHash = hB > 0 ? both.reduce((a, x) => a + (x.k.rosinG ?? 0), 0) / hB * 100 : null
-      const rated = v.runs.filter(x => x.l.rating != null); v.rating = rated.length ? rated.reduce((a, x) => a + (x.l.rating ?? 0), 0) / rated.length : null
+      v.lbs = v.runs.reduce((a, r) => a + (r.p.ff ?? 0), 0); Object.assign(v, yAgg(v.runs))
       v.runs.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
     }
     return [...m.values()]
@@ -1449,29 +1456,23 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const ql = q.toLowerCase()
     const years = [...new Set(yStrains.map(x => x.y))].sort((a, b) => b - a)
     const rows = sortRows('yres', yStrains.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)),
-      { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, q: x => x.rating ?? -1, g: x => gradeN(x.s) })
-    // totals across everything shown, lbs-weighted
-    const all = rows.flatMap(x => x.runs), ff = (f: (r: YRun) => boolean) => all.filter(f).reduce((a, r) => a + r.k.ffG, 0)
-    const tHash = ff(r => r.k.hashG != null), tRos = ff(r => r.k.rosinG != null), hB = all.filter(r => r.k.hashG != null && r.k.rosinG != null).reduce((a, r) => a + (r.k.hashG ?? 0), 0)
-    const kHash = tHash ? all.reduce((a, r) => a + (r.k.hashG ?? 0), 0) / tHash * 100 : null
-    const kRof = tRos ? all.reduce((a, r) => a + (r.k.rosinG ?? 0), 0) / tRos * 100 : null
-    const kRoh = hB ? all.filter(r => r.k.hashG != null).reduce((a, r) => a + (r.k.rosinG ?? 0), 0) / hB * 100 : null
+      { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1, g: x => gradeN(x.s) })
+    const tot = yAgg(rows.flatMap(x => x.runs))
     const maxHash = Math.max(1, ...rows.map(x => x.hashPct ?? 0))
-    const starsOf = (n: number | null) => n == null ? <span className={c('muted')}>–</span> : <span className={c('ystarv')} title={`${n.toFixed(1)} of 5`}>★ {n.toFixed(1)}</span>
-    const bar = (v: number | null) => <span className={c('ybar')}><b>{pct(v)}</b>{v != null && <i style={{ width: Math.max(4, Math.round(v / maxHash * 90)) }} />}</span>
+    const bar = (v: number | null) => <span className={c('ybar')}><b>{pct(v)}</b>{v != null && <i style={{ width: Math.max(4, Math.round(v / maxHash * 80)) }} />}</span>
     const runList = (x: YStrain) => <div className={c('yruns')}>
-      {desk && <div className={c('yrun head')}><span>Order</span><span>FF run</span><span>Hash</span><span>Rosin</span><span>Quality</span><span>Notes</span></div>}
+      {desk && <div className={c('yrun head')}><span>Order</span><span>FF run</span><span>Process</span><span>Hash / BHO</span><span>Rosin</span><span>Notes</span></div>}
       {x.runs.map((r, i) => <div key={i} className={c('yrun')}>
         <span><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button> <span className={c('muted')}>{shortDate(r.date)}</span>{r.draft && <> <span className={c('chip c-wait')}>Draft</span></>}</span>
-        <span>{fmt(r.l.ff ?? 0)} lbs</span>
-        <span>{r.k.hashG != null ? <><b>{pct(r.k.hashPct)}</b> <span className={c('muted')}>{gFmt(r.k.hashG)}</span></> : <span className={c('muted')}>–</span>}</span>
+        <span>{fmt(r.p.ff ?? 0)} lbs</span>
+        <span>{r.p.bho ? <span className={c('ptag bho')}>BHO</span> : <span className={c('ptag')}>{r.p.rosin ? 'Hash + rosin' : 'Hash'}</span>}</span>
+        <span>{r.p.bho ? <><b>{pct(r.k.bhoPct)}</b> <span className={c('muted')}>BHO · {gFmt(r.k.bhoG)}</span></> : r.k.hashG != null ? <><b>{pct(r.k.hashPct)}</b> <span className={c('muted')}>hash · {gFmt(r.k.hashG)}</span></> : <span className={c('muted')}>–</span>}</span>
         <span>{r.k.rosinG != null ? <><b>{pct(r.k.rosinOfHash)}</b> <span className={c('muted')}>of hash · {gFmt(r.k.rosinG)}</span></> : <span className={c('muted')}>–</span>}</span>
-        <span>{starsOf(r.l.rating)}</span>
-        <span className={c('muted')}>{r.l.note || ''}</span></div>)}</div>
+        <span className={c('muted')}>{r.note || ''}</span></div>)}</div>
     return (
       <div className={c('screen ylist')}>
         <header className={c('hdr')}>{back('home', 'Home')}<h1>Yields</h1>
-          <p className={c('sub')}>Report how each strain ran, and see how your hash and rosin yields compare across strains and orders.</p></header>
+          <p className={c('sub')}>Report how each strain ran, and see how your hash, rosin and BHO yields compare across strains and orders.</p></header>
         <main className={c('main')}>
           <div className={c('filters ytabs')} role="tablist" aria-label="Yields">
             <button role="tab" aria-selected={tab === 'results'} aria-pressed={tab === 'results'} onClick={() => setYTab('results')}>My results</button>
@@ -1490,37 +1491,37 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : yStrains.length === 0 ? <section className={c('card')}><p className={c('meta')} style={{ padding: 16, margin: 0 }}>Nothing reported yet. Report yields on a shipped order and your results show up here. <button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => setYTab('report')}>Report yields</button></p></section>
           : <>
             <div className={c(`kpis ${desk ? 'five' : 'ykpis'}`)}>
-              <div className={c('kpi')}><p>Strains reported</p><b>{rows.length}</b></div>
-              <div className={c('kpi')}><p>Fresh frozen run</p><b>{fmt(rows.reduce((a, x) => a + x.lbs, 0))} lbs</b></div>
-              <div className={c('kpi tint')}><p>Hash yield</p><b>{pct(kHash)}</b><small>of fresh frozen</small></div>
-              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(kRoh)}</b><small>of hash</small></div>
-              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(kRof)}</b><small>of fresh frozen</small></div>
+              <div className={c('kpi')}><p>Fresh frozen run</p><b>{fmt(rows.reduce((a, x) => a + x.lbs, 0))} lbs</b><small>{plural(rows.length, 'strain')}</small></div>
+              <div className={c('kpi tint')}><p>Hash yield</p><b>{pct(tot.hashPct)}</b><small>of fresh frozen</small></div>
+              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(tot.rosinOfHash)}</b><small>of hash</small></div>
+              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(tot.rosinOfFF)}</b><small>of fresh frozen</small></div>
+              <div className={c('kpi')}><p>BHO yield</p><b>{pct(tot.bhoPct)}</b><small>of fresh frozen</small></div>
             </div>
             <div className={c('rmbar act-bar')}>
-                <div className={c('filters')} role="group" aria-label="Filter strains">
-                  <button aria-pressed={menuYear === 'all' && gradeF === 'all'} onClick={() => { setMenuYear('all'); setGradeF('all') }}>All</button>
-                  {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
-                  <button aria-pressed={gradeF === 'SHO'} onClick={() => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO')}>SHO</button>
-                  <button aria-pressed={gradeF === 'BHO'} onClick={() => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>
-                <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
-              </div>
+              <div className={c('filters')} role="group" aria-label="Filter strains">
+                <button aria-pressed={menuYear === 'all' && gradeF === 'all'} onClick={() => { setMenuYear('all'); setGradeF('all') }}>All</button>
+                {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
+                <button aria-pressed={gradeF === 'SHO'} onClick={() => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO')}>SHO</button>
+                <button aria-pressed={gradeF === 'BHO'} onClick={() => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>
+              <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
+            </div>
             <section className={c('card')}>
               {desk ? <>
-                <div className={c('yres head')}>{sh('yres', 's', 'Strain')}{sh('yres', 'runs', 'Runs')}{sh('yres', 'lbs', 'FF run')}{sh('yres', 'hash', <>Hash yield<br />of FF</>)}{sh('yres', 'roh', <>Rosin yield<br />of hash</>)}{sh('yres', 'rof', <>Rosin yield<br />of FF</>)}{sh('yres', 'q', 'Quality')}<span /></div>
+                <div className={c('yres head')}>{sh('yres', 's', 'Strain')}{sh('yres', 'runs', 'Runs')}{sh('yres', 'lbs', 'FF run')}{sh('yres', 'hash', <>Hash yield<br />of FF</>)}{sh('yres', 'roh', <>Rosin yield<br />of hash</>)}{sh('yres', 'rof', <>Rosin yield<br />of FF</>)}{sh('yres', 'bho', <>BHO yield<br />of FF</>)}<span /></div>
                 {rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                   return <Fragment key={key}><button className={c(`yres ${open ? 'on' : ''}`)} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
                     <span className={c('rmname')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
-                    {bar(x.hashPct)}<b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span>{starsOf(x.rating)}<span className={c('muted')}>{open ? I.up : I.down}</span></button>
+                    {bar(x.hashPct)}<b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b><span className={c('muted')}>{open ? I.up : I.down}</span></button>
                     {open && runList(x)}</Fragment> })}
               </> : rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                 return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('li btnrow')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
                   <div className={c('grow')}><p className={c('name')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</p>
-                    <p className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs{x.rosinOfHash != null ? ` · Rosin ${pct(x.rosinOfHash)} of hash` : ''}{x.rating != null ? ` · ★ ${x.rating.toFixed(1)}` : ''}</p></div>
+                    <p className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs{x.rosinOfHash != null ? ` · Rosin ${pct(x.rosinOfHash)} of hash` : ''}{x.bhoPct != null ? ` · BHO ${pct(x.bhoPct)}` : ''}</p></div>
                   <div className={c('r')}><b className={c('num')} style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><p className={c('meta')}>hash</p></div>{open ? I.up : I.down}</button>
                   {open && runList(x)}</div> })}
               {rows.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>No strains match.</p>}
             </section>
-            <p className={c('meta')} style={{ margin: '0 4px' }}>Yields are weighted by lbs run. Hash yield is hash ÷ fresh frozen; rosin yield is rosin ÷ hash (and ÷ fresh frozen). Drafts count too.</p>
+            <p className={c('meta')} style={{ margin: '0 4px' }}>Yields are weighted by lbs run. Hash and BHO yields are ÷ fresh frozen; rosin yield is ÷ hash (and ÷ fresh frozen). Drafts count too.</p>
           </>}
         </main>
       </div>
@@ -1530,49 +1531,58 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   function YieldScreen() {
     const x = yOrders.find(z => z.o.order!.id === yOrder)
     if (!x) return <div className={c('screen')}><header className={c('hdr')}>{back('yields', 'Yields')}<h1>Report yields</h1></header><p className={c('loading')}>Pick an order to report.</p></div>
-    const set = (i: number, p: Partial<YieldLine>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, ...p } : l))
+    const setL = (i: number, p: Partial<YieldLine>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, ...p } : l))
+    const setP = (i: number, pi: number, p: Partial<YPart>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, parts: l.parts.map((q0, k) => k === pi ? { ...q0, ...p } : q0) } : l))
     // numbers with up to 2 decimals: keep what they typed, store the number
-    const typed = (key: string, v: string): number | null | undefined => {
+    const typed = (key: string, v: string): number | null => {
       let t = v.replace(/[^0-9.]/g, ''); const dot = t.indexOf('.')
       if (dot >= 0) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, '').slice(0, 2)
       setYTxt({ ...yTxt, [key]: t }); return t === '' || t === '.' ? null : Number(t)
     }
     const shown = (key: string, v: number | null) => yTxt[key] ?? (v == null ? '' : String(v))
-    const amount = (i: number, l: YieldLine, which: 'hash' | 'rosin') => {
-      const v = which === 'hash' ? l.hashV : l.rosinV, u = which === 'hash' ? l.hashU : l.rosinU
+    const amount = (i: number, pi: number, l: YieldLine, p: YPart, which: 'out' | 'rosin') => {
+      const v = which === 'out' ? p.outV : p.rosinV, u = which === 'out' ? p.outU : p.rosinU, what = which === 'rosin' ? 'rosin' : p.bho ? 'BHO' : 'hash', key = `${i}-${pi}-${which}`
       return <span className={c('yamt')}>
-        <input type="text" inputMode="decimal" placeholder="0.00" value={shown(`${i}-${which}`, v)} aria-label={`${l.s} ${which} amount`}
-          onChange={e => { const n = typed(`${i}-${which}`, e.target.value); set(i, which === 'hash' ? { hashV: n ?? null } : { rosinV: n ?? null }) }} />
-        <select value={u} aria-label={`${l.s} ${which} unit`} onChange={e => set(i, which === 'hash' ? { hashU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
+        <input type="text" inputMode="decimal" placeholder="0.00" value={shown(key, v)} aria-label={`${l.s} ${what} amount`}
+          onChange={e => { const n = typed(key, e.target.value); setP(i, pi, which === 'out' ? { outV: n } : { rosinV: n }) }} />
+        <select value={u} aria-label={`${l.s} ${what} unit`} onChange={e => setP(i, pi, which === 'out' ? { outU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
           {UNITS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
     }
-    const stars = (i: number, l: YieldLine) => <span className={c('ystars')} role="radiogroup" aria-label={`${l.s} quality`}>
-      {[1, 2, 3, 4, 5].map(n => <button key={n} type="button" role="radio" aria-checked={l.rating === n} aria-label={`${n} of 5`} className={c(l.rating != null && n <= l.rating ? 'on' : '')}
-        onClick={() => set(i, { rating: l.rating === n ? null : n })}>★</button>)}</span>
     const filled = yDraft.filter(yDone).length
     return (
       <div className={c('screen yform')}>
         <header className={c('hdr')}>{back('yields', 'Yields')}<h1>Yields · {x.o.label}</h1>
           <p className={c('sub')}>Shipped {shortDate(x.o.date)}. Fill in what you have; leave a strain blank if you haven't run it yet.</p></header>
         <main className={c('main')}>
-          <p className={c('meta yhint')}>Enter hash and rosin in grams, kg or lbs, or pick <b>%</b> to type the yield: hash % is of the fresh frozen, rosin % is of the hash.</p>
-          {desk && <div className={c('yrow head')}><span>Strain</span><span>Fresh frozen run</span><span>Hash</span><span>Rosin</span><span>Quality</span></div>}
-          {yDraft.map((l, i) => { const k = yCalc(l)
+          <p className={c('meta yhint')}>Pick <b>Hash</b> (tick <b>Rosin</b> if you pressed it) or <b>BHO</b>. Enter amounts in grams, kg or lbs, or pick <b>%</b>: hash and BHO % are of the fresh frozen, rosin % is of the hash. Ran a strain two ways? Use <b>+ Split this strain</b>.</p>
+          {desk && <div className={c('yhead')}><span>Strain</span><span>Process</span><span>Fresh frozen run</span><span>Hash / BHO</span><span>Rosin</span><span /></div>}
+          {yDraft.map((l, i) => { const used = l.parts.reduce((a, p) => a + (p.ff ?? 0), 0), left = Math.round((l.shipped - used) * 100) / 100
             return <section key={l.s + l.y} className={c(`card ycard ${yDone(l) ? 'done' : ''}`)}>
-              <div className={c('yrow')}>
+              <div className={c('ybody')}>
                 <div className={c('ystrain')}><p className={c('name')}>{l.s} {tagPill(l.s)} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
-                  <div className={c('ymade')} role="group" aria-label={`What you made from ${l.s}`}>
-                    <label><input type="checkbox" checked={l.made.hash} onChange={e => set(i, { made: { ...l.made, hash: e.target.checked } })} /> Hash</label>
-                    <label><input type="checkbox" checked={l.made.rosin} onChange={e => set(i, { made: { ...l.made, rosin: e.target.checked } })} /> Rosin</label></div></div>
-                <div className={c('yfield')}><span className={c('ylbl')}>Fresh frozen run</span>
-                  <span className={c('yamt')}><input type="text" inputMode="decimal" value={shown(`${i}-ff`, l.ff)} aria-label={`${l.s} fresh frozen run, lbs`} onChange={e => { const n = typed(`${i}-ff`, e.target.value); set(i, { ff: n ?? null }) }} /><span className={c('yunit')}>lbs</span></span></div>
-                <div className={c(`yfield ${l.made.hash ? '' : 'off'}`)}><span className={c('ylbl')}>Hash</span>
-                  {l.made.hash ? <>{amount(i, l, 'hash')}<span className={c('yres')}>{k.hashPct != null ? <><b>{pct(k.hashPct)}</b> of fresh frozen{l.hashU !== 'g' ? ` · ${gFmt(k.hashG)}` : ''}</> : ' '}</span></> : <span className={c('meta')}>Not made</span>}</div>
-                <div className={c(`yfield ${l.made.rosin ? '' : 'off'}`)}><span className={c('ylbl')}>Rosin</span>
-                  {l.made.rosin ? <>{amount(i, l, 'rosin')}<span className={c('yres')}>{k.rosinOfHash != null || k.rosinOfFF != null ? <>{k.rosinOfHash != null && <><b>{pct(k.rosinOfHash)}</b> of hash</>}{k.rosinOfHash != null && k.rosinOfFF != null ? ' · ' : ''}{k.rosinOfFF != null && <>{pct(k.rosinOfFF)} of FF</>}</> : ' '}</span></> : <span className={c('meta')}>Not made</span>}</div>
-                <div className={c('yfield')}><span className={c('ylbl')}>Quality</span>{stars(i, l)}</div>
+                  {l.parts.length > 1 && <p className={c('meta')} style={{ color: left < 0 ? 'var(--red)' : undefined }}>{left === 0 ? 'All lbs accounted for' : left > 0 ? `${fmt(left)} lbs not in a part yet` : `${fmt(-left)} lbs more than shipped`}</p>}</div>
+                <div className={c('yparts')}>
+                  {l.parts.map((p, pi) => { const k = yCalc(p)
+                    return <div key={pi} className={c(`ypart ${l.parts.length > 1 ? 'split' : ''}`)}>
+                      {!desk && l.parts.length > 1 && <p className={c('ypartn')}>Part {pi + 1}{p.bho ? ' · BHO' : ' · Hash'}</p>}
+                      <div className={c('ycell yproc')} role="group" aria-label={`What you made from ${l.s}`}>
+                        <label><input type="checkbox" checked={!p.bho} onChange={e => setP(i, pi, { bho: !e.target.checked })} /> Hash</label>
+                        <label className={c(p.bho ? 'dim' : '')}><input type="checkbox" checked={!p.bho && p.rosin} disabled={p.bho} onChange={e => setP(i, pi, { rosin: e.target.checked })} /> Rosin</label>
+                        <label><input type="checkbox" checked={p.bho} onChange={e => setP(i, pi, { bho: e.target.checked })} /> BHO</label></div>
+                      <div className={c('ycell')}><span className={c('ylbl')}>Fresh frozen run</span>
+                        <span className={c('yamt')}><input type="text" inputMode="decimal" value={shown(`${i}-${pi}-ff`, p.ff)} aria-label={`${l.s} fresh frozen run, lbs`} onChange={e => setP(i, pi, { ff: typed(`${i}-${pi}-ff`, e.target.value) })} /><span className={c('yunit')}>lbs</span></span></div>
+                      <div className={c('ycell')}><span className={c('ylbl')}>{p.bho ? 'BHO' : 'Hash'}</span>
+                        {amount(i, pi, l, p, 'out')}<span className={c('yout')}>{p.bho ? (k.bhoPct != null ? <><b className={c('gold')}>{pct(k.bhoPct)}</b> of fresh frozen{p.outU !== 'g' ? ` · ${gFmt(k.bhoG)}` : ''}</> : ' ')
+                          : k.hashPct != null ? <><b>{pct(k.hashPct)}</b> of fresh frozen{p.outU !== 'g' ? ` · ${gFmt(k.hashG)}` : ''}</> : ' '}</span></div>
+                      <div className={c(`ycell ${p.bho || !p.rosin ? 'off' : ''}`)}>{p.bho || !p.rosin ? (desk ? <span className={c('meta')}>{p.bho ? '' : 'No rosin'}</span> : null) : <>
+                        <span className={c('ylbl')}>Rosin</span>{amount(i, pi, l, p, 'rosin')}
+                        <span className={c('yout')}>{k.rosinOfHash != null || k.rosinOfFF != null ? <>{k.rosinOfHash != null && <><b>{pct(k.rosinOfHash)}</b> of hash</>}{k.rosinOfHash != null && k.rosinOfFF != null ? ' · ' : ''}{k.rosinOfFF != null && <>{pct(k.rosinOfFF)} of FF</>}</> : ' '}</span></>}</div>
+                      <div className={c('ycell yx')}>{l.parts.length > 1 && <button className={c('iconbtn')} aria-label={`Remove part ${pi + 1}`} onClick={() => { setL(i, { parts: l.parts.filter((_, z) => z !== pi) }); setYTxt({}) }}>{I.close}</button>}</div>
+                    </div> })}
+                  <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. some to hash, some to BHO)' : ''}</button>
+                </div>
               </div>
-              <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => set(i, { note: e.target.value })} /></label>
+              <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => setL(i, { note: e.target.value })} /></label>
             </section> })}
         </main>
         <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>
