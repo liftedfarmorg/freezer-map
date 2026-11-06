@@ -81,7 +81,7 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
 // 215: packages coming back on our own trucks (rejected or not delivered). Receive back = into Needs a spot (Staging) at the farm.
 // Nothing goes to METRC from here: Rama voids the manifest (not delivered) or checks the customer's rejection (alert in Transit).
 interface Back { id: number; stop_id: number; load_id: number; load: string; load_status: string; seq: number; customer: string; outcome: string; outcome_reason: string | null; outcome_at: string | null
-  manifest: string | null; kind: 'rejected' | 'not_delivered'; reason: string | null; note: string | null; pallet_id: number; code: string; tag: string | null; strain: string | null; lbs: number | null
+  manifest: string | null; kind: 'rejected' | 'not_delivered'; reason: string | null; note: string | null; pallet_id: number; code: string; tag: string | null; strain: string | null; lbs: number | null; pkgs?: number | null
   item: string | null; from_site: string | null; staged: boolean }
 function ComingBack({ sb, flash, onChanged }: { sb: SupabaseClient | null; flash: (m: string, bad?: boolean) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<Back[]>([])
@@ -128,7 +128,7 @@ function ComingBack({ sb, flash, onChanged }: { sb: SupabaseClient | null; flash
             <button className="primary small" disabled={busy} onClick={() => receive(l.load_id)}>Receive back{mine.some(r => sel.has(r.id)) ? ` (${mine.filter(r => sel.has(r.id)).length})` : ''}</button></span></div>
         {mine.map(r => <label key={r.id} className="row small" style={{ gap: 6, padding: '3px 0' }}>
           <input type="checkbox" checked={sel.has(r.id)} onChange={() => setSel(x => { const n = new Set(x); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n })} />
-          <span><b>{r.code}</b> {r.item ?? r.strain} <span className="mono">{r.tag}</span> · {Number(r.lbs ?? 0).toLocaleString()} lbs · stop {r.seq} {r.customer}:{' '}
+          <span><b>{r.code}</b> {r.item ?? r.strain} <span className="mono">{r.tag}</span> · {Number(r.lbs ?? 0).toLocaleString()} lbs{r.pkgs ? ` (${r.pkgs} packages)` : ''} · stop {r.seq} {r.customer}:{' '}
             <span className="warn-t">{r.kind === 'rejected' ? `rejected${r.reason ? ` (${r.reason.replace('_', ' ')})` : ''}` : `not delivered${r.outcome_reason ? ` (${r.outcome_reason.replace('_', ' ')})` : ''}`}</span>
             {r.note ? ` · "${r.note}"` : ''}{r.staged ? ' · GVR pallet staged at OHR' : ''}</span></label>)}
       </div>
