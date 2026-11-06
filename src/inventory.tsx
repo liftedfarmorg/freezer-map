@@ -1,3 +1,4 @@
+import { MTag } from './mtag'
 import { StrainLink } from './strainCard'
 // Inventory tabs for Distribution and Sales, built on the shared InvTable (Processing has its own in proc/).
 import { useEffect, useState } from 'react'
@@ -53,7 +54,7 @@ export function DistInventory({ c, onMove, flash }: { c: InvCtx; onMove: (ids: n
     { k: 'where', l: 'Location', phone: true, get: p => <span className="small">{c.where(p)}</span>, val: p => c.where(p) },
     { k: 'item', l: 'Item', get: p => <span className="small">{itemName(c.item(p.item_id))}</span>, val: p => c.item(p.item_id)?.sku ?? '' },
     { k: 'lot', l: 'Harvest lot', get: p => <span className="mono small">{c.lot(p.lot_id)?.code ?? ''}</span>, val: p => c.lot(p.lot_id)?.code ?? '' },
-    { k: 'tag', l: 'METRC tag', get: p => <span className="mono small" title={p.package_tag ?? ''}>{p.package_tag ? `…${p.package_tag.slice(-8)}` : p.tag_pending ? 'pending' : ''}</span>, val: p => p.package_tag ?? '' },
+    { k: 'tag', l: 'METRC tag', get: p => <span className="small">{p.package_tag ? <MTag t={p.package_tag} n={8} /> : p.tag_pending ? 'pending' : ''}</span>, val: p => p.package_tag ?? '' },
     { k: 'age', l: 'Days', num: true, get: p => n0(daysSince(p.harvest_date)), val: p => daysSince(p.harvest_date) ?? -1 },
     { k: 'flags', l: 'Flags', get: p => <span className="flags">{flags(p).map(f => <span key={f} className="pill warnp">{f}</span>)}</span>, val: p => flags(p).join('; ') },
     { k: 'harvested', l: 'Harvested', on: false, get: p => p.harvest_date ?? '', val: p => p.harvest_date ?? '' },

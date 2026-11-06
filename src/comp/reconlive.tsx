@@ -1,3 +1,4 @@
+import { MTag } from '../mtag'
 import { useEffect, useMemo, useState } from 'react'
 import type { LiveRecon, SyncStatus } from './api'
 import type { Ctx } from './ctx'
@@ -121,7 +122,7 @@ export function LiveReconcile({ c }: { c: Ctx }) {
         {open.has(k) && <>{HELP[k] && <p className="muted small">{HELP[k]}</p>}
           <div className="tablewrap"><table className="ct"><thead><tr><th>Package</th><th className="hide-s">Tag</th><th className="hide-s">Strain / item</th><th className="num">App</th><th className="num">METRC</th><th className="hide-s">App spot</th><th>What METRC shows</th></tr></thead>
             <tbody>{by.get(k)!.map((r, i) => <tr key={`${r.tag}-${r.pallet_id}-${i}`}>
-              <td>{r.code ?? ''}</td><td className="mono small hide-s" title={r.tag ?? ''}>{r.tag ? `…${r.tag.slice(-8)}` : ''}</td>
+              <td>{r.code ?? ''}</td><td className="small hide-s"><MTag t={r.tag} n={8} /></td>
               <td className="small hide-s">{r.strain ?? r.metrc_item ?? ''}</td><td className="num">{n2(r.app_lbs)}</td><td className="num">{n2(r.metrc_lbs)}</td>
               <td className="small hide-s">{r.app_spot ?? ''}</td>
               <td className="small">{shows(r)}{r.note && <div className="muted">{r.note}</div>}{r.metrc_location && <div className="muted">METRC: {r.metrc_location}{r.metrc_changed ? `, changed ${when(r.metrc_changed)}` : ''}</div>}</td>
@@ -130,7 +131,7 @@ export function LiveReconcile({ c }: { c: Ctx }) {
     {plants.length > 0 && <div className="dueg"><h3 className="tap" onClick={() => toggle('plants')}>{open.has('plants') ? '▾' : '▸'} Plant packages in METRC (clones, seeds) <span className="muted">{plants.length}</span></h3>
       {open.has('plants') && <><p className="muted small">The app doesn't track clones and seeds as pallets yet (Phase 2, nursery). Left out of the counts and the Excel / PDF.</p>
         <div className="tablewrap"><table className="ct"><thead><tr><th>Tag</th><th>Item</th><th className="num">Qty</th><th>Location</th></tr></thead>
-          <tbody>{plants.slice(0, 300).map((r, i) => <tr key={i}><td className="mono small">…{(r.tag ?? '').slice(-8)}</td><td className="small">{r.metrc_item}</td><td className="num">{n2(r.metrc_lbs)}</td><td className="small">{r.metrc_location ?? ''}</td></tr>)}</tbody></table></div></>}
+          <tbody>{plants.slice(0, 300).map((r, i) => <tr key={i}><td className="small"><MTag t={r.tag} n={8} /></td><td className="small">{r.metrc_item}</td><td className="num">{n2(r.metrc_lbs)}</td><td className="small">{r.metrc_location ?? ''}</td></tr>)}</tbody></table></div></>}
     </div>}
   </>
 }

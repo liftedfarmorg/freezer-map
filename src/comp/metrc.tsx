@@ -1,3 +1,4 @@
+import { tagTxt } from '../mtag'
 import { Select } from '../combo'
 import { useEffect, useMemo, useState } from 'react'
 import type { MAction, MError, Play, PushKind, PushResult, Recon, Upload } from './api'
@@ -12,7 +13,7 @@ import type { Field, MRow } from './csv'
 import { DateIn, F, Pick, SaveBar, Sheet, TextIn, errText, useSel, SelBox, SelAll, SelBar } from '../cult/ui'
 
 const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
-const short = (t: string | null | undefined) => (t ? (t.length > 10 ? `…${t.slice(-8)}` : t) : '')
+const short = (t: string | null | undefined) => (t ? (t.length > 10 ? tagTxt(t, 8) : t) : '')
 const n2 = (x: number | null | undefined) => (x == null ? '' : (Math.round(Number(x) * 100) / 100).toLocaleString())
 const PS: Record<NonNullable<MAction['push_state']>, [string, string]> = { checked: ['Dry run OK', 'cp-ok'], sending: ['Sending…', 'cp-warn'], sent: ['Sent by the app', 'cp-ok'], failed: ['Send failed', 'cp-bad'], waiting: ['Waiting', 'cp-mute'], held: ['Held', 'cp-warn'] }
 const ST: Record<MAction['status'], [string, string]> = { todo: ['To do', 'cp-warn'], done: ['Done', 'cp-ok'], error: ['Problem', 'cp-bad'], skipped: ['Skipped', 'cp-mute'] }

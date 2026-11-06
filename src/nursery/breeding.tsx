@@ -1,3 +1,4 @@
+import { tagTxt } from '../mtag'
 import { TagInput } from '../taginput'
 import { useBack } from '../nav'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
@@ -117,7 +118,7 @@ export function BreedingTab({ sb, d, c, flash, me }: { sb: SupabaseClient; d: ND
         <tr key={s.id} className="tap" onClick={() => setLot(s)}><td><b>{s.code}</b></td><td>{cross(s)}</td><td>{s.source === 'in-house' ? (b.runs.find(r => r.id === s.run_id)?.name ?? t('Lifted (in house)')) : s.breeder ?? cap(s.source)}</td>
           <td>{s.season ?? ''}</td><td className="num">{n0(s.seeds)}</td><td className="num">{n0(s.target_plants)}</td><td className="num">{n0(sown(s)) || ''}</td><td className="nowrap">{fmtD(s.sown_on)}</td>
           <td className="num">{ps.length || ''}</td><td className="num">{ps.length ? n0(ps.filter(p => p.status !== 'culled' && p.status !== 'male').length) : ''}</td><td className="num">{s.seeds != null ? n0(s.seeds - sown(s)) : ''}</td>
-          <td className="small nowrap">{(s.package_tags ?? []).length ? s.package_tags.map(l => { const k = b.pkgs.get(l); return `…${l.slice(-6)}${k ? ` · ${k.qty ?? ''} ${k.uom ?? ''}` : ''}` }).join(', ') : <span className="muted">{t('none')}</span>}</td>
+          <td className="small nowrap">{(s.package_tags ?? []).length ? s.package_tags.map(l => { const k = b.pkgs.get(l); return `${tagTxt(l)}${k ? ` · ${k.qty ?? ''} ${k.uom ?? ''}` : ''}` }).join(', ') : <span className="muted">{t('none')}</span>}</td>
           <td><button className="ghost small" onClick={e => { e.stopPropagation(); setHunt({ season: new Date().getFullYear(), status: 'sown', sown_on: today(), seed_lot_id: s.id, name: `${s.code ?? cross(s)} hunt` }) }}>{t('Hunt…')}</button></td></tr>) })}</tbody>
     </table></div>)}
     {tab === 'hunts' && (!b.hunts.length ? <p className="muted">{t('No pheno hunts yet. Start one from a seed lot.')}</p> : <div className="cwrap"><table className="ctable">
@@ -442,7 +443,7 @@ function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: 
       <thead><tr><th>{t('Pheno')}</th><th>{t('Where')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l)}</th>)}<th className="num">{t('Avg')}</th><th className="num">{t('Scores')}</th><th className="num">{t('Cuts')}</th><th>{t('Status')}</th></tr></thead>
       <tbody>{rows.slice(0, shown).map(r => <tr key={r.p.id} className={`tap ${isOut(r.p) ? 'done' : ''}`} onClick={() => setOpen(r.p)}>
         <td><b>{r.p.label ?? `#${r.p.number}`}</b>{r.p.keeper_strain && r.p.keeper_strain !== r.p.label ? <span className="muted"> → {r.p.keeper_strain}</span> : ''}{obsBy.get(r.p.id) ? <span className="muted small"> · {t('notes')}</span> : ''}</td>
-        <td className="small nowrap">{c.room(r.p.room_id)}{r.p.bed ? ` · ${r.p.bed}` : ''}{r.p.plant_tag ? <span className={r.p.tag_confirmed ? '' : 'muted'}> · …{r.p.plant_tag.slice(-5)}{r.p.tag_confirmed ? '' : '?'}</span> : ''}</td>
+        <td className="small nowrap">{c.room(r.p.room_id)}{r.p.bed ? ` · ${r.p.bed}` : ''}{r.p.plant_tag ? <span className={r.p.tag_confirmed ? '' : 'muted'}> · {tagTxt(r.p.plant_tag, 5)}{r.p.tag_confirmed ? '' : '?'}</span> : ''}</td>
         {TRAITS.map(([k]) => <td key={k} className="num">{f1(r.t[k])}</td>)}<td className="num"><b>{f1(r.total)}</b></td>
         <td className="num">{r.sc.length || ''}{r.mine ? ' ✓' : ''}</td><td className="num">{r.p.cut_qty || ''}</td>
         <td><span className={`pill ${r.p.status === 'keeper' ? 'okp' : r.p.status === 'maybe' ? 'warnp' : ''}`}>{t(PSTATUS[r.p.status])}</span>{r.p.cull_reason ? <span className="muted small"> {t(r.p.cull_reason)}</span> : ''}</td></tr>)}</tbody>
@@ -522,7 +523,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
         <F label={t('Bed / row')}><TextIn value={x.bed} onChange={v => setX({ ...x, bed: v })} /></F>
         <F label={x.plant_tag && !x.tag_confirmed ? <>{t('METRC plant tag')} <span className="pill warnp">{t('not confirmed')}</span></> : t('METRC plant tag')}
           hint={x.plant_tag && !x.tag_confirmed ? t('Tied by number order from METRC. Check the tag on the plant.') : undefined}><TagInput value={x.plant_tag ?? ''} onChange={v => setX({ ...x, plant_tag: v || null })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} keep={p.plant_tag ?? null} /></F>
-        <F label={t('Came from lot (METRC)')}><input value={x.lot_tag ? `…${x.lot_tag.slice(-6)}` : '—'} readOnly title={x.lot_tag ?? ''} /></F>
+        <F label={t('Came from lot (METRC)')}><input value={x.lot_tag ? tagTxt(x.lot_tag) : '—'} readOnly title={x.lot_tag ?? ''} /></F>
         <F label={t('Planted')}><input value={fmtD(x.planted_on) || '—'} readOnly /></F>
         <F label={t('Cuttings taken')}><DateIn value={x.cut_on} onChange={v => setX({ ...x, cut_on: v })} /></F>
         <F label={t('How many cuttings')}><NumIn value={x.cut_qty} onChange={v => setX({ ...x, cut_qty: v })} /></F>

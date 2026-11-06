@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { Select } from './combo'
 import { TagInput } from './taginput'
 import { ScanButton } from './scan'
@@ -192,7 +193,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
                 return (
                   <div key={pk.id} className="drow">
                     <button className="linkbtn" onClick={() => openPallet(pk.pallet_id)}><b>{pk.code}</b></button>
-                    <span className="grow muted">{p ? where(p) : ''}{pk.tag ? ` · ${pk.tag.slice(-6)}` : pk.tag_pending ? ' · tag pending' : ''}{p?.origin_site ? ` · grown at ${p.origin_site}` : ''}</span>
+                    <span className="grow muted">{p ? where(p) : ''}{pk.tag ? ` · ${tagTxt(pk.tag)}` : pk.tag_pending ? ' · tag pending' : ''}{p?.origin_site ? ` · grown at ${p.origin_site}` : ''}</span>
                     <b>{n0(Number(pk.lbs))} lbs</b>
                     {editable && !(p?.container_id && pallets.some(x => x.container_id === p.container_id && x.id !== p.id)) && <button className="ghost small" disabled={busy} title="Unassign" onClick={() => run(() => backend.unpick(pk.id), `${pk.code} unassigned`)}>✕</button>}
                   </div>
@@ -325,7 +326,7 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart }: 
   const list = qq ? sorted.filter(hit) : all ? sorted : sorted.slice(0, 5)
   const row = (p: Pallet, on = false) => (
     <div key={p.id} className={`drow ${on ? 'picked' : ''}`}>
-      <span className="grow"><b>{p.code}</b> <span className="muted">{where(p)}{p.package_tag ? ` · ${p.package_tag.slice(-6)}` : ''}</span></span>
+      <span className="grow"><b>{p.code}</b> <span className="muted">{where(p)}{p.package_tag ? ` · ${tagTxt(p.package_tag)}` : ''}</span></span>
       <b>{n0(w(p))} lbs</b>
       {need > 0 && w(p) > need && <button className="primary small" disabled={busy} onClick={() => setPart({ p, lbs: String(Math.round(need * 100) / 100), tag: '' })}>Take {n0(need)}</button>}
       {w(p) > 0 && <button className="ghost small" disabled={busy} onClick={() => setPart({ p, lbs: '', tag: '' })}>Part…</button>}

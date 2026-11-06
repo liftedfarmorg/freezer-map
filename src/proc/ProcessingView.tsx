@@ -1,3 +1,4 @@
+import { MTag } from '../mtag'
 import { Select } from '../combo'
 import { TagInput } from '../taginput'
 import { CompFleet } from '../fleet/Fleet'
@@ -163,7 +164,7 @@ export default function ProcessingView({ backend, flash, tab, go, isAdmin, canEd
 
 // ---------- shared bits ----------
 function Prod({ p }: { p: Product | undefined }) { return <span className={`pill prod pr-${p}`}>{PL(p)}</span> }
-function Tag({ p }: { p: Pallet }) { return p.package_tag ? <span className="mono small">…{p.package_tag.slice(-6)}</span> : p.tag_pending ? <span className="warn-t small">tag pending</span> : null }
+function Tag({ p }: { p: Pallet }) { return p.package_tag ? <MTag t={p.package_tag} className="small" /> : p.tag_pending ? <span className="warn-t small">tag pending</span> : null }
 
 /** on hand by product (live packages only) */
 function onHand(d: PData) {

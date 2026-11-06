@@ -1,3 +1,4 @@
+import { tagTxt } from '../mtag'
 import { ScanButton } from '../scan'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Backend } from '../api'
@@ -207,7 +208,7 @@ function NurseryActivity({ api }: { api: NurseryApi }) {
     if (r.type === 'nursery_delivered') bits.push(`${t('{n} plants', { n: String(x.plants) })} → ${x.site ?? x.customer ?? ''}${x.invoice ? ` · ${x.invoice}` : ''}`)
     if (r.type === 'nursery_batches_insert') bits.push(t('{n} cuttings', { n: String(row.cuttings) }))
     if (r.type === 'nursery_order_new') bits.push(`${t('{n} plants', { n: String(x.plants) })}${x.so ? ` · ${x.so}` : ''}`)
-    if (r.type === 'nursery_mothers_insert' && row.plant_tag) bits.push(String(row.plant_tag).slice(-8))
+    if (r.type === 'nursery_mothers_insert' && row.plant_tag) bits.push(tagTxt(String(row.plant_tag), 8))
     if (r.type.startsWith('nursery_invoice')) bits.push(String(x.inv ?? ''))
     return bits.filter(Boolean).join(' · ')
   }

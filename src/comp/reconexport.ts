@@ -61,7 +61,7 @@ export async function reconPdf(rows: Row[], o: { name: string; who: string; pull
       startY: y, margin: { left: M, right: M },
       head: [[{ content: `${ISSUE_LABEL[issue]}  (${g.length})`, colSpan: 11, styles: { fillColor: green, textColor: 255, fontStyle: 'bold' } }],
         ['Site', 'Package', 'Tag', 'Strain / item', 'App lbs', 'METRC lbs', 'Diff', 'App spot', 'METRC loc.', 'What METRC shows', 'Action / reason']],
-      body: g.map(r => { const c = cells(r); return [c[2], c[4], r.tag ? `…${r.tag.slice(-8)}` : '', c[6], c[7] ?? '', c[8] ?? '', c[9] ?? '', c[10], c[11], c[13], ''] }),
+      body: g.map(r => { const c = cells(r); return [c[2], c[4], r.tag ?? '', c[6], c[7] ?? '', c[8] ?? '', c[9] ?? '', c[10], c[11], c[13], ''] }),
       styles: { fontSize: 7, cellPadding: 2.5, overflow: 'linebreak', valign: 'top' },
       headStyles: { fillColor: [232, 239, 233], textColor: 30, fontStyle: 'bold' },
       columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 40 }, 2: { cellWidth: 52 }, 3: { cellWidth: 92 }, 4: { cellWidth: 38, halign: 'right' }, 5: { cellWidth: 40, halign: 'right' },

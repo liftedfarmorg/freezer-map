@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { TextIn } from './cult/ui'
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -120,7 +121,7 @@ export function NewPackageForm({ p, where, busy, onClose, onSubmit, onLoad, load
   const picked = items?.find(i => i.id === itemId)
   return (
     <Dialog title={`New package from ${p.code}`} onClose={onClose}>
-      <p className="muted">{p.strain}{PL(p) ? ` ${PL(p)}` : ''} · {lbs(w)} now{p.package_tag ? ` · tag …${p.package_tag.slice(-6)}` : ''}</p>
+      <p className="muted">{p.strain}{PL(p) ? ` ${PL(p)}` : ''} · {lbs(w)} now{p.package_tag ? ` · tag ${tagTxt(p.package_tag)}` : ''}</p>
       <div className="field">
         <label>How much goes in the new package?</label>
         <div className="choices">
@@ -145,15 +146,15 @@ export function NewPackageForm({ p, where, busy, onClose, onSubmit, onLoad, load
           {others.map(i => <option key={i.id} value={i.id}>{i.metrc_name}</option>)}
         </select>
         {picked && <div className="muted small">The new package goes on {picked.metrc_name}. METRC needs that item on this license.</div>}
-        {!picked && cur && metrcItem && metrcItem.toLowerCase() !== cur.metrc_name.toLowerCase() && <div className="warn-t small">METRC has …{(p.package_tag ?? '').slice(-6)} as {metrcItem}. Same item means the app's item: the new package goes on {cur.metrc_name}. METRC needs that item on this license.</div>}
+        {!picked && cur && metrcItem && metrcItem.toLowerCase() !== cur.metrc_name.toLowerCase() && <div className="warn-t small">METRC has {tagTxt(p.package_tag)} as {metrcItem}. Same item means the app's item: the new package goes on {cur.metrc_name}. METRC needs that item on this license.</div>}
       </div>
       {!whole && <DestField dest={dest} setDest={setDest} sameLabel={where && p.status !== 'in_transit' ? `Same slot (${where})${onLoad ? ', off the load' : ''}` : null}
         loadLabel={onLoad ? `Stays on ${onLoad}` : null} />}
       {!whole && onLoad && dest !== 'load' && <div className="muted small">The piece comes off the load{p.status === 'in_transit' ? ' and the truck' : ''}. If {p.code} is held for an order, that line gets lighter.</div>}
       <div className="field"><label>Note (optional)</label><input value={note} onChange={e => setNote(e.target.value)} placeholder={whole ? 'e.g. label on the trim bin is 7194' : 'e.g. pulled for Acquamarcia order'} /></div>
       <div className="metrc-note muted small">METRC: {whole
-        ? `new package on the new tag from …${(p.package_tag ?? '').slice(-6)}, all ${lbs(w)}, ${picked ? picked.metrc_name : 'same item'}. The old tag goes to 0 and is finished.`
-        : `new package split from …${(p.package_tag ?? '').slice(-6)} with the new tag, ${picked ? picked.metrc_name : 'same item'}. ${p.code} keeps the rest under its tag.`}</div>
+        ? `new package on the new tag from ${tagTxt(p.package_tag)}, all ${lbs(w)}, ${picked ? picked.metrc_name : 'same item'}. The old tag goes to 0 and is finished.`
+        : `new package split from ${tagTxt(p.package_tag)} with the new tag, ${picked ? picked.metrc_name : 'same item'}. ${p.code} keeps the rest under its tag.`}</div>
       <div className="row end">
         <button className="ghost" onClick={onClose}>Cancel</button>
         <button className="primary" disabled={!ok || busy} onClick={() => onSubmit(whole, n, (whole || !pending) ? tag : null, !whole && pending, dest, itemId, note)}>{whole ? 'Repackage' : 'Split'}</button>

@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { Select } from './combo'
 import { ScanButton } from './scan'
 import { useEffect, useState } from 'react'
@@ -52,7 +53,7 @@ export function TagRanges({ sb, license, kind, ranges, used, canEdit, flash, onC
         const n = (xs: Range[]) => xs.reduce((a, r) => a + r.last_n - r.first_n + 1, 0)
         const row = (r: Range) => (
           <div key={r.id} className={`drow ${r.active ? '' : 'off'}`}>
-            <span className="grow"><span className="mono">{tag(r, r.first_n).slice(-10)}{r.last_n > r.first_n ? ` to ${tag(r, r.last_n).slice(-10)}` : ''}</span><span className="muted"> · {(r.last_n - r.first_n + 1).toLocaleString()} {r.last_n > r.first_n ? 'tags' : 'tag'}
+            <span className="grow"><span className="mono">{tagTxt(tag(r, r.first_n), 10)}{r.last_n > r.first_n ? ` to ${tagTxt(tag(r, r.last_n), 10)}` : ''}</span><span className="muted"> · {(r.last_n - r.first_n + 1).toLocaleString()} {r.last_n > r.first_n ? 'tags' : 'tag'}
               {used ? ` · ${used(r).toLocaleString()} used` : ''}{r.active ? '' : ' · off'}</span>{r.reserved && <span className="pill m-warn">blocked off</span>}{r.notes && <span className="muted small"> {r.notes}</span>}</span>
             {canEdit && <button className="ghost small" disabled={busy} onClick={() => go({ id: r.id, reserved: !r.reserved }, r.reserved ? 'Range released' : 'Range blocked off')}>{r.reserved ? 'Release' : 'Block off'}</button>}
             {canEdit && <button className="ghost small" disabled={busy} onClick={() => go({ id: r.id, active: !r.active }, r.active ? 'Range off' : 'Range on')}>{r.active ? 'Turn off' : 'Turn on'}</button>}

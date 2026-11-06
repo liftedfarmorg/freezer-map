@@ -1,3 +1,4 @@
+import { rangeTxt } from '../mtag'
 import { useState } from 'react'
 import type { CultApi } from './api'
 import { daysBetween, fmtD, n0, n1, n2, plantingAcres, sum, today } from './calc'
@@ -158,12 +159,12 @@ function PlantingSheet({ d, c, p, api, flash, onClose, onSaved }: { d: CultData;
 /** flip to flowering: the METRC to-do promotes the planting's immature plants with plant tags (overnight, Compliance) */
 function FlipBox({ p, busy, run, onFlip }: { p: Planting; busy: boolean; run: HeldRun | null; onFlip: (on: string | null) => void }) {
   const [on, setOn] = useState<string | null>(today())
-  if (p.flipped_on) return <p className="cnote">Flipped to flowering {fmtD(p.flipped_on)}{p.flipped_by ? ` by ${p.flipped_by.split('@')[0]}` : ''}{run ? `, tags ${run.first_label} – ${run.last_label.slice(-9)}` : ''}.</p>
+  if (p.flipped_on) return <p className="cnote">Flipped to flowering {fmtD(p.flipped_on)}{p.flipped_by ? ` by ${p.flipped_by.split('@')[0]}` : ''}{run ? `, tags ${rangeTxt(run.first_label, run.last_label)}` : ''}.</p>
   const left = p.plants ?? 0   // Plants in field is already net of loss
   const ready = !!run && run.tags === left
   return <div className="cnote row wrap" style={{ alignItems: 'center', gap: 8 }}>
     <span>Flip {n0(left)} plants to flowering on</span><DateIn value={on} onChange={setOn} />
-    <button className="ghost small" disabled={busy || left <= 0 || !ready} onClick={() => { if (confirm(`Flip ${n0(left)} ${p.strain} plants to flowering with tags ${run!.first_label} – ${run!.last_label.slice(-9)}? ${left > 2000 ? 'This many goes on the overnight run.' : 'Compliance can send it right away.'}`)) onFlip(on) }}>Flip to flowering</button>
+    <button className="ghost small" disabled={busy || left <= 0 || !ready} onClick={() => { if (confirm(`Flip ${n0(left)} ${p.strain} plants to flowering with tags ${rangeTxt(run!.first_label, run!.last_label)}? ${left > 2000 ? 'This many goes on the overnight run.' : 'Compliance can send it right away.'}`)) onFlip(on) }}>Flip to flowering</button>
     {!ready && left > 0 && <span className="muted">Pick the flowering tags first ({n0(left)}, one per plant).</span>}
   </div>
 }

@@ -1,3 +1,4 @@
+import { tagTxt } from '../mtag'
 import { StrainLink } from '../strainCard'
 import { TagInput } from '../taginput'
 import { useBack, scrollTop } from '../nav'
@@ -307,7 +308,7 @@ function Weights({ title, kind, rows, busy, done, unit, withTag, site, admin, on
             onKeyDown={e => { if (e.key === 'Enter') saveEd(); if (e.key === 'Escape') setEd(null) }} onBlur={saveEd} aria-label={`${unit} ${i + 1} lbs`} /></span>
         : <span key={r.id} title={(r.tag ?? '') + (r.pushed ? ' · in METRC' : '')} className={r.pushed ? 'inmetrc' : ''}>
             {onEdit && open(r) ? <a className="binfix" onClick={() => !busy && setEd({ id: r.id, v: String(r.lbs) })}>{i + 1}: {n1(r.lbs)}</a> : <>{i + 1}: {n1(r.lbs)}</>}
-            {r.tag ? ` · ${r.tag.slice(-6)}` : ''}{open(r) && <a onClick={() => !busy && onRemove(r.id)}>×</a>}</span>)}</div>}
+            {r.tag ? ` · ${tagTxt(r.tag)}` : ''}{open(r) && <a onClick={() => !busy && onRemove(r.id)}>×</a>}</span>)}</div>}
       {onEdit && !done && rows.length > 0 && <p className="muted small">Tap a {unit} to fix its weight.{rows.some(r => r.pushed) ? ' Bins with a check are already in METRC.' : ''}</p>}
     </section>
   )
@@ -390,7 +391,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
           ? <EditPallet key={p.id} p={p} busy={busy} onCancel={() => setEdit(null)} onSave={x => run(() => api.editPallet(p.id, x), `${x.code ?? p.code} fixed`).then(() => setEdit(null))} />
           : <div key={p.id} className="drow">
             {canPush && !done && <input type="checkbox" checked={pick.has(p.id)} onChange={() => tog(p.id)} aria-label={`Pick ${p.code}`} />}
-            <span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? p.package_tag.slice(-8) : <em className="warn-t">tag pending</em>}{p.partial ? ' · partial' : ''}</span></span>
+            <span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? tagTxt(p.package_tag, 8) : <em className="warn-t">tag pending</em>}{p.partial ? ' · partial' : ''}</span></span>
             <b>{n0(Number(p.og_weight))} lbs</b>
             {!done && <><button className="ghost small" disabled={busy} onClick={() => setEdit(p.id)}>Edit</button>
               <button className="ghost small" disabled={busy} title="Logged by mistake" onClick={() => run(() => api.removePallet(p.id), `${p.code} removed`)}>✕</button></>}
@@ -406,7 +407,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
       {pushed.length > 0 && <>
         {waiting.length > 0 && <h4 className="csec">Pushed <span className="muted">{pushed.length} · {n0(sum(pushed.map(p => p.og_weight)))} lbs</span></h4>}
         <div className="dlist">{[...pushed].reverse().map(p => (
-          <div key={p.id} className="drow"><span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? p.package_tag.slice(-8) : 'tag pending'}{p.partial ? ' · partial' : ''}</span></span>
+          <div key={p.id} className="drow"><span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? tagTxt(p.package_tag, 8) : 'tag pending'}{p.partial ? ' · partial' : ''}</span></span>
             <b>{n0(Number(p.og_weight))} lbs</b>
             {!done && canUnpush && <button className="ghost small" disabled={busy} title="Take it back to Not pushed (only if METRC hasn't been done)" onClick={() => run(() => api.unpush(p.id), `${p.code} un-pushed`)}>Un-push</button>}
             {done && <button className="ghost small" disabled={busy} title="Logged by mistake" onClick={() => run(() => api.removePallet(p.id), `${p.code} removed`)}>✕</button>}

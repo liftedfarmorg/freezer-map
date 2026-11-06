@@ -153,3 +153,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .pbar .pmod { color: var(--ink); }
   .pbar .pscan { background: var(--r-teal); color: #10251d; }
 }
+
+/* METRC tags: full on computer and tablet, last digits on phone */
+.mtag { white-space: nowrap; letter-spacing: 0; }
+.mtag-short { display: none; }
+@media (max-width: 767px) { .mtag-full { display: none; } .mtag-short { display: inline; } }

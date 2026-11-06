@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { Select } from './combo'
 import { Scanner } from './scan'
 import { routeScan, sameTag } from './scanroute'
@@ -230,7 +231,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
     case 'split_from': { const d = e.details as { parent?: string; tag?: string | null; mixed?: string } | null
       return `${code} created from ${d?.parent} (${lbs(e.lbs)})${d?.mixed ? ` onto ${d.mixed}` : ''}${d?.tag ? '' : ', tag pending'}` }
     case 'repackage': { const d = e.details as { from?: string; to?: string; item_name?: string } | null
-      return `${code} repackaged onto …${(d?.to ?? '').slice(-6)} (was …${(d?.from ?? '').slice(-6)}), ${lbs(e.lbs)}${d?.item_name ? `, item ${d.item_name}` : ''}` }
+      return `${code} repackaged onto ${tagTxt(d?.to)} (was ${tagTxt(d?.from)}), ${lbs(e.lbs)}${d?.item_name ? `, item ${d.item_name}` : ''}` }
     case 'merge': { const d = e.details as { sources?: string[] } | null
       return `${code} made by merging ${(d?.sources ?? []).join(', ')} (${lbs(e.lbs)})` }
     case 'merged_into': { const d = e.details as { into?: string } | null
@@ -244,7 +245,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       return `${code} weight set ${d?.from != null ? `from ${lbs(d.from)} ` : ''}to ${lbs(d?.to)} in the app only (audit, not sent to METRC)` }
     case 'manifest_sync': { const d = e.details as { manifest?: string; tag?: string; to_site?: string; shipped_to?: string; new?: boolean; from?: string | number; to?: number } | null
       const m = `manifest ${d?.manifest ?? ''} (already in METRC)`
-      const tg = d?.tag ? ` …${d.tag.slice(-6)}` : ''
+      const tg = d?.tag ? ` ${tagTxt(d.tag)}` : ''
       if (d?.shipped_to) return d.new ? `${code}${tg} added as shipped to ${d.shipped_to} from ${d.from ?? ''}: ${m}` : `${code}${tg} shipped to ${d.shipped_to}: ${m}`
       if (d?.to_site) return d.new ? `${code}${tg} made from ${d.from ?? ''} and sent to ${d.to_site}: ${m}` : `${code} tagged${tg}, sent to ${d.to_site}: ${m}`
       if (typeof d?.from === 'number' || d?.to != null) return `${code} weight ${d?.from != null ? `from ${lbs(Number(d.from))} ` : ''}to ${lbs(d?.to)}: ${m}`
@@ -317,7 +318,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       return `${code} wet package: ${d?.strain} from ${d?.site} ${d?.field ?? ''} (${lbs(e.lbs)})${d?.tag ? '' : ', tag pending'}${d?.sent ? `, sent to ${d.processor}` : ''}` }
     case 'proc_sent': { const d = e.details as { processor?: string } | null; return `${code} sent to ${d?.processor} for drying (${lbs(e.lbs)})` }
     case 'proc_received': { const d = e.details as { processor?: string; site?: string; new_tag?: string | null } | null
-      return `${code} back from ${d?.processor ?? 'the processor'} unbucked, at ${d?.site}${d?.new_tag ? ` (new tag …${d.new_tag.slice(-6)})` : ''}` }
+      return `${code} back from ${d?.processor ?? 'the processor'} unbucked, at ${d?.site}${d?.new_tag ? ` (new tag ${tagTxt(d.new_tag)})` : ''}` }
     case 'proc_dried': return `${code} dried in house, now unbucked`
     case 'proc_run_started': { const d = e.details as { run?: string; kind?: string; strain?: string; packages?: string[] } | null
       return `${d?.run} ${d?.kind === 'buck' ? 'bucking' : 'trimming'} started: ${d?.strain}, ${(d?.packages ?? []).join(', ')} (${lbs(e.lbs)})` }
@@ -1291,7 +1292,7 @@ export default function App() {
           onLoad={editLoadOf(form.p.id) ? `${editLoadOf(form.p.id)!.load.code} with it (stop ${editLoadOf(form.p.id)!.stop.seq}${editLoadOf(form.p.id)!.item.loaded ? ', on the truck' : ''})` : null}
           onSubmit={(whole, n, tag, pending, dest, itemId, note) => {
             const p = form.p
-            if (whole) { submit(() => backend.newPackage(p.id, n, tag, false, null, itemId, note), c => `${c.code} is on …${(c.package_tag ?? '').slice(-6)} now. METRC to-do queued.`); return }
+            if (whole) { submit(() => backend.newPackage(p.id, n, tag, false, null, itemId, note), c => `${c.code} is on ${tagTxt(c.package_tag)} now. METRC to-do queued.`); return }
             const run = (slot: number | null, keep = false) => submit(() => backend.newPackage(p.id, n, tag, pending, slot, itemId, note, keep), c => `${c.code} created (${lbs(n)})${keep ? ' on the load' : ''}`, () => setPalletId(null))
             if (dest === 'load') run(null, true)
             else if (dest === 'same') run(null)

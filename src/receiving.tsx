@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { metrcRun } from './metrcCall'
@@ -111,7 +112,7 @@ function CountCard({ c, busy, onCount }: { c: Check; busy: boolean; onCount: (co
     {c.status === 'counts_off' && c.counted && <div className="small warn-t">{c.counted.filter(x => x.counted !== x.plants).map(x => `${x.name}: manifest ${x.plants}, counted ${x.counted}`).join(' · ')}</div>}
     {open && <>
       {c.lines.map(l => <div key={l.id} className="row between countrow">
-        <span><b>{l.batch}</b> <span className="muted">{l.strain}{l.tag ? ` · ${l.tag.slice(-8)}` : ''}</span></span>
+        <span><b>{l.batch}</b> <span className="muted">{l.strain}{l.tag ? ` · ${tagTxt(l.tag, 8)}` : ''}</span></span>
         <span className="row"><span className="muted small">manifest {l.plants}</span>
           <input type="number" min="0" inputMode="numeric" placeholder="counted" value={n[l.id] ?? ''} onChange={e => setN(x => ({ ...x, [l.id]: e.target.value }))} style={{ width: 90 }} /></span>
       </div>)}
@@ -160,7 +161,7 @@ function OutsideCard({ d, live, busy, module, onReceive, onOff }: { d: Delivery;
     <div><b>{d.manifest}</b> <span className="muted">from</span> <b>{d.from}</b> <span className="muted small">{d.from_license}</span>
       <div className="muted small">to {d.site} {d.license} · left {when(d.departed)}{d.driver ? ` · ${d.driver}` : ''}{d.vehicle ? ` · ${d.vehicle}` : ''}</div></div>
     {items.map(i => <div key={i.tag} className="row between countrow">
-      <span><b>{i.item}</b> <span className="muted mono small">{i.tag.slice(-8)}</span></span>
+      <span><b>{i.item}</b> <span className="muted mono small">{tagTxt(i.tag, 8)}</span></span>
       <span className="row"><span className="muted small">manifest {i.qty} {i.uom}</span>
         <input type="number" min="0" placeholder="counted" value={n[i.tag] ?? ''} onChange={e => setN(x => ({ ...x, [i.tag]: e.target.value }))} style={{ width: 90 }} /></span>
     </div>)}

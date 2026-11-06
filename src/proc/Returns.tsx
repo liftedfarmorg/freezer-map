@@ -1,3 +1,4 @@
+import { MTag, tagTxt } from '../mtag'
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pallet } from '../types'
@@ -116,7 +117,7 @@ export function ComingBack({ sb, api, flash, reload, isAdmin }: { sb: SupabaseCl
             <tbody>{items.map(i => { const e = ed[i.tag] ?? { slot_id: null, our_tag: '', reweigh: null }
               const off = e.reweigh != null && Math.abs(e.reweigh - Number(i.qty)) > 0.5
               return <tr key={i.tag}>
-                <td className="mono small">…{i.tag.slice(-6)}</td>
+                <td className="small"><MTag t={i.tag} /></td>
                 <td className="small">{i.item}</td>
                 <td className="num">{n0(i.qty)}</td>
                 <td><select value={e.slot_id ?? ''} onChange={x => set(i.tag, { slot_id: x.target.value ? Number(x.target.value) : null })} className={e.slot_id ? '' : 'need'}>
@@ -157,7 +158,7 @@ export function NeedsOurTag({ d, sb, flash, reload, isAdmin, openPkg }: { d: PDa
       <tbody>{rows.map(p => { const age = ageDays(p.returned_at), late = age > OVERDUE_DAYS, w = lot(p.wet_lot_id), run = inRun(p.id)
         return <tr key={p.id}>
           <td className="tap" onClick={() => openPkg(p)}><b>{p.code}</b>{run ? <span className="pill warnp">in {run.code}</span> : null}</td><td>{p.strain}</td><td className="num">{n0(p.current_weight)}</td>
-          <td className="hide-s mono small">…{(p.package_tag ?? '').slice(-6)}</td>
+          <td className="hide-s small"><MTag t={p.package_tag} /></td>
           <td className="hide-s small">{w ? `${w.code}${w.status === 'at_processor' ? ' (open)' : ''}` : <span className="warn-t">none</span>}</td>
           <td className={late ? 'neg small' : 'muted small'}>{Math.floor(age)}d{late ? ' · overdue' : ''}</td>
           <td>{isAdmin ? <button className={run ? 'ghost small' : 'primary small'} onClick={() => setForm(p)}>Repackage</button> : null}</td>
@@ -191,7 +192,7 @@ function RepackageSheet({ p, run, sb, flash, reload, onClose }: { p: Pallet; run
   const set = (i: number, x: Partial<RpLine>) => setLines(ls => ls.map((l, j) => j === i ? { ...l, ...x } : l))
   const itemName = (id: number | null) => (id ? items?.find(i => i.id === id)?.metrc_name : cur?.metrc_name) ?? 'same item'
   async function save() {
-    const sum = lines.map(l => `…${l.tag.slice(-6)}: ${n0(l.lbs)} lb, ${itemName(l.item)}`).join('\n')
+    const sum = lines.map(l => `${tagTxt(l.tag)}: ${n0(l.lbs)} lb, ${itemName(l.item)}`).join('\n')
     if (!confirm(`${p.code}: our labels are on?\n${sum}\n${left > 0.0001 ? `${n0(left)} lb stays on their tag (${p.package_tag}).` : `Their tag ${p.package_tag} goes to 0 and is finished.`}`)) return
     setBusy(true)
     try {
@@ -200,12 +201,12 @@ function RepackageSheet({ p, run, sb, flash, reload, onClose }: { p: Pallet; run
       const res = data as { lines: { code: string; tag: string; lbs: number }[]; left: number | null }
       const k = await metrcRun<{ results?: { id: number; state: string; error?: string; info?: string }[] }>(sb, { action: 'kick' }).catch(() => null)
       const bad = (k?.results ?? []).filter(x => x.state === 'error')
-      const done = `${res.lines.map(l => `${l.code} …${(l.tag ?? '').slice(-6)} ${n0(l.lbs)} lb`).join(', ')}${res.left ? ` · ${n0(res.left)} lb still on their tag` : ''}`
+      const done = `${res.lines.map(l => `${l.code} ${tagTxt(l.tag)} ${n0(l.lbs)} lb`).join(', ')}${res.left ? ` · ${n0(res.left)} lb still on their tag` : ''}`
       flash(bad.length ? `${done}. METRC: ${bad.map(b => `#${b.id} ${b.error ?? b.info}`).join('; ')}` : done, bad.length > 0)
       await reload(); onClose()
     } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
   }
-  return <Sheet wide title={`Repackage ${p.code} ${p.strain ?? ''}`} sub={`${n0(w)} lb on their tag …${(p.package_tag ?? '').slice(-6)}${metrcItem ? ` · METRC: ${metrcItem}` : ''}`} onClose={onClose}>
+  return <Sheet wide title={`Repackage ${p.code} ${p.strain ?? ''}`} sub={`${n0(w)} lb on their tag ${tagTxt(p.package_tag)}${metrcItem ? ` · METRC: ${metrcItem}` : ''}`} onClose={onClose}>
     {run && <p className="warn-t">{p.code} is an input to open run {run.code}. Finish the run instead (what comes out goes on our tags). Repackaging it now takes it out from under the run.</p>}
     {lines.map((l, i) => <div key={i} className="row noline">
       <TagInput compact value={l.tag} onChange={v => set(i, { tag: v })} where={{ pallet: p.id, purpose: 'processing' }} placeholder="Label you put on" />
@@ -273,7 +274,7 @@ function ReceiveBackSheet({ lot, d, api, flash, reload, onClose }: { lot: Pallet
     try { await api.linkReturn(x.id, null); flash(`${x.code} taken off ${lot.code}`); await reload(); onClose() }
     catch (e) { flash(errText(e), true) } finally { setBusy(false) }
   }
-  const row = (x: Pallet) => <><b>{x.code}</b> <span className="muted">{x.strain} · {n0(x.og_weight ?? x.current_weight)} lb · …{(x.package_tag ?? '').slice(-6)}{x.their_tag ? ' (their tag)' : ''}</span></>
+  const row = (x: Pallet) => <><b>{x.code}</b> <span className="muted">{x.strain} · {n0(x.og_weight ?? x.current_weight)} lb · {tagTxt(x.package_tag)}{x.their_tag ? ' (their tag)' : ''}</span></>
   return <Sheet title={`Receive back: ${lot.code} ${lot.strain ?? ''}`} sub={`${n0(wet)} lb wet · ${n0(back)} lb back so far${wet ? ` (${Math.round(back / wet * 1000) / 10}%)` : ''}`} onClose={onClose}>
     <h4 className="subh">On this lot</h4>
     {linked.length ? linked.map(x => <div key={x.id} className="row between noline"><span>{row(x)}</span><button className="ghost small" disabled={busy} onClick={() => unlink(x)}>Take off</button></div>)
