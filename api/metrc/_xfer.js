@@ -335,6 +335,35 @@ export async function sendTransfer_(job, ctx) {
   throw new Error(`This to-do (${d.type}) isn't a transfer the app makes. Check it by hand.`)
 }
 
+/** 221: a customer manifest whose product came back (Not delivered, all received back at the farm): void it in METRC.
+ *  The METRC id comes from the app's own manifest (metrc_app_transfers) or, for one made by hand, from the METRC pull by number. */
+export async function sendManifestVoid(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const man = String(d.manifest ?? '').replace(/\D/g, '')
+  if (!man) throw new Skip('No manifest number on this stop')
+  const stop = await one(`load_stops?id=eq.${Number(d.stop_id)}&select=id,manifest,manifest_voided_at`)
+  if (stop?.manifest_voided_at) throw new Skip(`Manifest ${man} is already voided`)
+  const open = await db(`stop_returns?stop_id=eq.${Number(d.stop_id)}&back_at=is.null&cancelled_at=is.null&select=id`).catch(() => [])
+  if (open?.length) throw new Skip('Not everything from this stop is received back yet')
+  const key = `stop:${Number(d.stop_id)}:${lic}`
+  const mine = await one(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided&select=transfer_id,manifest`).catch(() => null)
+  let id = mine?.transfer_id ?? null
+  if (!id) {
+    const pulled = await one(`metrc_transfers?manifest=eq.${enc(man)}&select=transfer_id,voided,received_at&order=seen_at.desc.nullslast`).catch(() => null)
+    if (pulled?.voided) throw new Skip(`Manifest ${man} is already voided in METRC`)
+    if (pulled?.received_at) throw new Error(`The customer already received manifest ${man} in METRC, so it can't be voided. Rama: sort it out in METRC by hand.`)
+    id = pulled?.transfer_id ?? null
+  }
+  if (!id) throw new Error(`Manifest ${man} isn't in the app's METRC data yet (run Compliance > METRC > Pull, then send this again), or void it in METRC by hand`)
+  const resp = await write(ctx, '/v2/transfers/void', lic, { id: Number(id) })
+  if (!ctx.live) return { state: 'checked', request: { id }, response: resp, info: `Dry run OK: void manifest ${man}` }
+  if (mine) await db(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided`, { method: 'PATCH', body: JSON.stringify({ state: 'voided' }), headers: { Prefer: 'return=minimal' } })
+  await db(`load_stops?id=eq.${Number(d.stop_id)}`, { method: 'PATCH', body: JSON.stringify({ manifest_voided_at: new Date().toISOString() }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
+  await db(`app_alerts?kind=eq.stop_metrc&done_at=is.null&ref->>stop_id=eq.${Number(d.stop_id)}`, { method: 'PATCH', body: JSON.stringify({ done_at: new Date().toISOString(), done_by: 'app (manifest voided)' }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
+  return { state: 'sent', request: { id }, response: resp, info: `METRC manifest ${man} voided (not delivered, product received back)` }
+}
+
 /** open "receive in METRC" to-dos covering these packages (by tag, or a mixed pallet they sit on) */
 async function openReceives(tags) {
   const t = [...new Set(tags.filter(Boolean).map(up))]
