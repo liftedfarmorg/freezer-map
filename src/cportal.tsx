@@ -757,7 +757,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   function sidebar() {
-    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0], ['yields', 'Report Yields', !!d?.yields]]
+    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0], ['yields', 'Yields', !!d?.yields]]
     const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields' }
     const on = group[screen] ?? screen
     return (
@@ -1415,23 +1415,113 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     toast(send ? 'Yields sent to Lifted. Thank you!' : 'Saved. You can finish later.'); await reload(); go('yields')
   }
 
+  // one row per strain + crop year: every run they've reported, totals and lbs-weighted yields
+  type YRun = { orderId: number; label: string; date: string | null; l: YieldLine; k: ReturnType<typeof yCalc>; draft: boolean }
+  type YStrain = { s: string; y: number; runs: YRun[]; lbs: number; hashPct: number | null; rosinOfHash: number | null; rosinOfFF: number | null; rating: number | null }
+  const yStrains = useMemo((): YStrain[] => {
+    const m = new Map<string, YStrain>()
+    for (const r of d?.yields ?? []) {
+      const o = orows.find(x => x.order?.id === r.orderId)
+      for (const l of r.lines) { if (!yDone(l)) continue
+        const key = l.s + '|' + l.y, v = m.get(key) ?? { s: l.s, y: l.y, runs: [], lbs: 0, hashPct: null, rosinOfHash: null, rosinOfFF: null, rating: null }
+        v.runs.push({ orderId: r.orderId, label: o?.label ?? `Order ${r.orderId}`, date: o?.date ?? r.savedAt, l, k: yCalc(l), draft: !r.sentAt }); m.set(key, v) }
+    }
+    for (const v of m.values()) {
+      const sum = (f: (k: YRun) => number | null) => v.runs.reduce((a, x) => a + (f(x) ?? 0), 0)
+      const withHash = v.runs.filter(x => x.k.hashG != null), withRosin = v.runs.filter(x => x.k.rosinG != null), both = withRosin.filter(x => x.k.hashG != null)
+      v.lbs = sum(x => x.l.ff)
+      const ffH = withHash.reduce((a, x) => a + x.k.ffG, 0), ffR = withRosin.reduce((a, x) => a + x.k.ffG, 0)
+      v.hashPct = ffH > 0 ? withHash.reduce((a, x) => a + (x.k.hashG ?? 0), 0) / ffH * 100 : null
+      v.rosinOfFF = ffR > 0 ? withRosin.reduce((a, x) => a + (x.k.rosinG ?? 0), 0) / ffR * 100 : null
+      const hB = both.reduce((a, x) => a + (x.k.hashG ?? 0), 0)
+      v.rosinOfHash = hB > 0 ? both.reduce((a, x) => a + (x.k.rosinG ?? 0), 0) / hB * 100 : null
+      const rated = v.runs.filter(x => x.l.rating != null); v.rating = rated.length ? rated.reduce((a, x) => a + (x.l.rating ?? 0), 0) / rated.length : null
+      v.runs.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+    }
+    return [...m.values()]
+  }, [d, orows])
+  const [yTab, setYTab] = useState<'report' | 'results' | null>(null)
+  const [yOpen, setYOpen] = useState<string | null>(null)
+
   function YieldsScreen() {
+    const tab = yTab ?? (yToDo.length ? 'report' : 'results')
     const chipOf = (r: YieldReport | null) => r?.sentAt ? <span className={c('chip c-ok')}>Sent</span> : r?.savedAt ? <span className={c('chip c-wait')}>Draft</span> : <span className={c('chip c-sub')}>To report</span>
+    const ql = q.toLowerCase()
+    const years = [...new Set(yStrains.map(x => x.y))].sort((a, b) => b - a)
+    const rows = sortRows('yres', yStrains.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)),
+      { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, q: x => x.rating ?? -1, g: x => gradeN(x.s) })
+    // totals across everything shown, lbs-weighted
+    const all = rows.flatMap(x => x.runs), ff = (f: (r: YRun) => boolean) => all.filter(f).reduce((a, r) => a + r.k.ffG, 0)
+    const tHash = ff(r => r.k.hashG != null), tRos = ff(r => r.k.rosinG != null), hB = all.filter(r => r.k.hashG != null && r.k.rosinG != null).reduce((a, r) => a + (r.k.hashG ?? 0), 0)
+    const kHash = tHash ? all.reduce((a, r) => a + (r.k.hashG ?? 0), 0) / tHash * 100 : null
+    const kRof = tRos ? all.reduce((a, r) => a + (r.k.rosinG ?? 0), 0) / tRos * 100 : null
+    const kRoh = hB ? all.filter(r => r.k.hashG != null).reduce((a, r) => a + (r.k.rosinG ?? 0), 0) / hB * 100 : null
+    const maxHash = Math.max(1, ...rows.map(x => x.hashPct ?? 0))
+    const starsOf = (n: number | null) => n == null ? <span className={c('muted')}>–</span> : <span className={c('ystarv')} title={`${n.toFixed(1)} of 5`}>★ {n.toFixed(1)}</span>
+    const bar = (v: number | null) => <span className={c('ybar')}><b>{pct(v)}</b>{v != null && <i style={{ width: Math.max(4, Math.round(v / maxHash * 90)) }} />}</span>
+    const runList = (x: YStrain) => <div className={c('yruns')}>
+      {desk && <div className={c('yrun head')}><span>Order</span><span>FF run</span><span>Hash</span><span>Rosin</span><span>Quality</span><span>Notes</span></div>}
+      {x.runs.map((r, i) => <div key={i} className={c('yrun')}>
+        <span><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button> <span className={c('muted')}>{shortDate(r.date)}</span>{r.draft && <> <span className={c('chip c-wait')}>Draft</span></>}</span>
+        <span>{fmt(r.l.ff ?? 0)} lbs</span>
+        <span>{r.k.hashG != null ? <><b>{pct(r.k.hashPct)}</b> <span className={c('muted')}>{gFmt(r.k.hashG)}</span></> : <span className={c('muted')}>–</span>}</span>
+        <span>{r.k.rosinG != null ? <><b>{pct(r.k.rosinOfHash)}</b> <span className={c('muted')}>of hash · {gFmt(r.k.rosinG)}</span></> : <span className={c('muted')}>–</span>}</span>
+        <span>{starsOf(r.l.rating)}</span>
+        <span className={c('muted')}>{r.l.note || ''}</span></div>)}</div>
     return (
       <div className={c('screen ylist')}>
-        <header className={c('hdr')}>{back('home', 'Home')}<h1>Report Yields</h1>
-          <p className={c('sub')}>Tell us how each strain ran: hash and rosin from the fresh frozen you got. It helps us grow better strains for you.</p></header>
+        <header className={c('hdr')}>{back('home', 'Home')}<h1>Yields</h1>
+          <p className={c('sub')}>Report how each strain ran, and see how your hash and rosin yields compare across strains and orders.</p></header>
         <main className={c('main')}>
-          {yToDo.length > 0 && <div className={c('note teal')}><b>{plural(yToDo.length, 'order')}</b> waiting for yields. It takes a minute per strain, and you can save and finish later.</div>}
-          <section className={c('card')}>
-            {yOrders.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>Once an order ships, it shows up here.</p>}
-            {yOrders.map(({ o, rep }) => { const ls = o.order!.order_lines, strains = [...new Set(ls.map(l => l.strain))], done = rep?.lines.filter(yDone).length ?? 0
-              return <button key={o.key} className={c('li btnrow')} onClick={() => openYield(o.order!.id)}>
-                <div className={c('grow')}><p className={c('name')}>{o.label} {chipOf(rep)}</p>
-                  <p className={c('meta')}>Shipped {shortDate(o.date)} · {strains.length <= 3 ? strains.join(', ') : `${strains.slice(0, 3).join(', ')} +${strains.length - 3} more`}</p>
-                  {rep && !rep.sentAt && <p className={c('meta')}>{done} of {plural(strains.length, 'strain')} filled in</p>}</div>
-                <span className={c('pillbtn')}>{rep?.sentAt ? 'View / edit' : rep?.savedAt ? 'Finish' : 'Report'}</span></button> })}
-          </section>
+          <div className={c('filters ytabs')} role="tablist" aria-label="Yields">
+            <button role="tab" aria-selected={tab === 'results'} aria-pressed={tab === 'results'} onClick={() => setYTab('results')}>My results</button>
+            <button role="tab" aria-selected={tab === 'report'} aria-pressed={tab === 'report'} onClick={() => setYTab('report')}>Report yields{yToDo.length > 0 ? ` (${yToDo.length})` : ''}</button></div>
+          {tab === 'report' ? <>
+            {yToDo.length > 0 && <div className={c('note teal')}><b>{plural(yToDo.length, 'order')}</b> waiting for yields. It takes a minute per strain, and you can save and finish later.</div>}
+            <section className={c('card')}>
+              {yOrders.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>Once an order ships, it shows up here.</p>}
+              {yOrders.map(({ o, rep }) => { const ls = o.order!.order_lines, strains = [...new Set(ls.map(l => l.strain))], done = rep?.lines.filter(yDone).length ?? 0
+                return <button key={o.key} className={c('li btnrow')} onClick={() => openYield(o.order!.id)}>
+                  <div className={c('grow')}><p className={c('name')}>{o.label} {chipOf(rep)}</p>
+                    <p className={c('meta')}>Shipped {shortDate(o.date)} · {strains.length <= 3 ? strains.join(', ') : `${strains.slice(0, 3).join(', ')} +${strains.length - 3} more`}</p>
+                    {rep && !rep.sentAt && <p className={c('meta')}>{done} of {plural(strains.length, 'strain')} filled in</p>}</div>
+                  <span className={c('pillbtn')}>{rep?.sentAt ? 'View / edit' : rep?.savedAt ? 'Finish' : 'Report'}</span></button> })}
+            </section></>
+          : yStrains.length === 0 ? <section className={c('card')}><p className={c('meta')} style={{ padding: 16, margin: 0 }}>Nothing reported yet. Report yields on a shipped order and your results show up here. <button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => setYTab('report')}>Report yields</button></p></section>
+          : <>
+            <div className={c(`kpis ${desk ? 'five' : 'ykpis'}`)}>
+              <div className={c('kpi')}><p>Strains reported</p><b>{rows.length}</b></div>
+              <div className={c('kpi')}><p>Fresh frozen run</p><b>{fmt(rows.reduce((a, x) => a + x.lbs, 0))} lbs</b></div>
+              <div className={c('kpi tint')}><p>Hash yield</p><b>{pct(kHash)}</b><small>of fresh frozen</small></div>
+              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(kRoh)}</b><small>of hash</small></div>
+              <div className={c('kpi')}><p>Rosin yield</p><b>{pct(kRof)}</b><small>of fresh frozen</small></div>
+            </div>
+            <div className={c('rmbar act-bar')}>
+                <div className={c('filters')} role="group" aria-label="Filter strains">
+                  <button aria-pressed={menuYear === 'all' && gradeF === 'all'} onClick={() => { setMenuYear('all'); setGradeF('all') }}>All</button>
+                  {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
+                  <button aria-pressed={gradeF === 'SHO'} onClick={() => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO')}>SHO</button>
+                  <button aria-pressed={gradeF === 'BHO'} onClick={() => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>
+                <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
+              </div>
+            <section className={c('card')}>
+              {desk ? <>
+                <div className={c('yres head')}>{sh('yres', 's', 'Strain')}{sh('yres', 'runs', 'Runs')}{sh('yres', 'lbs', 'FF run')}{sh('yres', 'hash', <>Hash yield<br />of FF</>)}{sh('yres', 'roh', <>Rosin yield<br />of hash</>)}{sh('yres', 'rof', <>Rosin yield<br />of FF</>)}{sh('yres', 'q', 'Quality')}<span /></div>
+                {rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
+                  return <Fragment key={key}><button className={c(`yres ${open ? 'on' : ''}`)} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
+                    <span className={c('rmname')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
+                    {bar(x.hashPct)}<b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span>{starsOf(x.rating)}<span className={c('muted')}>{open ? I.up : I.down}</span></button>
+                    {open && runList(x)}</Fragment> })}
+              </> : rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
+                return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('li btnrow')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
+                  <div className={c('grow')}><p className={c('name')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</p>
+                    <p className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs{x.rosinOfHash != null ? ` · Rosin ${pct(x.rosinOfHash)} of hash` : ''}{x.rating != null ? ` · ★ ${x.rating.toFixed(1)}` : ''}</p></div>
+                  <div className={c('r')}><b className={c('num')} style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><p className={c('meta')}>hash</p></div>{open ? I.up : I.down}</button>
+                  {open && runList(x)}</div> })}
+              {rows.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>No strains match.</p>}
+            </section>
+            <p className={c('meta')} style={{ margin: '0 4px' }}>Yields are weighted by lbs run. Hash yield is hash ÷ fresh frozen; rosin yield is rosin ÷ hash (and ÷ fresh frozen). Drafts count too.</p>
+          </>}
         </main>
       </div>
     )
@@ -1439,7 +1529,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function YieldScreen() {
     const x = yOrders.find(z => z.o.order!.id === yOrder)
-    if (!x) return <div className={c('screen')}><header className={c('hdr')}>{back('yields', 'Report Yields')}<h1>Report yields</h1></header><p className={c('loading')}>Pick an order to report.</p></div>
+    if (!x) return <div className={c('screen')}><header className={c('hdr')}>{back('yields', 'Yields')}<h1>Report yields</h1></header><p className={c('loading')}>Pick an order to report.</p></div>
     const set = (i: number, p: Partial<YieldLine>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, ...p } : l))
     // numbers with up to 2 decimals: keep what they typed, store the number
     const typed = (key: string, v: string): number | null | undefined => {
@@ -1462,7 +1552,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const filled = yDraft.filter(yDone).length
     return (
       <div className={c('screen yform')}>
-        <header className={c('hdr')}>{back('yields', 'Report Yields')}<h1>Yields · {x.o.label}</h1>
+        <header className={c('hdr')}>{back('yields', 'Yields')}<h1>Yields · {x.o.label}</h1>
           <p className={c('sub')}>Shipped {shortDate(x.o.date)}. Fill in what you have; leave a strain blank if you haven't run it yet.</p></header>
         <main className={c('main')}>
           <p className={c('meta yhint')}>Enter hash and rosin in grams, kg or lbs, or pick <b>%</b> to type the yield: hash % is of the fresh frozen, rosin % is of the hash.</p>
