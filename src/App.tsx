@@ -894,7 +894,7 @@ export default function App() {
   const bottomRest = [...all.slice(4), ...extras]
   const restOn = bottomRest.some(x => x.on)
   const restBadge = all.slice(4).reduce((a, x) => a + (x.n ?? 0), 0)
-  const canScan = cur === 'dist' || cur === 'proc'
+  const canScan = cur === 'dist' || cur === 'proc' || cur === 'cult' || cur === 'nurs'   // 279: Cultivation and Nursery get the Scan button too
   const shortL = (x: NavItem) => x.k === 'dash' || x.k === 'dashboard' ? t('Home') : x.s ?? (typeof x.l === 'string' ? x.l : x.k)
   const curScreen = all.find(x => x.on) ?? extras.find(x => x.on)
   const pageTitle = view === 'mine' ? t('My settings') : inDrv ? t('My loads') : !curScreen || curScreen.k === 'dash' || curScreen.k === 'dashboard' ? ML(cur) : typeof curScreen.l === 'string' ? curScreen.l : curScreen.s ?? ML(cur)
