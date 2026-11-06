@@ -9,6 +9,7 @@ import { DocSheet } from '../invoices'
 import { ModulePeople } from '../users'
 import { dfmt, money as money2 } from '../docs'
 import { PayrollTab, PaySettings } from '../pay/PayrollView'
+import { BcPanel } from './BcPanel'
 
 type Flash = (t: string, bad?: boolean) => void
 const money = money2
@@ -452,12 +453,13 @@ function SendSheet({ api, id, flash, canEdit, isAdmin = false, env, onClose, onC
 
 // ---------- Settings ----------
 function SettingsTab({ api, flash, conn, env, refresh, sb, canEdit }: { api: AcctApi; flash: Flash; conn: { env: Env; connected: boolean; company?: string; error?: string } | null; env: Env; refresh: () => void; sb: ReturnType<Backend['client']>; canEdit: boolean }) {
-  const [sec, setSec] = useState<'conn' | 'products' | 'classes' | 'rules' | 'pay' | 'people'>('conn')
+  const [sec, setSec] = useState<'conn' | 'bc' | 'products' | 'classes' | 'rules' | 'pay' | 'people'>('conn')
   return (
     <div className="list">
       <h2>Accounting settings</h2>
-      <div className="seg tabs">{([['conn', 'QuickBooks'], ['products', 'Products'], ['classes', 'Classes'], ['rules', 'Class rules'], ['pay', 'Crew and piece rates'], ['people', 'People']] as const).map(([k, l]) => <button key={k} className={sec === k ? 'on' : ''} onClick={() => setSec(k)}>{l}</button>)}</div>
+      <div className="seg tabs">{([['conn', 'QuickBooks'], ['bc', 'Business Central'], ['products', 'Products'], ['classes', 'Classes'], ['rules', 'Class rules'], ['pay', 'Crew and piece rates'], ['people', 'People']] as const).map(([k, l]) => <button key={k} className={sec === k ? 'on' : ''} onClick={() => setSec(k)}>{l}</button>)}</div>
       {sec === 'conn' && <ConnPanel api={api} flash={flash} conn={conn} env={env} refresh={refresh} />}
+      {sec === 'bc' && sb && <BcPanel sb={sb} flash={flash} canEdit={canEdit} />}
       {sec === 'products' && <ProductsPanel api={api} flash={flash} />}
       {sec === 'classes' && <ClassesPanel api={api} flash={flash} />}
       {sec === 'rules' && <RulesPanel api={api} flash={flash} />}
