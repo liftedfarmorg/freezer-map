@@ -65,9 +65,10 @@ export function DocSheet({ backend, kind, id, flash, onClose, onChanged, canEdit
               {d.acct_status === 'sent' ? <span className="muted small">Payments are recorded in QuickBooks; paid shows here after the hourly check.</span>
                 : d.status === 'open' ? <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setInvoiceStatus(d.id, 'paid'), 'Marked paid')}>Mark paid</button>
                 : <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setInvoiceStatus(d.id, 'open'), 'Marked open')}>Mark not paid</button>}
-              {canVoid && d.acct_status !== 'sent' && <button className="ghost small" disabled={busy} onClick={() => { const why = prompt(`Void ${d.number}? Say why (optional):`); if (why !== null) run(() => backend.setInvoiceStatus(d.id, 'void', why), 'Voided') }}>Void</button>}
+              {canVoid && d.nursery && d.acct_status !== 'sent' && <button className="ghost small" disabled={busy} onClick={() => { const why = prompt(`Void ${d.number}? Say why (optional):`); if (why !== null) run(() => backend.setInvoiceStatus(d.id, 'void', why), 'Voided') }}>Void</button>}
             </div>
           )}
+          {d.kind === 'invoice' && !d.nursery && <Adjustments d={d} backend={backend} canEdit={canEdit} flash={flash} onDone={async () => { await load(); onChanged?.() }} />}
           {url ? <iframe className="docframe" title={d.number} src={url} /> : <p className="muted">Making the PDF…</p>}
         </>}
       </div>
@@ -555,4 +556,117 @@ export function SharedDocPage({ backend, token }: { backend: Backend; token: str
       {url ? <iframe className="docframe big" title={d.number} src={url} /> : <p className="muted">Making the PDF…</p>}
     </div>
   )
+}
+
+// =====================================================================================================
+// 218: once an invoice is in QuickBooks it never changes. Owe less: credit memo. Owe more: a second invoice.
+// =====================================================================================================
+interface Adj { credits: { id: number; number: string; total: number; reason: string | null; date: string; acct_status: string; status: string }[]
+  followups: { id: number; number: string; total: number; reason: string | null; date: string; acct_status: string }[]
+  parent: { id: number; number: string } | null; products: { code: string; name: string }[] | null }
+const CM_REASONS: [string, string][] = [['price_correction', 'Price correction (charged too much)'], ['return', 'Return'], ['rejected', 'Rejected'], ['not_delivered', 'Not delivered'],
+  ['cancelled', 'Cancelled'], ['quality', 'Quality discount'], ['other', 'Other']]
+const BILL_REASONS: [string, string][] = [['price_correction', 'Price correction (charged too little)'], ['missed_charge', 'Missed charge (shipping, storage…)'], ['other', 'Other']]
+const rl = (xs: [string, string][], k: string | null) => xs.find(x => x[0] === k)?.[1].split(' (')[0] ?? k ?? ''
+
+function Adjustments({ d, backend, canEdit, flash, onDone }: { d: SalesDoc; backend: Backend; canEdit: boolean; flash: Flash; onDone: () => Promise<void> }) {
+  const sb = backend.client()
+  const [a, setA] = useState<Adj | null>(null)
+  const [mode, setMode] = useState<'cm' | 'bill' | null>(null)
+  const load = () => { sb?.rpc('invoice_adjustments', { p_inv: d.id }).then(({ data }) => setA(data as Adj)) }
+  useEffect(load, [d.id])
+  if (!sb || !a) return null
+  const sent = d.acct_status === 'sent'
+  const credited = a.credits.filter(c => c.status !== 'void').reduce((x, c) => x + Number(c.total), 0)
+  return <div className="dcard adjbox">
+    {a.parent && <p className="muted small">Bills the difference on {a.parent.number}.</p>}
+    {(a.credits.length > 0 || a.followups.length > 0) && <div className="small">
+      {a.credits.map(c => <div key={c.id}>Credit memo <b>{c.number}</b> · {rl(CM_REASONS, c.reason)} · −{money(c.total)} · {dfmt(c.date)} <span className={`pill acct-${c.acct_status}`}>{ACCT[c.acct_status] ?? c.acct_status}</span></div>)}
+      {a.followups.map(f => <div key={f.id}>Second invoice <b>{f.number}</b> · {rl(BILL_REASONS, f.reason)} · {money(f.total)} · {dfmt(f.date)} <span className={`pill acct-${f.acct_status}`}>{ACCT[f.acct_status] ?? f.acct_status}</span></div>)}
+      {credited > 0 && <div className="muted">Still owed on this invoice after credits: {money(Number(d.total) - credited)} (before payments)</div>}
+    </div>}
+    {canEdit && sent && !mode && <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
+      <button className="ghost small" onClick={() => setMode('cm')}>Credit memo</button>
+      <button className="ghost small" onClick={() => setMode('bill')}>Bill the difference</button>
+      <span className="muted small">It's in QuickBooks, so it can't change: they owe less = credit memo, they owe more = a second invoice.</span></div>}
+    {canEdit && !sent && d.status !== 'void' && <p className="muted small">Not in QuickBooks yet: change it with Edit. Once it's in QuickBooks, fixes are a credit memo or a second invoice.</p>}
+    {mode === 'cm' && <CreditForm d={d} sb={sb} flash={flash} onClose={() => setMode(null)} onDone={async () => { setMode(null); load(); await onDone() }} />}
+    {mode === 'bill' && <BillForm d={d} sb={sb} products={a.products ?? []} flash={flash} onClose={() => setMode(null)} onDone={async () => { setMode(null); load(); await onDone() }} />}
+  </div>
+}
+
+type SB = NonNullable<ReturnType<Backend['client']>>
+function CreditForm({ d, sb, flash, onClose, onDone }: { d: SalesDoc; sb: SB; flash: Flash; onClose: () => void; onDone: () => Promise<void> }) {
+  const [why, setWhy] = useState('')
+  const [notes, setNotes] = useState('')
+  const [rows, setRows] = useState<Record<number, { on: boolean; qty: string; price: string }>>({})
+  const [busy, setBusy] = useState(false)
+  const perLb = why === 'price_correction' || why === 'quality'
+  const row = (id: number) => rows[id] ?? { on: false, qty: '', price: '' }
+  const set = (id: number, x: Partial<{ on: boolean; qty: string; price: string }>) => setRows(r => ({ ...r, [id]: { ...row(id), ...x } }))
+  const lines = d.lines.filter(l => Number(l.amount) > 0)
+  const total = lines.reduce((t, l) => { const r = row(l.id); return r.on ? t + (Number(r.qty) || 0) * (Number(r.price) || 0) : t }, 0)
+  async function save() {
+    setBusy(true)
+    try {
+      const { data, error } = await sb.rpc('make_credit_memo', { p_inv: d.id, p: { reason: why, notes, lines: lines.filter(l => row(l.id).on).map(l => ({ invoice_line_id: l.id, qty: Number(row(l.id).qty), price: Number(row(l.id).price) })) } })
+      if (error) throw new Error(error.message)
+      flash(`Credit memo ${(data as { number: string }).number} made. Send it to QuickBooks from Accounting.`); await onDone()
+    } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
+  }
+  return <div className="invedit">
+    <b>Credit memo on {d.number}</b>
+    <label className="field"><span>Why</span><Select value={why} onChange={e => { setWhy(e.target.value); setRows({}) }}><option value="">Pick a reason…</option>{CM_REASONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></label>
+    {why && <>
+      <p className="muted small">{perLb ? 'Tick the lines and enter the lbs and the amount off per lb.' : 'Tick the lines and the lbs being credited (the price is what was billed).'}{why === 'return' ? ' Product coming back is usually done in Sales › Returns, which makes the credit memo when it\'s received.' : ''}</p>
+      <table className="restable invlines"><thead><tr><th /><th>Line</th><th className="num">Qty</th><th className="num">{perLb ? 'Off per unit' : 'Price'}</th><th className="num">Credit</th></tr></thead><tbody>
+        {lines.map(l => { const r = row(l.id)
+          return <tr key={l.id}><td><input type="checkbox" checked={r.on} onChange={e => set(l.id, { on: e.target.checked, qty: r.qty || String(l.qty), price: r.price || (perLb ? '' : String(l.price)) })} /></td>
+            <td>{l.description}<div className="muted small">{Number(l.qty).toLocaleString()} {l.uom} at {money(l.price)}</div></td>
+            <td className="num"><input className="qty" type="number" disabled={!r.on} value={r.qty} onChange={e => set(l.id, { qty: e.target.value })} /></td>
+            <td className="num"><input className="qty" type="number" step="0.01" disabled={!r.on || (!perLb && why !== 'other')} value={r.price} onChange={e => set(l.id, { price: e.target.value })} /></td>
+            <td className="num">{r.on ? money((Number(r.qty) || 0) * (Number(r.price) || 0)) : ''}</td></tr> })}
+      </tbody></table>
+      <label className="field"><span>Note {why === 'other' ? '' : '(optional)'}</span><input value={notes} onChange={e => setNotes(e.target.value)} /></label>
+      <div className="row end"><span className="muted">Credit total <b>{money(total)}</b></span>
+        <button className="ghost" onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || total <= 0 || (why === 'other' && !notes.trim())} onClick={save}>Make credit memo</button></div>
+    </>}
+  </div>
+}
+
+function BillForm({ d, sb, products, flash, onClose, onDone }: { d: SalesDoc; sb: SB; products: { code: string; name: string }[]; flash: Flash; onClose: () => void; onDone: () => Promise<void> }) {
+  const [why, setWhy] = useState('')
+  const [notes, setNotes] = useState('')
+  const [lines, setLines] = useState([{ product: 'FRESH_FROZEN', description: '', qty: '', price: '' }])
+  const [busy, setBusy] = useState(false)
+  const total = lines.reduce((t, l) => t + (Number(l.qty) || 0) * (Number(l.price) || 0), 0)
+  const prods = products.filter(p => !['SAMPLES_DISCOUNT', 'SALES_DISCOUNT', 'QUALITY_DISCOUNT', 'PRODUCT_RETURN', 'PRODUCT_REFUND'].includes(p.code))
+  async function save() {
+    setBusy(true)
+    try {
+      const { data, error } = await sb.rpc('make_followup_invoice', { p_inv: d.id, p: { reason: why, notes, lines: lines.map(l => ({ ...l, qty: Number(l.qty), price: Number(l.price) })) } })
+      if (error) throw new Error(error.message)
+      flash(`Invoice ${(data as { inv_number: string }).inv_number} made. Check it and send it to QuickBooks like any invoice.`); await onDone()
+    } catch (e) { flash((e as Error).message, true) } finally { setBusy(false) }
+  }
+  return <div className="invedit">
+    <b>Bill the difference on {d.number}</b>
+    <label className="field"><span>Why</span><Select value={why} onChange={e => setWhy(e.target.value)}><option value="">Pick a reason…</option>{BILL_REASONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></label>
+    {why && <>
+      <p className="muted small">{why === 'price_correction' ? 'Example: billed 300 lbs at $45 instead of $50: Fresh Frozen, "Price correction Gas Face", qty 300, price 5.' : 'One line per charge.'}</p>
+      {lines.map((l, k) => <div key={k} className="row wrap" style={{ gap: 6 }}>
+        <Select value={l.product} onChange={e => setLines(x => x.map((y, j) => j === k ? { ...y, product: e.target.value } : y))}>{prods.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}</Select>
+        <input placeholder="Description" value={l.description} onChange={e => setLines(x => x.map((y, j) => j === k ? { ...y, description: e.target.value } : y))} />
+        <input className="qty" type="number" placeholder="Qty" value={l.qty} onChange={e => setLines(x => x.map((y, j) => j === k ? { ...y, qty: e.target.value } : y))} />
+        <input className="qty" type="number" step="0.01" placeholder="Price" value={l.price} onChange={e => setLines(x => x.map((y, j) => j === k ? { ...y, price: e.target.value } : y))} />
+        {lines.length > 1 && <button className="ghost small" aria-label="Remove line" onClick={() => setLines(x => x.filter((_, j) => j !== k))}>✕</button>}
+      </div>)}
+      <button className="ghost small" onClick={() => setLines(x => [...x, { product: 'SHIPPING', description: '', qty: '1', price: '' }])}>+ Add line</button>
+      <label className="field"><span>Note (optional)</span><input value={notes} onChange={e => setNotes(e.target.value)} /></label>
+      <div className="row end"><span className="muted">New invoice total <b>{money(total)}</b></span>
+        <button className="ghost" onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || total <= 0 || lines.some(l => !l.description.trim())} onClick={save}>Make the invoice</button></div>
+    </>}
+  </div>
 }

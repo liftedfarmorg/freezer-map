@@ -1,5 +1,6 @@
 import { Select } from '../combo'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Backend } from '../api'
 import { AcctApi, GRP_LABEL } from './api'
 import type { AClass, AInvoice, CmPayload, Conn, CreditToSend, Env, Overview, Payload, Product, QLine, Ref, Rule } from './api'
@@ -465,6 +466,7 @@ function SettingsTab({ api, flash, conn, env, refresh, sb, canEdit }: { api: Acc
       {sec === 'rules' && <RulesPanel api={api} flash={flash} />}
       {sec === 'pay' && sb && <PaySettings sb={sb} flash={flash} canEdit={canEdit} isAdmin />}
       {sec === 'people' && <ModulePeople sb={sb} module="accounting" flash={flash} />}
+      {sec === 'people' && <AlertPeople sb={sb} flash={flash} />}
     </div>
   )
 }
@@ -493,7 +495,7 @@ function AutoSend({ api, flash, env, conn }: { api: AcctApi; flash: Flash; env: 
       <h3>Auto-send</h3>
       {err ? <p className="bad-t small">Couldn't load auto-send: {err}</p> : !auto ? <p className="muted small">Loading…</p> : <>
         <p>{auto.on ? <b className="ok-t">On</b> : <b className="bad-t">Off</b>}{' · '}
-          {auto.on ? `new invoices for outside customers go to ${ENV_LABEL[env]} ${auto.minutes} minutes after they're made (editing restarts the clock).`
+          {auto.on ? `new invoices for outside customers go to ${ENV_LABEL[env]} ${auto.minutes} minutes after they're made, which is when the stop is delivered (editing restarts the clock).`
             : 'nothing goes to QuickBooks on its own. Send invoices by hand from To send.'}</p>
         {!!auto.due && <p className={auto.on ? 'muted small' : 'warn-t small'}>{auto.due >= 40 ? '40 or more invoices are' : auto.due === 1 ? '1 invoice is' : `${auto.due} invoices are`} past their wait{auto.on ? ' and going out now.' : ' and will go within 10 minutes of turning auto-send on.'}</p>}
         <div className="row wrap"><button className={auto.on ? 'ghost' : 'primary'} disabled={busy} onClick={() => flip(!auto.on)}>{busy ? 'Saving…' : auto.on ? 'Turn auto-send off' : 'Turn auto-send on'}</button></div>
@@ -628,4 +630,17 @@ function RulesPanel({ api, flash }: { api: AcctApi; flash: Flash }) {
       </div>
     </div>
   )
+}
+
+/** 218: who gets Accounting alerts, besides everyone in the Accounting module */
+function AlertPeople({ sb, flash }: { sb: SupabaseClient | null; flash: (m: string, bad?: boolean) => void }) {
+  const [v, setV] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { sb?.rpc('acct_alert_people').then(({ data }) => setV(String(data ?? ''))) }, [sb])
+  if (!sb || v === null) return null
+  return <section className="dcard" style={{ marginTop: 12 }}><h3>Accounting alerts</h3>
+    <p className="muted small">Everyone in the Accounting module gets them, plus these people (emails, separated by commas). Each person picks push / email in My settings.</p>
+    <div className="row wrap"><input style={{ minWidth: 320 }} value={v} onChange={e => setV(e.target.value)} placeholder="matt@lifted-organics.com, nikki@lifted-organics.com" />
+      <button className="primary small" disabled={busy} onClick={async () => { setBusy(true); const { data, error } = await sb.rpc('set_acct_alert_people', { p_emails: v }); setBusy(false)
+        if (error) flash(error.message, true); else { setV(String(data ?? '')); flash('Saved') } }}>Save</button></div></section>
 }

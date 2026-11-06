@@ -284,7 +284,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
               {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
               {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
                 <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
-                {onInvoice && <button className="ghost small" onClick={() => onInvoice(o.id)}>{o.status === 'shipped' ? 'Invoice' : 'Make invoice now'}</button>}</div>}
+                {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
               {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
               {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
             </div>
