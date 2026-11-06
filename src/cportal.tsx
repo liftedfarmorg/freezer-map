@@ -1385,6 +1385,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const yToDo = yOrders.filter(x => !x.rep?.sentAt)
   const [yOrder, setYOrder] = useState<number | null>(null)
   const [yDraft, setYDraft] = useState<YieldLine[]>([])
+  const [yTxt, setYTxt] = useState<Record<string, string>>({})   // what's typed in each amount box, so "3." and "0.50" stay as typed
   const openYield = (orderId: number) => {
     const x = yOrders.find(z => z.o.order!.id === orderId); if (!x) return
     // one line per strain + crop year on the order (samples included); fresh frozen run starts at what shipped
@@ -1393,7 +1394,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       if (v) v.shipped += Number(l.lbs); else by.set(k, { s: l.strain, y: y0, shipped: Number(l.lbs), ff: null, made: { hash: true, rosin: true }, hashV: null, hashU: 'g', rosinV: null, rosinU: 'g', rating: null, note: '' }) }
     const saved = x.rep?.lines ?? []
     setYDraft([...by.values()].map(l => ({ ...l, ...(saved.find(z => z.s === l.s && z.y === l.y) ?? {}), shipped: l.shipped })).map(l => ({ ...l, ff: l.ff ?? l.shipped })))
-    setYOrder(orderId); go('yield')
+    setYTxt({}); setYOrder(orderId); go('yield')
   }
   // grams for each step, and the yields worked out from them
   const yCalc = (l: YieldLine) => {
@@ -1440,12 +1441,18 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const x = yOrders.find(z => z.o.order!.id === yOrder)
     if (!x) return <div className={c('screen')}><header className={c('hdr')}>{back('yields', 'Report Yields')}<h1>Report yields</h1></header><p className={c('loading')}>Pick an order to report.</p></div>
     const set = (i: number, p: Partial<YieldLine>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, ...p } : l))
-    const num = (v: string) => { const t = v.replace(/[^0-9.]/g, ''); return t === '' ? null : Number(t) }
+    // numbers with up to 2 decimals: keep what they typed, store the number
+    const typed = (key: string, v: string): number | null | undefined => {
+      let t = v.replace(/[^0-9.]/g, ''); const dot = t.indexOf('.')
+      if (dot >= 0) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, '').slice(0, 2)
+      setYTxt({ ...yTxt, [key]: t }); return t === '' || t === '.' ? null : Number(t)
+    }
+    const shown = (key: string, v: number | null) => yTxt[key] ?? (v == null ? '' : String(v))
     const amount = (i: number, l: YieldLine, which: 'hash' | 'rosin') => {
       const v = which === 'hash' ? l.hashV : l.rosinV, u = which === 'hash' ? l.hashU : l.rosinU
       return <span className={c('yamt')}>
-        <input type="text" inputMode="decimal" placeholder="0" value={v ?? ''} aria-label={`${l.s} ${which} amount`}
-          onChange={e => set(i, which === 'hash' ? { hashV: num(e.target.value) } : { rosinV: num(e.target.value) })} />
+        <input type="text" inputMode="decimal" placeholder="0.00" value={shown(`${i}-${which}`, v)} aria-label={`${l.s} ${which} amount`}
+          onChange={e => { const n = typed(`${i}-${which}`, e.target.value); set(i, which === 'hash' ? { hashV: n ?? null } : { rosinV: n ?? null }) }} />
         <select value={u} aria-label={`${l.s} ${which} unit`} onChange={e => set(i, which === 'hash' ? { hashU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
           {UNITS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
     }
@@ -1468,7 +1475,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                     <label><input type="checkbox" checked={l.made.hash} onChange={e => set(i, { made: { ...l.made, hash: e.target.checked } })} /> Hash</label>
                     <label><input type="checkbox" checked={l.made.rosin} onChange={e => set(i, { made: { ...l.made, rosin: e.target.checked } })} /> Rosin</label></div></div>
                 <div className={c('yfield')}><span className={c('ylbl')}>Fresh frozen run</span>
-                  <span className={c('yamt')}><input type="text" inputMode="decimal" value={l.ff ?? ''} aria-label={`${l.s} fresh frozen run, lbs`} onChange={e => set(i, { ff: num(e.target.value) })} /><span className={c('yunit')}>lbs</span></span></div>
+                  <span className={c('yamt')}><input type="text" inputMode="decimal" value={shown(`${i}-ff`, l.ff)} aria-label={`${l.s} fresh frozen run, lbs`} onChange={e => { const n = typed(`${i}-ff`, e.target.value); set(i, { ff: n ?? null }) }} /><span className={c('yunit')}>lbs</span></span></div>
                 <div className={c(`yfield ${l.made.hash ? '' : 'off'}`)}><span className={c('ylbl')}>Hash</span>
                   {l.made.hash ? <>{amount(i, l, 'hash')}<span className={c('yres')}>{k.hashPct != null ? <><b>{pct(k.hashPct)}</b> of fresh frozen{l.hashU !== 'g' ? ` · ${gFmt(k.hashG)}` : ''}</> : ' '}</span></> : <span className={c('meta')}>Not made</span>}</div>
                 <div className={c(`yfield ${l.made.rosin ? '' : 'off'}`)}><span className={c('ylbl')}>Rosin</span>
