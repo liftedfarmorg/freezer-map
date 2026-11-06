@@ -12,7 +12,7 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
   api: CultApi; flash: Flash; onSaved: (m: string) => Promise<void> }) {
   const sel = useSel()
   const bulk = (f: () => Promise<unknown>, m: string) => async () => { try { await f(); await onSaved(m) } catch (e) { flash(errText(e), true) } }
-  const [mode, setMode] = useState<Mode>(d.year === d.currentYear ? 'upcoming' : 'all')
+  const [mode, setMode] = useState<Mode>('all')   // 255: everything by default, filter from there
   const [kind, setKind] = useState<'all' | 'flower' | 'biomass'>('all')
   const now = today()
   const ql = q.trim().toLowerCase()
@@ -62,11 +62,26 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
   }
   const late = d.harvests.filter(h => h.status === 'planned' && h.planned_on && h.planned_on < now && (!site || h.site === site))
 
+  // 255: summary cards over the schedule (same site and type filters, ignores the status filter)
+  const base = d.harvests.filter(h => (!site || h.site === site) && (kind === 'all' || (kind === 'biomass') === isBiomass(h.kind)))
+  const wk0 = monday(now), wk1 = addDays(wk0, 6)
+  const thisWeek = base.filter(h => h.planned_on && h.planned_on >= wk0 && h.planned_on <= wk1)
+  const upcoming = base.filter(h => h.status === 'planned' && h.planned_on && h.planned_on >= now)
+  const estUp = sum(upcoming.map(h => { const k = calcHarvest(c, h); return h.kind === 'ff' ? k.estFF : null }))
+  const doneN = base.filter(h => h.status === 'done').length
+  const lateN = late.filter(h => kind === 'all' || (kind === 'biomass') === isBiomass(h.kind)).length
+  const cnt: Record<Mode, number> = { all: base.length, upcoming: base.filter(h => h.status === 'planned' && (!h.planned_on || h.planned_on >= addDays(now, -7))).length, done: doneN } as Record<Mode, number>
   return (
     <>
+      <div className="invcards">
+        <div className="icard"><span>This week</span><b>{thisWeek.length}</b><small>{n0(sum(thisWeek.filter(h => !isBiomass(h.kind)).map(h => h.plants)))} plants</small></div>
+        <div className="icard"><span>Coming up</span><b>{upcoming.length}</b><small>{n0(estUp)} lbs FF estimated</small></div>
+        <div className="icard"><span>Harvested</span><b>{doneN}</b><small>of {base.length} this season</small></div>
+        <div className={`icard ${lateN ? 'warn' : ''}`}><span>Past date, not logged</span><b>{lateN}</b><small>{lateN ? 'open to log or move' : 'all caught up'}</small></div>
+      </div>
       <div className="row toolbar">
         <div className="seg">
-          {(['upcoming', 'all', 'done'] as Mode[]).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'upcoming' ? 'Coming up' : m === 'all' ? 'All' : 'Harvested'}</button>)}
+          {(['upcoming', 'all', 'done'] as Mode[]).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'upcoming' ? 'Coming up' : m === 'all' ? 'All' : 'Harvested'} <span className="segn">{cnt[m]}</span></button>)}
         </div>
         <Pick value={kind} onChange={v => setKind(v ?? 'all')} options={[{ v: 'all', l: 'Flower + biomass' }, { v: 'flower', l: 'Flower only' }, { v: 'biomass', l: 'Biomass only' }]} />
         <SelButton sel={sel} />
@@ -111,7 +126,7 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
                           ? <span className="cdatew" onClick={e => e.stopPropagation()}><b className="cdow">{h.planned_on ? new Date(`${h.planned_on}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' }) : ''}</b><input type="date" className="cdate" value={h.planned_on ?? ''} aria-label={`${h.strain} harvest date`}
                               onChange={e => { const v = e.target.value || null; if (v !== h.planned_on) bulk(() => api.save<Harvest>('cult_harvests', { id: h.id, planned_on: v }), `${h.strain} moved to ${fmtD(v, true)}`)() }} /></span>
                           : fmtD(h.planned_on, true)}{h.status === 'done' && h.harvested_on && h.harvested_on !== h.planned_on && <div className="muted small">cut {fmtD(h.harvested_on)}</div>}</td>
-                        <td>{h.strain}{trialOf(h) && <> <span className="kpill k-trial" title="Trial strain">T</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>}
+                        <td>{h.strain}{trialOf(h) && <> <span className="kpill k-trial" title="Trial strain">Trial</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>}
                           {h.planted_strain && h.planted_strain !== h.strain && <div className="muted small">planted as {h.planted_strain}</div>}<div className="show-s"><span className="fpill">{h.site} {fieldName(c, h.field_id)}</span><span className={`kpill k-${h.kind}`}>{KIND_SHORT[h.kind]}</span></div>
                           {h.notes && <div className="muted small">{h.notes.length > 60 ? h.notes.slice(0, 60) + '…' : h.notes}</div>}</td>
                         <td className="hide-s"><span className="fpill">{h.site} {fieldName(c, h.field_id)}</span></td>

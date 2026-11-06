@@ -40,12 +40,15 @@ export function HarvestTab({ d, c, site, api, flash, onSaved, openFirst }: { d: 
   const done = hs.filter(h => h.status === 'done' && h.harvested_on === day)
   // a harvest day card per site with fresh frozen work that day (the picked site only, when one is picked)
   const daySites = site ? (hs.some(h => h.kind === 'ff') ? [site] : []) : [...new Set([...going, ...planned, ...done].filter(h => h.kind === 'ff').map(h => h.site))].sort()
-  const card = (h: Harvest, extra?: string) => <HCard key={h.id} h={h} c={c} name={appHarvestName(h, d.harvests, c)} extra={extra} onOpen={() => { setOpenId(h.id); scrollTop() }} />
+  const card = (h: Harvest, extra?: string) => <HCard key={h.id} h={h} c={c} name={appHarvestName(h, d.harvests, c)} extra={extra} onOpen={() => { setOpenId(h.id); scrollTop() }}
+    start={h.status === 'planned' && !h.stage && h.planned_on != null && h.planned_on <= now} />
   const order = (a: Harvest, b: Harvest) => (a.sched_order ?? 1e9) - (b.sched_order ?? 1e9) || a.site.localeCompare(b.site) || a.strain.localeCompare(b.strain)
   return (
     <div className="hlog">
       <div className="row wrap hday">
+        <button className="ghost small hday-arw" aria-label="Day before" onClick={() => setDay(addDays(day, -1))}>‹</button>
         <DateIn value={day} onChange={v => setDay(v ?? now)} />
+        <button className="ghost small hday-arw" aria-label="Next day" onClick={() => setDay(addDays(day, 1))}>›</button>
         {day !== now && <button className="ghost small" onClick={() => setDay(now)}>Today</button>}
       </div>
       {daySites.map(s => <HarvestDayCard key={`${s}-${day}`} site={s} day={day} api={api} flash={flash} />)}
@@ -91,7 +94,7 @@ function DayGroup({ label, hs, c, card, startOpen }: { label: string; hs: Harves
 }
 
 /** one harvest on the list: what it is, how big, and where it's at */
-function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string; extra?: string; onOpen: () => void }) {
+function HCard({ h, c, name, extra, onOpen, start }: { h: Harvest; c: Ctx; name: string; extra?: string; onOpen: () => void; start?: boolean }) {
   const k = calcHarvest(c, h)
   const pl = h.planting_id ? c.planting.get(h.planting_id) : undefined
   const trial = !!pl?.trial || c.field.get(h.field_id ?? -1)?.kind === 'trials'
@@ -104,7 +107,10 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
   const facts: string[] = []
   if (plants) facts.push(`${n0(plants)} plants`)
   if (h.kind === 'ff') {
-    if (k.estFF) facts.push(`~${n0(k.estFF)} lbs FF${h.est_lbs_per_plant ? ` (${n1(h.est_lbs_per_plant)}/plant)` : ''}`)
+    if (k.estFF) facts.push(`~${n0(k.estFF)} lbs FF`)
+    // 255: lbs/plant is the estimate until the plants harvested are saved, then the real number
+    if (h.plants_harvested && logged > 0) facts.push(`${n1(logged / h.plants_harvested)} lbs/plant`)
+    else if (h.est_lbs_per_plant) facts.push(`${n1(h.est_lbs_per_plant)} lbs/plant est.`)
     if (!going && h.status === 'planned') {
       if (k.deleafPeople) facts.push(`${k.deleafPeople} deleafers`)
       if (k.buckPeople) facts.push(`${k.buckPeople} buckers`)
@@ -119,9 +125,9 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
   }
   if (h.metrc_name && h.metrc_name !== name) facts.push(`METRC ${h.metrc_name}`)
   return (
-    <button className="li setrow hcard" onClick={onOpen}>
+    <div className="li setrow hcard" role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}>
       <div className="grow">
-        <div><b>{h.strain}</b>{trial && <> <span className="kpill k-trial" title="Trial strain">T</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span> <span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span></div>
+        <div><b>{h.strain}</b>{trial && <> <span className="kpill k-trial" title="Trial strain">Trial</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span> <span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span></div>
         <div className="muted small">{name}</div>
         <div className="hfacts">{facts.map((f, i) => <span key={i}>{f}</span>)}</div>
         {(going || logged > 0) && h.kind === 'ff' ? <div className="hprog">
@@ -131,8 +137,9 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
           : <div className="muted small">{extra ?? STEP[h.kind]}{logged > 0 ? ` · ${n0(logged)} lbs logged` : ''}</div>}
         {going && extra && <div className="muted small">{extra}</div>}
       </div>
+      {start && <button className="primary small hstart" onClick={e => { e.stopPropagation(); onOpen() }}>Start</button>}
       <span className="hgo">›</span>
-    </button>
+    </div>
   )
 }
 
@@ -164,7 +171,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   return (
     <div className="hlog">
       <button className="ghost small hback" onClick={back}>‹ Harvest</button>
-      <h2><StrainLink name={h.strain} /> {trial && <span className="kpill k-trial" title="Trial strain">T</span>} {(h.day_no ?? 1) > 1 && <span className="kpill s-planned">Day {h.day_no}</span>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span></h2>
+      <h2><StrainLink name={h.strain} /> {trial && <span className="kpill k-trial" title="Trial strain">Trial</span>} {(h.day_no ?? 1) > 1 && <span className="kpill s-planned">Day {h.day_no}</span>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span></h2>
       {h.planted_strain && h.planted_strain !== h.strain && <p className="muted small">Planted as {h.planted_strain} (renamed at harvest; the planting keeps its name)</p>}
       <div className="row wrap"><span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span>
         <span className="muted">{done ? `Finished · harvested ${fmtD(h.harvested_on, true)}` : h.stage === 'drying' ? `Drying since ${fmtD(h.harvested_on, true)}` : h.stage === 'harvesting' ? `Harvesting · started ${fmtD(h.harvested_on, true)}` : `Scheduled ${fmtD(h.planned_on, true)}`}
