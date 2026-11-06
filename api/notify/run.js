@@ -37,6 +37,8 @@ export default async function handler(req, res) {
   running = true
   const done = { push: [], subs_gone: [], subs_ok: [], email: [], sms: [] }
   try {
+    // 224: staged GVR pallets not shipping within 2 days: one 'Move back to GVR' alert each (queues its push)
+    await rpc('gvr_stage_sweep').catch(() => {})
     const q = await rpc('notify_claim', { p_limit: 50 })
     // ---- push ----
     if (q.push?.length && q.vapid?.public) {

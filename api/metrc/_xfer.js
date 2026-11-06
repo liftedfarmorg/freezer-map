@@ -340,14 +340,15 @@ export async function sendTransfer_(job, ctx) {
 export async function sendManifestVoid(job, ctx) {
   const d = job.details || {}
   const lic = job.license
-  const man = String(d.manifest ?? '').replace(/\D/g, '')
-  if (!man) throw new Skip('No manifest number on this stop')
+  const key = `stop:${Number(d.stop_id)}:${lic}`
+  const mine = await one(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided&select=transfer_id,manifest`).catch(() => null)
+  // 224: a stop taken off while departing may have its METRC id before its number reached the stop
+  const man = String(d.manifest || mine?.manifest || '').replace(/\D/g, '')
+  if (!man && !mine?.transfer_id) throw new Skip('No manifest on this stop (nothing to void)')
   const stop = await one(`load_stops?id=eq.${Number(d.stop_id)}&select=id,manifest,manifest_voided_at`)
   if (stop?.manifest_voided_at) throw new Skip(`Manifest ${man} is already voided`)
   const open = await db(`stop_returns?stop_id=eq.${Number(d.stop_id)}&back_at=is.null&cancelled_at=is.null&select=id`).catch(() => [])
   if (open?.length) throw new Skip('Not everything from this stop is received back yet')
-  const key = `stop:${Number(d.stop_id)}:${lic}`
-  const mine = await one(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided&select=transfer_id,manifest`).catch(() => null)
   let id = mine?.transfer_id ?? null
   if (!id) {
     const pulled = await one(`metrc_transfers?manifest=eq.${enc(man)}&select=transfer_id,voided,received_at&license=eq.${enc(lic)}&order=last_modified.desc.nullslast`).catch(() => null)
@@ -361,7 +362,7 @@ export async function sendManifestVoid(job, ctx) {
   if (mine) await db(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided`, { method: 'PATCH', body: JSON.stringify({ state: 'voided' }), headers: { Prefer: 'return=minimal' } })
   await db(`load_stops?id=eq.${Number(d.stop_id)}`, { method: 'PATCH', body: JSON.stringify({ manifest_voided_at: new Date().toISOString() }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
   await db(`app_alerts?kind=eq.stop_metrc&done_at=is.null&ref->>stop_id=eq.${Number(d.stop_id)}`, { method: 'PATCH', body: JSON.stringify({ done_at: new Date().toISOString(), done_by: 'app (manifest voided)' }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
-  return { state: 'sent', request: { id }, response: resp, info: `METRC manifest ${man} voided (not delivered, product received back)` }
+  return { state: 'sent', request: { id }, response: resp, info: `METRC manifest ${man} voided (${d.why === 'departing' ? 'stop taken off while departing' : 'not delivered, product received back'})` }
 }
 
 /** open "receive in METRC" to-dos covering these packages (by tag, or a mixed pallet they sit on) */

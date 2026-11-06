@@ -15,6 +15,7 @@ import { MergeForm, MergeHere, MixedBuilder, NewPackageForm, NewPalletChooser, P
 import { SettingsView } from './settings'
 import { AllCustomerLogins } from './custlogins'
 import { ModulePeople, UsersTab } from './users'
+import { AlertPeopleAll } from './notifyprefs'
 import { PermissionsPanel } from './perms'
 import { AdminDashboard, AdminReview, AppSettingsPanel } from './admin'
 import type { Jump } from './admin'
@@ -1098,6 +1099,7 @@ export default function App() {
               { k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
               { k: 'perms', l: 'Permissions', node: <PermissionsPanel sb={backend.client()} flash={flash} /> },
               { k: 'licenses', l: 'Licenses', node: <LicensesPanel backend={backend} flash={flash} /> },
+              { k: 'alerts', l: 'Alerts', node: <AlertPeopleAll sb={backend.client()} flash={flash} /> },
               { k: 'app', l: 'App settings', node: <AppSettingsPanel backend={backend} flash={flash} /> }]} />}
           {adminSet === 'dist' && distSettings}
           {adminSet === 'sales' && salesSettings}
