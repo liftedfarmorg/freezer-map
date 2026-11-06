@@ -248,3 +248,6 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .pbar .pmore { color: var(--muted); font-weight: 600; }
 .pbar .pmore.on { color: var(--ink); }
 .pbar .pmore .pti { position: relative; }
+
+/* preview badge hides while a sheet or pop-up is open */
+.is-preview body:has(.scrim)::before { display: none; }
