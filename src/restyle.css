@@ -184,3 +184,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .app.shell main { max-width: 1480px; }
 .app.shell .cwrap { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--r-shadow); border-radius: 16px; }
 .app.shell .ctable td.small .mtag, .app.shell .ctable .mtag { font-size: 12.5px; }
+
+/* preview badge out of the way of the header on tablets and phones */
+@media (max-width: 999px) { .is-preview body::before { top: auto; bottom: 12px; left: auto; right: 10px; transform: none; font-size: 10px; padding: 3px 8px; opacity: .92; pointer-events: none; } }
+@media (max-width: 767px) { .is-preview body::before { bottom: calc(76px + env(safe-area-inset-bottom)); } }
