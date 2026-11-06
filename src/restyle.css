@@ -199,3 +199,17 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .otable tr.open td { background: var(--r-teal-bg); }
 .odetail { border: 0; padding: 4px 0; background: transparent; box-shadow: none; }
 .ctable .nw, .otable .nw { white-space: nowrap; }
+
+/* phone header: the module pill (opens the module sheet), like the mockup */
+.phmod { display: none; }
+@media (max-width: 767px) {
+  .app.shell .phmod { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--r-line);
+    background: var(--r-ink-3); color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; order: -1; }
+  .phmod-dot { width: 8px; height: 8px; border-radius: 4px; background: var(--r-teal); }
+  .app.shell .top .brand { display: none; }
+}
+
+/* Schedule: every column on every screen, the table scrolls sideways */
+.cwrap.fit .ctable.schedt { min-width: 900px; }
+.ctable.schedt .hide-s { display: table-cell !important; }
+.ctable.schedt td:nth-child(2), .ctable.schedt td:nth-child(3) { min-width: 140px; }

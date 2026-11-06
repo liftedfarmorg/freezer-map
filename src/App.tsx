@@ -957,6 +957,8 @@ export default function App() {
         </aside>
       )}
       <header className="top">
+        {!noMods && <button className="phmod" aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
+          <span className="phmod-dot" />{inDrv ? t('Driver') : ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>}
         <div className="brand" onClick={() => nav.main[0]?.go()}>
           <img className="logo-img logo-l" src="/logo-light.svg" alt="Lifted Farms" /><img className="logo-img logo-d" src="/logo-dark.svg" alt="Lifted Farms" /> <span className="app-name">{appName}</span><span className="ptitle">{pageTitle}</span> {backend.demo && <span className="demo">DEMO</span>}
         </div>

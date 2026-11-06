@@ -91,7 +91,7 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
       {!rows.length && <p className="muted">Nothing here. {mode === 'upcoming' ? 'Try All.' : ''}</p>}
       {rows.length > 0 && (
         <div className="cwrap fit">
-          <table className="ctable">
+          <table className="ctable schedt">
             <thead><tr><SelAll sel={sel} ids={rows.map(h => h.id)} />{canDrag && <th className="hdl" aria-label="Drag" />}<th>Date</th><th>Strain</th><th className="hide-s">Field</th><th className="hide-s">Type</th><th className="num">Plants</th><th className="num">Lbs</th>
               <th className="num hide-s">Deleaf</th><th className="num hide-s">Buck</th><th className="num hide-s">Dry ice</th><th>Status</th></tr></thead>
             <tbody>
