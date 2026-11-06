@@ -102,6 +102,8 @@ const MOD_ICON: Record<Mod, ReactNode> = {
   comp: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="m9 15 2 2 4-4" /></svg>,
   admin: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></svg>,
 }
+// 215/246: Driver sits with the modules (for people who drive and have other modules)
+const DRV_ICON = <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2" /><path d="M12 14v7M10.2 11.2 3.5 9.5M13.8 11.2l6.7-1.7" /></svg>
 const stored = (k: string) => { try { return localStorage.getItem(k) } catch { return null } }
 const store = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* private mode */ } }
 
@@ -485,6 +487,9 @@ export default function App() {
   const MODS = (Object.keys(MOD_KEY) as Mod[]).map(m => ({ m, l: ML(m), on: !!lv[MOD_KEY[m]] }))
   const myMods = MODS.filter(x => x.on)
   const noMods = staff && myMods.length === 0
+  const isDrv = !!me?.access?.driver
+  const inDrv = view === 'driver' && isDrv
+  const modCount = myMods.length + (isDrv ? 1 : 0)
   const cur: Mod = myMods.some(x => x.m === mod) ? mod : myMods[0]?.m ?? 'dist'
   const inCult = cur === 'cult'
   const isAdminOf = (m: Mod) => lv[MOD_KEY[m]] === 'admin'
@@ -875,7 +880,6 @@ export default function App() {
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
   const extras: NavItem[] = [
-    ...(me?.access?.driver ? [{ k: 'driver', l: t('Driver'), on: view === 'driver', go: () => go('driver') }] : []),
     ...(staff ? [{ k: 'fleet', l: t('Vehicles'), on: view === 'fleet', go: () => go('fleet') }] : []),
   ]
   const bottomRest = [...all.slice(4), ...extras]
@@ -884,53 +888,60 @@ export default function App() {
   const canScan = cur === 'dist' || cur === 'proc'
   const shortL = (x: NavItem) => x.k === 'dash' || x.k === 'dashboard' ? t('Home') : x.s ?? (typeof x.l === 'string' ? x.l : x.k)
   const curScreen = all.find(x => x.on) ?? extras.find(x => x.on)
-  const pageTitle = view === 'mine' ? t('My settings') : !curScreen || curScreen.k === 'dash' || curScreen.k === 'dashboard' ? ML(cur) : typeof curScreen.l === 'string' ? curScreen.l : curScreen.s ?? ML(cur)
+  const pageTitle = view === 'mine' ? t('My settings') : inDrv ? t('My loads') : !curScreen || curScreen.k === 'dash' || curScreen.k === 'dashboard' ? ML(cur) : typeof curScreen.l === 'string' ? curScreen.l : curScreen.s ?? ML(cur)
   const jump = (j: Jump) => {
     const [m, t] = j.split('.') as [Mod, string]
     if (!lv[MOD_KEY[m]]) { flash(`You don't have ${MOD_LABEL[m]}`, true); return }
     setModS(m); store('fm.mod', m)
     if (m === 'dist') go(t as View); else if (m === 'sales') setSalesTab(t as SalesTab); else if (m === 'cult') setCultTab(t as CultTab); else if (m === 'nurs') setNurTab(t as NTab); else if (m === 'acct') setAcctTab(t as ATab); else if (m === 'proc') setProcTab(t as PTab); else if (m === 'comp') setCompTab(t as CTab); else setAdminTab(t === 'users' ? 'settings' : t as AdminTab)
   }
-  const appName = ML(cur)
+  const appName = inDrv ? t('Driver') : ML(cur)
   document.title = noMods ? 'Lifted Farms' : `${view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : view === 'driver' ? t('Driver') : ML(cur)} · Lifted Farms`
 
   return (
-    <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${myMods.length > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
-      style={{ ['--navw' as string]: myMods.length > 1 ? '284px' : '200px' }}>
+    <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${modCount > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
+      style={{ ['--navw' as string]: modCount > 1 ? '284px' : '200px' }}>
       {viewBar}
       {!noMods && (
         <aside className="rail" aria-label="Navigation">
-          {myMods.length > 1 && <div className="rail-mods">
+          {modCount > 1 && <div className="rail-mods">
             <img className="rail-logo" src="/logo-dark.svg" alt="Lifted Farms" />
             {myMods.map(x => (
-              <button key={x.m} className={`rail-mod ${cur === x.m ? 'on' : ''}`} onClick={() => goMod(x.m)}>
+              <button key={x.m} className={`rail-mod ${cur === x.m && !inDrv ? 'on' : ''}`} onClick={() => goMod(x.m)}>
                 {MOD_ICON[x.m]}<span>{x.l}</span>
               </button>
             ))}
+            {isDrv && <button className={`rail-mod ${inDrv ? 'on' : ''}`} onClick={() => go('driver')}>{DRV_ICON}<span>{t('Driver')}</span></button>}
           </div>}
+          {inDrv ? <nav className="rail-screens" aria-label={t('Driver')}>
+            <div className="rail-h">{t('Driver').toUpperCase()}</div>
+            <button className="on">{t('My loads')}</button>
+          </nav> :
           <nav className="rail-screens" aria-label={`${ML(cur)} screens`}>
             <div className="rail-h">{ML(cur).toUpperCase()}</div>
             {canScan && <button className="rail-scan" onClick={() => setScanning(true)}>{SCAN_ICON}<span>{t('Scan a tag')}</span></button>}
             {nav.main.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
             {nav.tail.length > 0 && <div className="rail-sep" />}
             {nav.tail.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
-          </nav>
+          </nav>}
         </aside>
       )}
       <header className="top">
         <div className="brand" onClick={() => nav.main[0]?.go()}>
           <img className="logo-img logo-l" src="/logo-light.svg" alt="Lifted Farms" /><img className="logo-img logo-d" src="/logo-dark.svg" alt="Lifted Farms" /> <span className="app-name">{appName}</span><span className="ptitle">{pageTitle}</span> {backend.demo && <span className="demo">DEMO</span>}
         </div>
-        {myMods.length > 1 && (
+        {modCount > 1 && (
           <div className="modpick">
-            <button className={`modpill m-${cur}`} aria-haspopup="menu" aria-expanded={modMenu} onClick={() => setModMenu(!modMenu)}>
-              {ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            <button className={`modpill m-${inDrv ? 'driver' : cur}`} aria-haspopup="menu" aria-expanded={modMenu} onClick={() => setModMenu(!modMenu)}>
+              {inDrv ? t('Driver') : ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             </button>
             {modMenu && <>
               <div className="modscrim" onClick={() => setModMenu(false)} />
               <div className="modmenu" role="menu">
-                {myMods.map(x => <button key={x.m} role="menuitem" className={cur === x.m ? 'on' : ''} onClick={() => goMod(x.m)}>
+                {myMods.map(x => <button key={x.m} role="menuitem" className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => goMod(x.m)}>
                   <b>{x.l}</b><span className="muted">{t(MOD_WHAT[x.m])}</span></button>)}
+                {isDrv && <button role="menuitem" className={inDrv ? 'on' : ''} onClick={() => { setModMenu(false); go('driver') }}>
+                  <b>{t('Driver')}</b><span className="muted">{t('My loads and stops')}</span></button>}
               </div>
             </>}
           </div>
@@ -945,7 +956,6 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
-        {me?.access?.driver && <button className={`ghost small ${view === 'driver' ? 'on-btn' : ''}`} title={t('Driver: my loads and stops')} onClick={() => (view === 'driver' ? go(lastView.current) : go('driver'))}>🚛<span className="hide-phone"> {t('Driver')}</span></button>}
         {staff && <button className={`ghost small desk-only ${view === 'fleet' ? 'on-btn' : ''}`} title={t('Vehicles: inspections, maintenance, incidents')} onClick={() => (view === 'fleet' ? go(lastView.current) : go('fleet'))}>🚚<span className="hide-phone"> {t('Vehicles')}</span></button>}
         <button className={`ghost small ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
         <button className="ghost small" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
@@ -1120,10 +1130,11 @@ export default function App() {
       )}
       <DragGhost />
       {!noMods && <>
-        <nav className={`bottom pbar ${canScan ? 'with-scan' : ''}`} aria-label={`${ML(cur)} screens`}>
-          <button className={`pmod ${restOn ? 'on' : ''}`} aria-label={t('Switch module, now {m}', { m: ML(cur) })} onClick={() => setMore(true)}>
-            <span className="pmod-i">{MOD_ICON[cur]}{restBadge > 0 && <i className="pdot" />}</span><span className="pl">{t(MOD_SHORT[cur])} ▴</span></button>
-          {bottomFit.map((x, i) => <Fragment key={x.k}>
+        <nav className={`bottom pbar ${canScan && !inDrv ? 'with-scan' : ''}`} aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
+          <button className={`pmod ${restOn ? 'on' : ''}`} aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
+            <span className="pmod-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{inDrv ? t('Driver') : t(MOD_SHORT[cur])} ▴</span></button>
+          {inDrv && <button className="ptab on"><span className="pti">{DRV_ICON}</span><span className="pl">{t('My loads')}</span></button>}
+          {!inDrv && bottomFit.map((x, i) => <Fragment key={x.k}>
             {canScan && i === 2 && <div className="pscan-w"><button className="pscan" aria-label={t('Scan a METRC tag')} onClick={() => setScanning(true)}>{SCAN_ICON}</button></div>}
             <button className={`ptab ${x.on ? 'on' : ''}`} onClick={x.go}>
               <span className="pti">{screenIcon(x.k)}{(x.n ?? 0) > 0 && <b className={`pbadge ${x.warn ? 'warn' : ''}`}>{x.n}</b>}</span><span className="pl">{shortL(x)}</span></button>
@@ -1133,12 +1144,14 @@ export default function App() {
           <div className="scrim" onClick={() => setMore(false)}>
             <div className="sheet modsheet" onClick={e => e.stopPropagation()}>
               <div className="sheet-h"><span /><button className="ghost" aria-label={t('Close')} onClick={() => setMore(false)}>✕</button></div>
-              {myMods.length > 1 && <>
+              {modCount > 1 && <>
                 <div className="msh">{t('Switch module')}</div>
-                <div className="modgrid">{myMods.map(x => <button key={x.m} className={cur === x.m ? 'on' : ''} onClick={() => { setMore(false); goMod(x.m) }}>{MOD_ICON[x.m]}<span>{x.l}</span></button>)}</div>
+                <div className="modgrid">{myMods.map(x => <button key={x.m} className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => { setMore(false); goMod(x.m) }}>{MOD_ICON[x.m]}<span>{x.l}</span></button>)}
+                  {isDrv && <button className={inDrv ? 'on' : ''} onClick={() => { setMore(false); go('driver') }}>{DRV_ICON}<span>{t('Driver')}</span></button>}</div>
               </>}
-              <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>
-              <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>
+              {!inDrv && <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>}
+              {!inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
             </div>
           </div>
         )}

@@ -1156,7 +1156,8 @@ export const ES: Record<string, string> = {
  "manifests to void or rejections to check after a delivery": "manifiestos por anular o rechazos por revisar después de una entrega",
  "Other alerts": "Otras alertas",
  "everything else for the modules you're in": "todo lo demás de tus módulos",
- "My notifications": "Mis notificaciones"
+ "My notifications": "Mis notificaciones",
+ "My loads and stops": "Mis cargas y paradas"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Production's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

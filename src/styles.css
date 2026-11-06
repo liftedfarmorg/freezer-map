@@ -1223,3 +1223,6 @@ html:has(.app.shell), html:has(.app.shell) body { height: 100%; overflow: hidden
 .drv .neg, .neg.small, p.neg, .warnbox.neg { color: var(--bad); }
 a.btnlink { display: inline-flex; align-items: center; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
 .stopchip.not_delivered { text-decoration: line-through; opacity: .7; }
+.modpill.m-driver { border-color: #1d4ed8; background: color-mix(in srgb, #2563eb 12%, var(--panel)); color: #1e40af; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .modpill.m-driver { color: #93c5fd; border-color: #93c5fd; } }
+:root[data-theme="dark"] .modpill.m-driver { color: #93c5fd; border-color: #93c5fd; }
