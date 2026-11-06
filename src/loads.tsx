@@ -1,4 +1,4 @@
-import { ListInput, Select } from './combo'
+import { Select } from './combo'
 import { ScanButton } from './scan'
 import { sameTag, useScanHandler } from './scanroute'
 import { useEffect, useMemo, useState } from 'react'
@@ -9,6 +9,8 @@ import { lbs } from './forms'
 import type { Customer, FOrder, Load, LoadBlocker, LoadDriver, LoadItem, LoadStop, Pallet, StopInput, StopManifest, StopShipping, Vehicle } from './types'
 import { PickupForm, PickupPanel, ShipLine, money, rpc } from './ship'
 import { STATE_LABEL, orderGot, orderLbs } from './fulfill'
+import { StopAlerts, StopOutcomeSheet, outcomeText } from './driver'
+import type { DLoad, DStop } from './driver'
 
 // Everything the transit screens need from the app, passed in to avoid circular imports.
 export interface LoadCtx {
@@ -31,6 +33,7 @@ export interface LoadCtx {
   openOrder?: (id: number) => void             // open the order in Distribution > Fulfillment
   refreshOrders?: () => Promise<void>
   canShip?: boolean                            // Sales: can change a stop's shipping
+  canRecord?: boolean                          // 215: Distribution User/Admin: record or fix stop outcomes, carrier driver links
   newMixedOnStop?: (stopId: number, onTruck: boolean) => void   // build a mixed pallet right on a stop
   api: {
     createLoad(v: number, d: string, s: StopInput[], driver: string, notes: string): Promise<Load>
@@ -117,6 +120,7 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
   return (
     <div className="list">
       <div className="row between"><h2>Transit</h2><div className="row"><button className="ghost" onClick={() => setPickup(true)}>+ Pickup</button><button className="primary" onClick={onNew}>+ New load</button></div></div>
+      <StopAlerts sb={ctx.api.client()} only={['distribution', 'sales']} />
       {pickup && <PickupForm customers={ctx.customers} onClose={() => setPickup(false)} onCreate={async (cust, date, notes) => {
         let id = 0
         if (await ctx.run(async () => { id = (await rpc<Load>(ctx.api.client(), 'create_pickup', { p_customer: cust, p_date: date, p_notes: notes || null })).id }, 'Pickup made')) { setPickup(false); onOpen(id) }
@@ -211,13 +215,18 @@ export function LoadForm({ ctx, load, onClose, onSaved }: { ctx: LoadCtx; load?:
           <StopSearch ctx={ctx} customers={customers} taken={new Set(stops.map(s => s.customer_id))} onPick={addStop} />
           {customers.filter(c => c.kind === 'external').length === 0 && <div className="muted small-note">No customers yet. Add them in Settings, Customers.</div>}
         </div>
-        <div className="field"><label>Driver (optional)</label><ListInput list="load-drivers" value={driver} onChange={e => setDriver(e.target.value)} placeholder="Pick or type a name" />
-          <datalist id="load-drivers">{(() => {
+        <div className="field"><label>Driver</label>{(() => {
             const v = ctx.vehicles.find(x => x.id === vehicle)
             const ds = (ctx.drivers ?? []).filter(x => x.active && (v?.carrier_id != null ? x.carrier_id === v.carrier_id : x.carrier_id == null))
-            return [...ds.filter(x => vehicle != null && x.asset_ids.includes(vehicle)), ...ds.filter(x => vehicle == null || !x.asset_ids.includes(vehicle))].map(x => <option key={x.id} value={x.name} />)
-          })()}</datalist>
-          <span className="muted small">Drivers are kept in Distribution › Settings › Vehicles.</span></div>
+            const sorted = [...ds.filter(x => vehicle != null && x.asset_ids.includes(vehicle)), ...ds.filter(x => vehicle == null || !x.asset_ids.includes(vehicle))]
+            const legacy = driver.trim() && !sorted.some(x => x.name.toLowerCase() === driver.trim().toLowerCase())
+            return <Select value={sorted.find(x => x.name.toLowerCase() === driver.trim().toLowerCase())?.name ?? driver} onChange={e => setDriver(e.target.value)}>
+              <option value="">No driver yet</option>
+              {legacy && <option value={driver}>{driver} (not in Vehicles › Drivers)</option>}
+              {sorted.map(x => <option key={x.id} value={x.name}>{x.name}</option>)}
+            </Select>
+          })()}
+          <span className="muted small">Pick from Vehicles › Drivers so the load shows on that driver's phone (carrier trucks: the carrier's drivers, who get a link).</span></div>
         <div className="field"><label>Notes (optional)</label><input value={notes} onChange={e => setNotes(e.target.value)} /></div>
         <div className="row end">
           <button className="ghost" onClick={onClose}>Cancel</button>
@@ -248,6 +257,23 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const [manifestFor, setManifestFor] = useState<{ stop: number; value: string } | null>(null)
   const [departAsk, setDepartAsk] = useState(false)
   const [carrier, setCarrier] = useState<string | null>(null)
+  // 215: the driver portal's view of this load (packages, outcomes), the outcome sheet, the carrier driver's link
+  const [dl, setDl] = useState<DLoad | null>(null)
+  const [dlOff, setDlOff] = useState(false)   // 215 not run yet: the old Mark delivered button
+  const [outFor, setOutFor] = useState<DStop | null>(null)
+  const [dlink, setDlink] = useState<{ token: string; driver: string | null; phone: string | null; email: string | null } | null>(null)
+  const dsig = JSON.stringify([l?.status, l?.driver_id, ctx.stops.filter(s => s.load_id === loadId).map(s => [s.id, s.status, s.outcome, s.fixed_at])])
+  const loadDl = () => {
+    const sb = ctx.api.client(); if (!sb || !l || isPickup(l) || !['in_transit', 'delivered'].includes(l.status)) { setDl(null); return }
+    rpc<DLoad>(sb, 'driver_load', { p_load: l.id }, '215_driver_portal').then(d => { setDl(d); setDlOff(false) }).catch(() => { setDl(null); setDlOff(true) })
+  }
+  useEffect(loadDl, [dsig])
+  const carrierTruck = !!l && !isPickup(l) && ctx.vehicles.find(x => x.id === l.vehicle_id)?.carrier_id != null
+  useEffect(() => {
+    const sb = ctx.api.client(); setDlink(null)
+    if (!sb || !l || !carrierTruck || !l.driver_id || ['delivered', 'cancelled'].includes(l.status) || !ctx.canRecord) return
+    rpc<{ token: string; driver: string | null; phone: string | null; email: string | null }>(sb, 'driver_link_for_load', { p_load: l.id }, '215_driver_portal').then(setDlink).catch(() => setDlink(null))
+  }, [l?.id, l?.driver_id, l?.status, carrierTruck])
   useEffect(() => {
     const sb = ctx.api.client(); if (!sb) return
     sb.from('licenses').select('license_no, kind, site, hub, sort, active').then(({ data }) => setLics((data ?? []) as Lic[]))
@@ -421,6 +447,20 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
               <button className="ghost small" onClick={() => setCarrier(null)}>Cancel</button></span>)}
       </div>}
 
+      {carrierTruck && !l.driver_id && !['delivered', 'cancelled'].includes(l.status) && <div className="warnbox">Pick the carrier's driver (Edit) so they get a link to record each stop.</div>}
+      {dlink && (() => {
+        const url = `${location.origin}/?drive=${dlink.token}`
+        const msg = `Lifted Farms load ${l.code}: record each stop here (open it again any time): ${url}`
+        return <div className="dcard">
+          <div><b>Driver link for {dlink.driver ?? 'the driver'}</b> <span className="muted small">(no login; works until the load is done)</span></div>
+          <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
+            <button className="ghost small" onClick={() => navigator.clipboard.writeText(url).then(() => ctx.run(async () => {}, 'Link copied'))}>Copy link</button>
+            {dlink.phone && <a className="ghost small btnlink" href={`sms:${dlink.phone.replace(/[^\d+]/g, '')}${/iPhone|iPad/.test(navigator.userAgent) ? '&' : '?'}body=${encodeURIComponent(msg)}`}>Text to {dlink.phone}</a>}
+            {dlink.email && <a className="ghost small btnlink" href={`mailto:${dlink.email}?subject=${encodeURIComponent(`Lifted Farms load ${l.code}`)}&body=${encodeURIComponent(msg)}`}>Email {dlink.email}</a>}
+            {typeof navigator.share === 'function' && <button className="ghost small" onClick={() => navigator.share({ title: `Load ${l.code}`, text: msg }).catch(() => {})}>Share…</button>}
+            <button className="ghost small" onClick={() => ctx.confirm('Make a new link? The old one stops working.', 'New link', async () => { await ctx.run(async () => setDlink(await rpc(ctx.api.client(), 'driver_link_for_load', { p_load: l.id, p_new: true }, '215_driver_portal')), 'New link made') })}>New link</button>
+          </div></div>
+      })()}
       <div className="stops">
         {stops.map(s => {
           const its = items.filter(i => i.stop_id === s.id)
@@ -442,13 +482,32 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
             <div key={s.id} className={`stopcard ${s.status}`} style={{ ['--sc' as string]: stopColor(s.seq) }}>
               <div className="row between">
                 <div><span className="stopnum">{s.seq}</span> <b>{c?.name}</b>{s.manifest && <span className="muted"> · manifest {s.manifest}</span>}</div>
-                {s.status === 'delivered'
-                  ? <span className="pill s-delivered">{site ? 'Received' : 'Delivered'}</span>
-                  : l.status === 'in_transit' && <button className="primary small" disabled={ctx.busy} onClick={() => ctx.confirm(
+                {(() => {
+                  const ds = dl?.stops.find(x => x.id === s.id)
+                  const o = s.outcome ?? ds?.outcome
+                  const officeOk = ctx.canRecord && !isPickup(l) && ['in_transit', 'delivered'].includes(l.status)
+                  if (o || s.status !== 'pending') {
+                    const bad = o && o !== 'delivered' && o !== 'dropped_off'
+                    return <span className="row" style={{ gap: 6 }}>
+                      <span className={`pill ${bad ? 's-back' : 's-delivered'}`}>{o ? outcomeText({ outcome: o, outcome_reason: s.outcome_reason ?? ds?.outcome_reason ?? null }) : site ? 'Received' : 'Delivered'}</span>
+                      {officeOk && !site && ds && !ds.back_started && <button className="ghost small" disabled={ctx.busy} onClick={() => setOutFor(ds)}>Change</button>}
+                    </span>
+                  }
+                  if (dlOff && l.status === 'in_transit') return <button className="primary small" disabled={ctx.busy} onClick={() => ctx.confirm(
                       `Mark stop ${s.seq} (${c?.name}) ${site ? 'received' : 'delivered'}? ${its.length} pallet${its.length === 1 ? '' : 's'} ${site ? `will be received at ${c?.name} and need a freezer spot` : 'will leave inventory'}.`,
-                      site ? 'Received' : 'Delivered', async () => { await ctx.run(() => ctx.api.deliverStop(s.id), `Stop ${s.seq} ${site ? 'received' : 'delivered'}`) })}>{site ? 'Mark received' : 'Mark delivered'}</button>}
+                      site ? 'Received' : 'Delivered', async () => { await ctx.run(() => ctx.api.deliverStop(s.id), `Stop ${s.seq} ${site ? 'received' : 'delivered'}`) })}>{site ? 'Mark received' : 'Mark delivered'}</button>
+                  return l.status === 'in_transit' && officeOk && <button className="primary small" disabled={ctx.busy || !ds} title={ds ? '' : 'Loading the packages…'} onClick={() => ds && setOutFor(ds)}>Record outcome</button>
+                })()}
               </div>
               <div className="muted">{its.length} pallet{its.length === 1 ? '' : 's'} · {lbs(w)}</div>
+              {(() => { const ds = dl?.stops.find(x => x.id === s.id); if (!ds || !ds.outcome) return null
+                const back = ds.packages.filter(p => p.back)
+                return <div className="small-note stop-outcome">
+                  {ds.receiver_name ? <>Received by <b>{ds.receiver_name}</b> · </> : ''}{ds.outcome_by}{ds.outcome_via === 'office' ? ' (office)' : ds.outcome_via === 'link' ? '' : ' (driver)'}{ds.outcome_at ? ` · ${new Date(ds.outcome_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
+                  {ds.outcome_note && <div>Note: {ds.outcome_note}</div>}
+                  {back.length > 0 && <div className="warn-t">↩ {back.length} coming back{ds.back_started ? ' (receiving started)' : ''}: {back.map(p => `${p.code}${p.reason ? ` (${p.reason.replace('_', ' ')})` : ''}`).join(', ')}</div>}
+                  {ds.has_photo && <button className="ghost small" onClick={() => rpc<string | null>(ctx.api.client(), 'stop_photo', { p_stop: s.id }, '215_driver_portal').then(u => { if (u) { const w = window.open(); if (w) w.document.write(`<img src="${u}" style="max-width:100%">`) } }).catch(e => ctx.run(() => Promise.reject(e), ''))}>📷 Photo</button>}
+                </div> })()}
               {(sOrders.length > 0 || waiting.length > 0 || loose > 0 || carrying.length > 0) && <div className="stoporders">
                 {sOrders.map(o => {
                   const ids = palletIds(o), tops = new Set(ids.map(top)), on = its.filter(i => tops.has(i.pallet_id)), onTruck = ids.filter(id => on.some(i => i.loaded && i.pallet_id === top(id))).length
@@ -497,6 +556,12 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
         })}
       </div>
 
+      {outFor && <StopOutcomeSheet stop={outFor} load={l.code} office onClose={() => setOutFor(null)}
+        onSave={async p => {
+          const { error } = await ctx.api.client()!.rpc('record_stop_outcome', { p_stop: outFor.id, p })
+          if (error) throw new Error(error.message)
+          setOutFor(null); loadDl(); await ctx.run(async () => { await ctx.refreshOrders?.() }, 'Outcome saved')
+        }} />}
       {placeItem && <div className="movebar"><div><b>Moving {ctx.pallet(placeItem.pallet_id)?.code} on the truck</b><div className="muted">Tap a position.</div></div><button className="ghost" onClick={() => setPlaceItem(null)}>Cancel</button></div>}
 
       {isPickup(l) ? <div className="list pickuplist">

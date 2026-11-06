@@ -109,11 +109,13 @@ export type ListRow = Vehicle | Customer | Strain
 export interface Settings { vehicles: Vehicle[]; customers: Customer[]; strains: Strain[] }
 
 export type LoadStatus = 'planning' | 'loading' | 'departing' | 'in_transit' | 'delivered' | 'cancelled'
-export interface Load { id: number; code: string; load_date: string; vehicle_id: number; status: LoadStatus; driver: string | null; notes: string | null; created_by: string | null; created_at: string; departed_at: string | null; closed_at: string | null
+export interface Load { id: number; code: string; load_date: string; vehicle_id: number; status: LoadStatus; driver: string | null; driver_id?: number | null; notes: string | null; created_by: string | null; created_at: string; departed_at: string | null; closed_at: string | null
   /** 089: customer pickups, Depart in two steps, carrier cost */
   kind?: 'delivery' | 'pickup'; departing_at?: string | null; depart_error?: string | null; carrier_cost?: number | null
   pickup_driver?: string | null; pickup_dl?: string | null; pickup_make?: string | null; pickup_model?: string | null; pickup_plate?: string | null; pickup_license?: string | null }
-export interface LoadStop { id: number; load_id: number; seq: number; customer_id: number; manifest: string | null; status: 'pending' | 'delivered'; delivered_at: string | null; delivered_by: string | null
+export interface LoadStop { id: number; load_id: number; seq: number; customer_id: number; manifest: string | null; status: 'pending' | 'delivered' | 'not_delivered'; delivered_at: string | null; delivered_by: string | null
+  /** 215 driver portal */
+  outcome?: 'delivered' | 'partly_rejected' | 'fully_rejected' | 'not_delivered' | 'dropped_off' | null; outcome_reason?: string | null; fixed_at?: string | null
   ship_override?: number | null; ship_override_reason?: string | null; ship_charge?: number | null; ship_value?: number | null; ship_rule?: string | null; ship_desc?: string | null; ship_saved_at?: string | null }
 export interface LoadItem { id: number; load_id: number; stop_id: number; pallet_id: number; position: number; loaded: boolean; from_slot: number | null; from_site?: string | null; layer?: number }
 export interface StopInput { id?: number; customer_id: number; manifest: string }
@@ -156,7 +158,9 @@ export const MODULES: { key: ModKey; label: string; what: string; user: string; 
   { key: 'admin', label: 'Admin', what: 'Company dashboard, users and access, app settings', user: 'Everything in Admin', admin: 'Everything in Admin' },
 ]
 export interface Prefs { theme?: 'light' | 'dark' | 'system'; lang?: 'en' | 'es'; start_module?: ModKey; start_site?: Site; notify?: { requests?: boolean; orders?: boolean; metrc_pull?: boolean } }
-export interface Access { owner: boolean; modules: Partial<Record<ModKey, Level>>; prefs: Prefs; perms?: Record<string, Record<string, boolean>>; login?: 'microsoft' | 'email' | null }
+export interface Access { owner: boolean; modules: Partial<Record<ModKey, Level>>; prefs: Prefs; perms?: Record<string, Record<string, boolean>>; login?: 'microsoft' | 'email' | null
+  /** 215: set up as one of our drivers (Vehicles > Drivers email = this login) */
+  driver?: { id: number; name: string } | null }
 export interface UserAccess { email: string; module: ModKey; level: Level }
 /** before 023 is run: work it out from the old role */
 export function accessFromRole(role: Role, extra: string[] = []): Access {

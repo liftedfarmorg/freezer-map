@@ -1,3 +1,4 @@
+import { StopAlerts } from './driver'
 import { useEffect, useState } from 'react'
 import type { Backend } from './api'
 import type { FOrder, Balance, Customer, MenuNumbers, Order, ReserveRequest, ReserveYears, SampleHold } from './types'
@@ -65,6 +66,7 @@ export function SalesDashboard({ backend, customers, isAdmin, go }: { backend: B
   return (
     <div className="dash">
       <DashHead title="Dashboard" sub={`Sales · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`} />
+      <StopAlerts sb={backend.client()} only={['sales', 'accounting']} />
       <Tiles>
         <Tile label="Orders to confirm" value={toConfirm.length} sub={toConfirm.length ? `oldest ${fmt(toConfirm.map(o => o.order_date ?? '').sort()[0] || null)}` : 'all caught up'} tone={toConfirm.length ? 'warn' : 'ok'} foot={toConfirm.length ? 'Confirm' : undefined} onClick={() => go('orders')} />
         <Tile label="Reserve requests" value={pend.length} sub={pend.length ? `${plural(new Set(pend.map(r => r.customer_id)).size, 'customer')} waiting${isAdmin ? '' : ' (Sales Admin approves)'}` : 'none waiting'} tone={pend.length ? (isAdmin ? 'warn' : 'info') : 'ok'} foot={pend.length ? 'Review' : undefined} onClick={() => go('requests')} />

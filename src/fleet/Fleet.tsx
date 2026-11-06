@@ -338,6 +338,18 @@ function DriverSheet({ api, d, x0, flash, onClose, onSaved }: { api: FleetApi; d
       await onSaved(`${x.name} is on the app. They sign in with their email${/@lifted-organics\.com$/i.test(x.email) ? ' (Microsoft)' : ' and a code'}.`, true)
     } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
   }
+  // 215: a login that only sees the Driver screen (no modules)
+  async function driverOnly() {
+    if (!x.email?.trim()) { flash('Add their email first', true); return }
+    setBusy(true)
+    try {
+      if (x.id) await api.saveDriver({ id: x.id, name: x.name, email: x.email })
+      const { data, error } = await api.sb.rpc('fleet_driver_app', { p_driver: x.id })
+      if (error) throw new Error(/Could not find the function|schema cache/i.test(error.message) ? 'Run 215_driver_portal.sql in Supabase first' : error.message)
+      const r = data as { email: string; already: boolean; login: string }
+      await onSaved(r.already ? `${x.name} already has an app login; the Driver button shows for them.` : `${x.name} can sign in at the app with ${r.email}${r.login === 'email' ? ' and a code sent to that email' : ' (Microsoft)'}. They only see the Driver screen.`, true)
+    } catch (e) { flash(errText(e), true) } finally { setBusy(false) }
+  }
   const txt = (k: keyof Driver, l: string, hint?: string, ph?: string) => <F label={l} hint={hint}><TextIn value={x[k] as string | null} placeholder={ph} onChange={v => set({ [k]: v } as Partial<Driver>)} /></F>
   return <Sheet title={x.id ? x.name : isCarrier ? `New ${carrier?.name ?? 'carrier'} driver` : 'New driver'} sub={isCarrier ? carrier?.name : x.department ? DEPT_L[x.department] : undefined} onClose={onClose}>
     <fieldset disabled={!can} className="fset">
@@ -357,8 +369,11 @@ function DriverSheet({ api, d, x0, flash, onClose, onSaved }: { api: FleetApi; d
           {!ours.length && <span className="muted small">No vehicles yet.</span>}</div></F>}
       <F label="Notes"><textarea value={x.notes ?? ''} onChange={e => set({ notes: e.target.value || null })} /></F>
     </fieldset>
-    {!isCarrier && x.id && (live?.has_login ? <p className="okbox">On the app as {live.email}.</p>
-      : can && <div className="infobox">Not on the app yet. {x.email ? <><button className="ghost small" disabled={busy} onClick={invite}>Add {x.name?.split(' ')[0]} to the app</button> as a {DEPT_L[(x.department && x.department !== 'company' ? x.department : 'distribution') as Dept]} User, so they can file vehicle reports.</> : 'Add their email to put them on the app.'}</div>)}
+    {!isCarrier && x.id && (live?.has_login ? <p className="okbox">On the app as {live.email}. Loads with {x.name?.split(' ')[0]} as the driver show on their Driver screen (🚛 Driver).</p>
+      : can && <div className="infobox">Not on the app yet. {x.email ? <>
+          <button className="ghost small" disabled={busy} onClick={driverOnly}>Driver-only login</button> sees only their loads and stops (Driver screen), nothing else.<br />
+          <button className="ghost small" disabled={busy} onClick={invite}>Add {x.name?.split(' ')[0]} to the app</button> as a {DEPT_L[(x.department && x.department !== 'company' ? x.department : 'distribution') as Dept]} User, so they can also file vehicle reports and use Distribution.</> : 'Add their email to put them on the app.'}</div>)}
+    {isCarrier && <p className="muted small">Carrier drivers don't get a login. When they're picked as the driver on a load, the load gets a link for them (Transit › the load › Driver link).</p>}
     {can ? <SaveBar busy={busy} onSave={save} onCancel={onClose} disabled={!x.name?.trim()} saveLabel={x.id ? 'Save' : 'Add'} /> : <p className="muted small">Only Compliance or this department's Admins can change drivers.</p>}
   </Sheet>
 }

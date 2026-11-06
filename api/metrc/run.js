@@ -7,6 +7,7 @@
 //   { action: 'depart', load_id }           Depart: checks, the METRC manifests first, then the load leaves and invoices are made
 //   { action: 'nursery_ship', ref }         the nursery's Ship: the METRC transfer now (taken back if METRC refuses)
 //   { action: 'manifest_pdf', license, manifest } the METRC manifest PDF (base64)
+//   { action: 'link_manifest_pdf', token, stop }  215: the same for a carrier driver's one-load link (no login)
 //   { action: 'stage', order_id, vehicle_id, driver, ship_date, load_id? }  Stage at OHR (197): GVR pallets to OHR in the app, the METRC
 //        manifest from GVR to the customer right away (taken back if METRC refuses it)
 //   { action: 'unstage', stage_id } / { action: 'stage_relink', stage_id }  Move back to GVR (manifest voided or updated) / Use that load
@@ -36,9 +37,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const miss = missing()
   if (miss.length) return send(res, 500, { error: `METRC sending isn't set up in Vercel yet. Missing: ${miss.join(', ')}` })
+  const body = req.body || {}
+  if (body.action === 'link_manifest_pdf') {
+    // 215: an outside carrier's driver (one-load link, no login) opens a stop's manifest. The token decides which manifests.
+    try {
+      const m = await rpc('driver_link_manifest', { p_token: String(body.token || ''), p_stop: Number(body.stop) || 0 })
+      if (!m?.license || !m?.manifest) return send(res, 400, { error: 'No manifest for that stop yet' })
+      const f = await t3file('/v2/transfers/manifest', { licenseNumber: m.license, manifestNumber: String(m.manifest).replace(/\D/g, '') })
+      return send(res, 200, { manifest: m.manifest, license: m.license, ...f })
+    } catch (e) { return send(res, 400, { error: String(e?.message ?? e) }) }
+  }
   const me = await caller(req)
   if (!me) return send(res, 403, { error: 'Sign in again' })
-  const body = req.body || {}
   useSource('app')
   const t0 = Date.now()
   try {

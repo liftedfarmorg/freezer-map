@@ -35,6 +35,7 @@ import { ReservesView, SALES_TITLES } from './reserves'
 import type { SalesMode } from './reserves'
 import { Portal, PortalLink, PortalLogin } from './portal'
 import { BonusScreen } from './bonus'
+import { DriverHome, DriverLinkPage } from './driver'
 import { DistLocations } from './locations'
 import { DistDashboard } from './distdash'
 import { CULT_TABS, CULT_TAIL } from './cult/tabs'
@@ -76,7 +77,7 @@ const AccountingView = lazy(() => import('./acct/AccountingView'))
 const ProcessingView = lazy(() => import('./proc/ProcessingView'))
 const ComplianceView = lazy(() => import('./comp/ComplianceView'))
 
-type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'inbound' | 'archived' | 'items'
+type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'driver' | 'inbound' | 'archived' | 'items'
 // modules: each person has a level (User / Admin) per module; Owners have all of them (Admin > Settings > Users)
 type Mod = 'dist' | 'sales' | 'cult' | 'nurs' | 'proc' | 'acct' | 'comp' | 'admin'
 const MOD_KEY: Record<Mod, ModKey> = { dist: 'distribution', sales: 'sales', cult: 'cultivation', nurs: 'nursery', proc: 'processing', acct: 'accounting', comp: 'compliance', admin: 'admin' }
@@ -262,6 +263,10 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
     case 'unloaded': return `${code} taken off ${(e.details as { load?: string } | null)?.load}, back to ${whereIs(ix, e.to_slot_id)}`
     case 'load_departed': return `Load ${(e.details as { load?: string } | null)?.load} departed`
     case 'load_cancelled': return `Load ${(e.details as { load?: string } | null)?.load} cancelled`
+    case 'stop_outcome': case 'stop_outcome_fixed': { const d = e.details as { load?: string; customer?: string; seq?: number; label?: string; receiver?: string; back?: number; via?: string; was?: string } | null
+      return `${d?.load} stop ${d?.seq} ${d?.customer}: ${e.type === 'stop_outcome_fixed' ? `changed to ${d?.label} (was ${d?.was ?? 'nothing'})` : d?.label}${d?.receiver ? `, received by ${d.receiver}` : ''}${d?.back ? `, ${d.back} coming back` : ''}${d?.via === 'link' ? ' (carrier link)' : d?.via === 'office' ? ' (office)' : ''}` }
+    case 'returned_back': { const d = e.details as { load?: string; customer?: string; site?: string; reason?: string } | null
+      return `${code} came back from ${d?.customer} on ${d?.load}${d?.reason ? ` (${d.reason.replace('_', ' ')})` : ''}, received at ${d?.site}` }
     case 'stop_delivered': { const d = e.details as { load?: string; customer?: string; seq?: number } | null
       return `${d?.load} stop ${d?.seq} delivered to ${d?.customer}` }
     case 'shipped_out': return `${code} taken out of inventory: ${e.note ?? 'shipped'} (${lbs(e.lbs)})`
@@ -422,7 +427,7 @@ export default function App() {
   const setProcTab = (t: PTab) => { setProcTabS(t); store('proc.tab', t); setView('proc'); top() }
   const setCompTab = (t: CTab) => { setCompTabS(t); store('comp.tab', t); setView('comp'); top() }
   const lastView = useRef<View>('dash')
-  const go = (v: View) => { if (view !== 'mine' && view !== 'fleet') lastView.current = view; setView(v); top() }
+  const go = (v: View) => { if (view !== 'mine' && view !== 'fleet' && view !== 'driver') lastView.current = view; setView(v); top() }
   const [freezerId, setFreezerId] = useState<number | null>(null)
   const [palletId, setPalletId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan>(EMPTY)
@@ -510,11 +515,11 @@ export default function App() {
     try { setForders(await backend.fulfillmentOrders()); setFErr(null) } catch (e) { setForders([]); setFErr(String((e as Error).message ?? e)) }
   }, [canFulfill])
   useEffect(() => {
-    if (!staff) return
+    if (!staff || (noMods && me?.access?.driver)) return
     reload().then(() => setLoadError(null)).catch(e => setLoadError(String(e?.message ?? e)))
     refreshF()
     return backend.subscribe(() => { reload(); refreshF() })
-  }, [staff, reload, refreshF])
+  }, [staff, reload, refreshF, noMods])
 
   // search outside the live set (archived / old pallets) once the query is specific
   useEffect(() => {
@@ -637,12 +642,18 @@ export default function App() {
   if (docToken) return <SharedDocPage backend={backend} token={docToken} />
   const bonusToken = linkParams.get('bonus')
   if (bonusToken) return <BonusScreen backend={backend} token={bonusToken} />
+  const driveToken = linkParams.get('drive')
+  if (driveToken && backend.client()) return <DriverLinkPage sb={backend.client()!} token={driveToken} />
   if (link) return <PortalLink backend={backend} kind={link.kind} code={link.code} onDone={refreshUser} />
   if (user === undefined) return <Splash />
   if (!user) return IS_PORTAL ? <PortalLogin backend={backend} onDone={refreshUser} /> : <Login />
   if (user && !me && !loadError) return <Splash />
   const viewBar = me?.viewing_as ? <ViewAsBar me={me} stop={() => backend.stopViewAs().then(() => location.reload())} /> : null
   if (me?.role === 'customer') return <>{viewBar}<Portal backend={backend} me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
+  // driver-only login (215): no modules, set up as a driver: just the Driver screen
+  if (me && staff && noMods && me.access?.driver && backend.client()) return <>{viewBar}<DriverHome sb={backend.client()!} name={me.display_name ?? me.email}
+    onLang={l => { backend.setMyPrefs({ ...(me.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }}
+    signOut={() => backend.signOut().then(() => setUser(null))} /></>
   if (me && !staff) return <>{viewBar}<NoAccess me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
   if (loadError && !snap) return (
     <div className="center"><h2>Couldn't load the app</h2>
@@ -701,6 +712,7 @@ export default function App() {
     openOrder: id => { setFOpen(id); go('fulfill') },
     refreshOrders: refreshF,
     canShip: isSales,
+    canRecord: lv.distribution === 'user' || lv.distribution === 'admin' || !!me?.access?.owner,
     newMixedOnStop: (stop, onTruck) => setForm({ kind: 'stopmixed', stop, onTruck }),
     putBack: (item, p) => { setView('map'); startPlacing({ title: `Putting ${p.code} back in a freezer`, sub: 'Open a freezer and tap the slot.', run: slot => act(() => backend.unloadPallet(item.id, slot.id), `${p.code} back in ${slot.code}`) }) },
     api: backend,
@@ -862,6 +874,7 @@ export default function App() {
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
   const extras: NavItem[] = [
+    ...(me?.access?.driver ? [{ k: 'driver', l: t('Driver'), on: view === 'driver', go: () => go('driver') }] : []),
     ...(staff ? [{ k: 'fleet', l: t('Vehicles'), on: view === 'fleet', go: () => go('fleet') }] : []),
   ]
   const bottomRest = [...all.slice(4), ...extras]
@@ -878,7 +891,7 @@ export default function App() {
     if (m === 'dist') go(t as View); else if (m === 'sales') setSalesTab(t as SalesTab); else if (m === 'cult') setCultTab(t as CultTab); else if (m === 'nurs') setNurTab(t as NTab); else if (m === 'acct') setAcctTab(t as ATab); else if (m === 'proc') setProcTab(t as PTab); else if (m === 'comp') setCompTab(t as CTab); else setAdminTab(t === 'users' ? 'settings' : t as AdminTab)
   }
   const appName = ML(cur)
-  document.title = noMods ? 'Lifted Farms' : `${view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : ML(cur)} · Lifted Farms`
+  document.title = noMods ? 'Lifted Farms' : `${view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : view === 'driver' ? t('Driver') : ML(cur)} · Lifted Farms`
 
   return (
     <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${myMods.length > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
@@ -931,6 +944,7 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
+        {me?.access?.driver && <button className={`ghost small ${view === 'driver' ? 'on-btn' : ''}`} title={t('Driver: my loads and stops')} onClick={() => (view === 'driver' ? go(lastView.current) : go('driver'))}>🚛<span className="hide-phone"> {t('Driver')}</span></button>}
         {staff && <button className={`ghost small desk-only ${view === 'fleet' ? 'on-btn' : ''}`} title={t('Vehicles: inspections, maintenance, incidents')} onClick={() => (view === 'fleet' ? go(lastView.current) : go('fleet'))}>🚚<span className="hide-phone"> {t('Vehicles')}</span></button>}
         <button className={`ghost small ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
         <button className="ghost small" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
@@ -944,11 +958,12 @@ export default function App() {
       )}
 
       <main>
-        {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
+        {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
         {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} />}
+        {view === 'driver' && backend.client() && <DriverHome embedded sb={backend.client()!} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}
         {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} canPrice={salesAdmin || !!me?.access?.owner} />}
         {view === 'mine' && <MySettings backend={backend} me={me!} flash={flash} onSaved={(p, name) => setMe(m => m && ({ ...m, display_name: name ?? m.display_name, access: { ...m.access, prefs: p } }))} />}
-        {noMods && view !== 'mine' && view !== 'fleet' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}
+        {noMods && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}
         {view === 'dash' && cur === 'dist' && (
           <DistDashboard staged={{ n: fromHarvest.length, lbs: fromHarvest.reduce((a, p) => a + Number(p.current_weight ?? 0), 0), sites: [...new Set(fromHarvest.map(p => ix.freezer.get(ix.slot.get(p.slot_id!)!.freezer_id)!.site))],
             go: () => { const st = fromHarvest[0] ? ix.freezer.get(ix.slot.get(fromHarvest[0].slot_id!)!.freezer_id) : undefined; if (st) { setSite(st.site); openFreezer(st.id) } } }}

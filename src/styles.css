@@ -1194,3 +1194,32 @@ html:has(.app.shell), html:has(.app.shell) body { height: 100%; overflow: hidden
 .neworder .noline > select:first-child { flex: 0 0 150px; max-width: 150px; }
 .neworder .noline > .combo.sel { flex: 4 1 0; min-width: 0; }
 .neworder .noline > input { flex: 1 1 90px; width: auto; min-width: 80px; }
+
+/* ---------- Driver portal (215) ---------- */
+.pill.s-departing { background: #fef3c7; color: #92400e; }
+.pill.s-back { background: #fee2e2; color: #991b1b; }
+.drv-full { min-height: 100dvh; background: var(--bg); overflow: auto; height: 100dvh; }
+.drv-top { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 5; }
+.drv .list { max-width: 720px; margin: 0 auto; padding: 12px 16px; }
+.drv-load { padding: 0; overflow: hidden; }
+.drv-loadhead { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; background: none; border: 0; padding: 12px 14px; gap: 8px; color: inherit; }
+.drv-load > :not(.drv-loadhead) { margin-left: 14px; margin-right: 14px; }
+.drv-stop { border-top: 1px solid var(--line); padding: 10px 0; }
+.drv-stop.done { opacity: .8; }
+.drv-stop .primary { min-height: 44px; font-size: 16px; }
+.drv-pkg { padding: 3px 0; }
+.drv-sheet { max-height: 92dvh; overflow: auto; }
+.drv-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }
+.drv-choice { min-height: 52px; font-size: 16px; font-weight: 600; border-radius: 12px; border: 2px solid var(--line); background: var(--panel); color: inherit; }
+.drv-choice.small { min-height: 40px; font-size: 14px; }
+.drv-choice.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 14%, var(--panel)); }
+.drv-choice.c-delivered.on, .drv-choice.c-dropped_off.on { border-color: #16a34a; background: color-mix(in srgb, #16a34a 14%, var(--panel)); }
+.drv-choice.c-partly_rejected.on, .drv-choice.c-fully_rejected.on, .drv-choice.c-not_delivered.on { border-color: #dc2626; background: color-mix(in srgb, #dc2626 12%, var(--panel)); }
+.drv-rej { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 6px 0; }
+.drv-rej.on { border-color: #dc2626; }
+.drv-rej input[type=checkbox] { width: 22px; height: 22px; margin-right: 8px; }
+.drv-sheet .field input, .drv-sheet .field textarea, .drv-sheet .field select { font-size: 16px; }
+.stop-outcome { margin-top: 4px; }
+.drv .neg, .neg.small, p.neg, .warnbox.neg { color: var(--bad); }
+a.btnlink { display: inline-flex; align-items: center; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
+.stopchip.not_delivered { text-decoration: line-through; opacity: .7; }
