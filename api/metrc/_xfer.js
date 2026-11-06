@@ -350,7 +350,7 @@ export async function sendManifestVoid(job, ctx) {
   const mine = await one(`metrc_app_transfers?key=eq.${enc(key)}&state=neq.voided&select=transfer_id,manifest`).catch(() => null)
   let id = mine?.transfer_id ?? null
   if (!id) {
-    const pulled = await one(`metrc_transfers?manifest=eq.${enc(man)}&select=transfer_id,voided,received_at&order=seen_at.desc.nullslast`).catch(() => null)
+    const pulled = await one(`metrc_transfers?manifest=eq.${enc(man)}&select=transfer_id,voided,received_at&license=eq.${enc(lic)}&order=last_modified.desc.nullslast`).catch(() => null)
     if (pulled?.voided) throw new Skip(`Manifest ${man} is already voided in METRC`)
     if (pulled?.received_at) throw new Error(`The customer already received manifest ${man} in METRC, so it can't be voided. Rama: sort it out in METRC by hand.`)
     id = pulled?.transfer_id ?? null
