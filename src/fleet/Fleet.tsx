@@ -63,7 +63,7 @@ export function CrewFleet({ sb, flash, dept, title, driver }: { sb: SupabaseClie
   if (err) return <div className="list"><h2>{h}</h2><div className="warnbox">{err}</div></div>
   if (!d) return <div className="list"><h2>{h}</h2><p className="muted">{t('Loading…')}</p></div>
   const mineIds = new Set(d.drivers.filter(x => x.email && x.email === d.me).flatMap(x => x.asset_ids))
-  const inScope = (a: Asset) => a.carrier_id == null && (!dept || a.department === dept || a.department === 'company' || mineIds.has(a.id))
+  const inScope = (a: Asset) => a.carrier_id == null && a.body_type !== 'Customer pickup' && (!dept || a.department === dept || a.department === 'company' || mineIds.has(a.id))
   const ids = new Set(d.assets.filter(inScope).map(a => a.id))
   const mine = d.logs.filter(l => l.created_by === d.me).slice(0, 20)
   const open = d.logs.filter(l => l.status === 'open' && (l.asset_id == null || ids.has(l.asset_id)))
