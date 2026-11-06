@@ -4,6 +4,8 @@ import type { Backend } from './api'
 import { MODULES } from './types'
 import type { AppUser, Customer, Level, Me, ModKey } from './types'
 import { LANGS } from './i18n'
+import { NotifyBox } from './notifyprefs'
+import type { NotifyPrefs } from './notifyprefs'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { can, isOwnerMe } from './fold'
 
@@ -62,7 +64,7 @@ export function UsersTab({ backend, me, customers, flash }: {
         <input className="search" type="search" placeholder="Search people" value={q} onChange={e => setQ(e.target.value)} />
         <button className="primary" onClick={() => setEdit({ role: 'crew', access: { distribution: 'user' } })}>+ Add person</button>
       </div>
-      <p className="muted">Anyone with a Lifted Microsoft account can sign in and starts with Distribution. Staff without a Lifted email sign in with a code sent to their email (they can't be Admins). Give each person a level per module: User works in it, Admin also changes its settings and approves. Owners have everything. Customer portal logins are in the Customer logins tab.</p>
+      <p className="muted">Anyone with a Lifted Microsoft account can sign in and starts with Distribution. You can add people before they've ever signed in (+ Add person): their modules, Driver and language are ready the first time they sign in. Staff without a Lifted email sign in with a code sent to their email (they can't be Admins). Give each person a level per module: User works in it, Admin also changes its settings and approves. Owners have everything. Customer portal logins are in the Customer logins tab.</p>
       {groups.map(([l, list]) => !list.length ? null : (
         <div key={l}>
           <h3 className="grouph">{l} <span className="muted">{list.length}</span></h3>
@@ -200,6 +202,12 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
             </div>
           )}
         </>)}
+        {kind === 'staff' && !isNew && (iOwn || hasAdminModule || MODULES.some(m => manages(m.key))) && <details className="field"><summary><b>Notifications</b> <span className="muted">(they can change these in My settings; a driver-only login can't)</span></summary>
+          <NotifyBox nf={(u.prefs?.notify ?? {}) as NotifyPrefs} busy={locked} phone={u.phone ?? ''} onSave={async x => {
+            const { data, error } = await backend.client()!.rpc('set_user_notify', { p_email: u.email, p_notify: x })
+            if (error) flash(/Could not find the function|schema cache/i.test(error.message) ? 'Run 217 in Supabase first' : error.message, true)
+            else { set({ prefs: { ...u.prefs, notify: data as NonNullable<AppUser['prefs']>['notify'] } }); flash('Notifications saved') }
+          }} /></details>}
         {kind === 'staff' && <label className="check"><input type="checkbox" checked={!!u.driver} disabled={locked} onChange={e => set({ driver: e.target.checked, driver0: u.driver0 ?? false })} />
           <span><b>Driver</b> <span className="muted">Makes (or links) their card in Vehicles › Drivers. Loads they drive show on their Driver screen. Turning it off makes the card inactive.</span></span></label>}
         {!isNew && !isMe && !user.owner && (iOwn || (!protectedU && (user.role === 'customer' ? myLv.sales === 'admin' : MODULES.some(m => manages(m.key) && (user.access ?? {})[m.key])))) && (

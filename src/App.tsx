@@ -652,7 +652,7 @@ export default function App() {
   const viewBar = me?.viewing_as ? <ViewAsBar me={me} stop={() => backend.stopViewAs().then(() => location.reload())} /> : null
   if (me?.role === 'customer') return <>{viewBar}<Portal backend={backend} me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
   // driver-only login (215): no modules, set up as a driver: just the Driver screen
-  if (me && staff && noMods && me.access?.driver && backend.client()) return <>{viewBar}<DriverHome sb={backend.client()!} name={me.display_name ?? me.email}
+  if (me && staff && noMods && me.access?.driver && backend.client()) return <>{viewBar}<DriverHome sb={backend.client()!} name={me.display_name ?? me.email} nf={(me.access?.prefs?.notify ?? {}) as Record<string, boolean>}
     onLang={l => { backend.setMyPrefs({ ...(me.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }}
     signOut={() => backend.signOut().then(() => setUser(null))} /></>
   if (me && !staff) return <>{viewBar}<NoAccess me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
@@ -961,7 +961,7 @@ export default function App() {
       <main>
         {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
         {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} />}
-        {view === 'driver' && backend.client() && <DriverHome embedded sb={backend.client()!} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}
+        {view === 'driver' && backend.client() && <DriverHome embedded sb={backend.client()!} nf={(me?.access?.prefs?.notify ?? {}) as Record<string, boolean>} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}
         {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} canPrice={salesAdmin || !!me?.access?.owner} />}
         {view === 'mine' && <MySettings backend={backend} me={me!} flash={flash} onSaved={(p, name) => setMe(m => m && ({ ...m, display_name: name ?? m.display_name, access: { ...m.access, prefs: p } }))} />}
         {noMods && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}

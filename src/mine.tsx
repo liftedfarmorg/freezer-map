@@ -5,6 +5,7 @@ import type { Me, ModKey, Prefs, Site } from './types'
 import { applyTheme } from './theme'
 import { LANGS, lang, t } from './i18n'
 import { pushOff, pushOn, pushState } from './push'
+import { NotifyBox } from './notifyprefs'
 import type { PushState } from './push'
 
 /** Top bar ⚙: your own settings. Nothing here changes anyone else's view. */
@@ -98,7 +99,6 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
   useEffect(() => { pushState().then(setSt).catch(() => setSt('unsupported')) }, [])
   const sb = backend.client()
   const nf = (p.notify ?? {}) as Record<string, boolean | undefined>
-  const set = (k: string, v: boolean) => savePref({ notify: { ...p.notify, [k]: v } })
   async function toggle() {
     if (!sb) return
     setWork(true); setMsg(null)
@@ -114,11 +114,6 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
         : <div className="row"><button className={st === 'on' ? 'ghost small' : 'primary small'} disabled={work || !st} onClick={toggle}>{st === 'on' ? t('Turn off on this device') : t('Turn on notifications')}</button>
             {st === 'on' && <span className="muted small">{t('On for this device')}</span>}</div>}
       {msg && <p className="neg small">{msg}</p>}</div>
-    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_push !== false} onChange={e => set('alerts_push', e.target.checked)} />
-      <span><b>{t('Push')}</b> <span className="muted">{t('on every device you turned it on for')}</span></span></label>
-    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_email === true} onChange={e => set('alerts_email', e.target.checked)} />
-      <span><b>{t('Email')}</b> <span className="muted">{t('starts once Lifted\'s email sending is connected')}</span></span></label>
-    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_text === true} onChange={e => set('alerts_text', e.target.checked)} />
-      <span><b>{t('Text')}</b> <span className="muted">{phone ? t('to {p}, once texting is connected', { p: phone }) : t('add your phone above first')}</span></span></label>
+    <NotifyBox nf={nf} busy={busy} phone={phone} onSave={x => savePref({ notify: { ...p.notify, ...x } })} />
   </section>
 }

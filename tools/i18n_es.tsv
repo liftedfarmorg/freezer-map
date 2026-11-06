@@ -1142,3 +1142,19 @@ starts once Lifted's email sending is connected	empieza cuando se conecte el env
 to {p}, once texting is connected	a {p}, cuando se conecten los mensajes de texto
 add your phone above first	primero agrega tu teléfono arriba
 Text	Mensaje de texto
+How	Cómo
+What	Qué
+Push needs it turned on for each phone or computer. Email starts once Lifted's email sending is connected; texts once texting is connected.	Las notificaciones se activan en cada teléfono o computadora. El correo empieza cuando se conecte el envío de Lifted; los textos cuando se conecten los mensajes.
+Texts need a phone number.	Los textos necesitan un número de teléfono.
+Put on a load	Asignado a una carga
+when you're picked as the driver of a load	cuando te eligen como chofer de una carga
+Load leaving	Salida de la carga
+when a load you drive departs	cuando sale una carga que manejas
+Delivery problems	Problemas de entrega
+a stop that wasn't a plain delivery (rejected, not delivered)	una parada que no fue entrega normal (rechazada, no entregada)
+METRC follow-ups	Seguimiento de METRC
+manifests to void or rejections to check after a delivery	manifiestos por anular o rechazos por revisar después de una entrega
+Other alerts	Otras alertas
+everything else for the modules you're in	todo lo demás de tus módulos
+My notifications	Mis notificaciones
+Saved	Guardado

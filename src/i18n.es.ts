@@ -1141,7 +1141,22 @@ export const ES: Record<string, string> = {
  "starts once Lifted's email sending is connected": "empieza cuando se conecte el envío de correos de Lifted",
  "to {p}, once texting is connected": "a {p}, cuando se conecten los mensajes de texto",
  "add your phone above first": "primero agrega tu teléfono arriba",
- "Text": "Mensaje de texto"
+ "Text": "Mensaje de texto",
+ "How": "Cómo",
+ "What": "Qué",
+ "Push needs it turned on for each phone or computer. Email starts once Lifted's email sending is connected; texts once texting is connected.": "Las notificaciones se activan en cada teléfono o computadora. El correo empieza cuando se conecte el envío de Lifted; los textos cuando se conecten los mensajes.",
+ "Texts need a phone number.": "Los textos necesitan un número de teléfono.",
+ "Put on a load": "Asignado a una carga",
+ "when you're picked as the driver of a load": "cuando te eligen como chofer de una carga",
+ "Load leaving": "Salida de la carga",
+ "when a load you drive departs": "cuando sale una carga que manejas",
+ "Delivery problems": "Problemas de entrega",
+ "a stop that wasn't a plain delivery (rejected, not delivered)": "una parada que no fue entrega normal (rechazada, no entregada)",
+ "METRC follow-ups": "Seguimiento de METRC",
+ "manifests to void or rejections to check after a delivery": "manifiestos por anular o rechazos por revisar después de una entrega",
+ "Other alerts": "Otras alertas",
+ "everything else for the modules you're in": "todo lo demás de tus módulos",
+ "My notifications": "Mis notificaciones"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Production's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

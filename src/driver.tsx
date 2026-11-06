@@ -7,6 +7,8 @@ import { LANGS, lang, setLang, t } from './i18n'
 import type { Lang } from './i18n'
 import { kickNotify, pushOn, pushState } from './push'
 import type { PushState } from './push'
+import { NotifyBox } from './notifyprefs'
+import type { NotifyPrefs } from './notifyprefs'
 
 // Driver portal (215, Msg #239/#242): drivers record what happened at each stop.
 //  * DriverHome: a signed-in driver's loads (driver-only logins land here; app users who drive open it from the Driver button)
@@ -121,7 +123,9 @@ function LangPick({ onLang }: { onLang?: (l: Lang) => void }) {
 // =====================================================================================================
 // a signed-in driver
 // =====================================================================================================
-export function DriverHome({ sb, name, onLang, signOut, embedded }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean }) {
+export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0 }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean; nf?: NotifyPrefs }) {
+  const [nf, setNf] = useState<NotifyPrefs>(nf0 ?? {})
+  const [nmsg, setNmsg] = useState<string | null>(null)
   const [loads, setLoads] = useState<DLoad[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [, bump] = useState(0)
@@ -150,6 +154,11 @@ export function DriverHome({ sb, name, onLang, signOut, embedded }: { sb: Supaba
       {name && <p className="muted">{t('Signed in as {u}', { u: name })}</p>}
       <QueueBox qu={qu} />
       <PushBanner sb={sb} />
+      <details className="card small"><summary>{t('My notifications')}</summary>
+        <NotifyBox nf={nf} only={['t_load_assigned', 't_load_left', 't_delivery']} notes={false} onSave={async x => {
+          const next = { ...nf, ...x }; setNf(next)
+          const { error } = await sb.rpc('set_my_notify', { p_notify: x }); setNmsg(error ? error.message : t('Saved'))
+        }} />{nmsg && <span className="muted small">{nmsg}</span>}</details>
       {err && <p className="neg">{err}</p>}
       {loads === null ? <p className="muted">{t('Loading…')}</p>
         : !loads.length ? <div className="card"><p className="muted">{t('No loads for you right now. When Distribution puts you on a load as the driver, it shows here.')}</p></div>
