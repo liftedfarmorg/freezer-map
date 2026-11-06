@@ -213,3 +213,33 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .cwrap.fit .ctable.schedt { min-width: 900px; }
 .ctable.schedt .hide-s { display: table-cell !important; }
 .ctable.schedt td:nth-child(2), .ctable.schedt td:nth-child(3) { min-width: 140px; }
+
+/* phone top bar, option B (Msg 277): temperature as a plain outline button, then your initials (account menu) */
+.phacct { display: none; position: relative; }
+@media (max-width: 767px) {
+  .app.shell .hdr-acct { display: none; }
+  .app.shell .phacct { display: inline-flex; }
+  .phacct-btn { width: 36px; height: 36px; border-radius: 18px; border: 0; background: var(--r-teal); color: #10251d; font-size: 13px; font-weight: 700; padding: 0; }
+  .phacct-menu { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; width: 250px; background: #fff; color: #231f20; border-radius: 16px;
+    box-shadow: 0 12px 32px rgb(0 0 0 / .25); padding: 6px; display: grid; gap: 2px; }
+  .phacct-who { display: grid; padding: 10px 12px 8px; border-bottom: 1px solid #eef1ed; margin-bottom: 4px; line-height: 1.3; }
+  .phacct-who small { font-size: 13px; color: #5f6b64; overflow: hidden; text-overflow: ellipsis; }
+  .phacct-menu button { height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; font-size: 15px; color: #231f20; text-align: left; }
+  .phacct-menu button:hover { background: #f1f3ef; }
+  .app.shell .top .wxbar { height: 36px; min-height: 36px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--r-line); background: none; color: #fff; }
+  .app.shell .top .wxbar .wx-ic, .app.shell .top .wxbar .wx-hl, .app.shell .top .wxbar .wx-pop, .app.shell .top .wxbar .wx-alert,
+  .app.shell .top .wxbar .wx-dot, .app.shell .top .wxbar .wx-site { display: none !important; }
+  .app.shell .top .wxbar .wx-today b { font-size: 15px; font-weight: 600; }
+  .app.shell .top .wxbar.wx-has-warn { background: #fbf3cf; border-color: #e6d27e; color: #6b5200; }
+  .app.shell .top .wxbar.wx-has-bad { background: #fde8ec; border-color: #f2a9b9; color: #9f1239; }
+  .app.shell .top .wxbar.wx-has-warn b, .app.shell .top .wxbar.wx-has-bad b { color: inherit; }
+}
+@media (max-width: 767px) {
+  .app.shell .top .phmod { order: -3; margin-right: auto; }
+  .app.shell .top .wxbar { order: -2; }
+  .app.shell .top .phacct { order: -1; }
+  .app.shell .top .seg { order: 1; flex: 1 1 100%; }
+  .app.shell .top .seg button { flex: 1; }
+  .app.shell .top .search { order: 2; flex: 1 1 100%; }
+  .app.shell .top > .grow { display: none; }
+}

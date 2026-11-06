@@ -152,7 +152,7 @@ export function WeatherBar({ sb, canEdit, flash }: { sb: SupabaseClient | null; 
 
   return (
     <>
-      <button type="button" className="wxbar" title={t('{s} weather. Click for 10 days, flags and alerts.', { s: site.name })} onClick={() => setOpen(true)}>
+      <button type="button" className={`wxbar ${alertN ? (w.alerts.some(a => /warning/i.test(a.event ?? '')) ? 'wx-has-bad' : 'wx-has-warn') : worst(flagsOn(d0.day)) ? `wx-has-${worst(flagsOn(d0.day)) === 'warning' ? 'bad' : 'warn'}` : ''}`} title={t('{s} weather. Click for 10 days, flags and alerts.', { s: site.name })} onClick={() => setOpen(true)}>
         <span className="wx-site">{label}</span>
         {alertN > 0 && <span className="wx-alert" title={w.alerts.map(a => a.event).join(', ')}>⚠{alertN > 1 ? alertN : ''}</span>}
         {/* phone: today */}

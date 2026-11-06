@@ -420,6 +420,7 @@ export default function App() {
   const [nurTab, setNurTabS] = useState<NTab>(() => ([...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === stored('nur.tab'))?.t ?? 'dashboard'))
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
+  const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)
   const [more, setMore] = useState(false)
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
@@ -988,6 +989,17 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
+        <span className="phacct">
+          <button className="phacct-btn" aria-haspopup="menu" aria-expanded={acctMenu} aria-label={t('Account menu')} onClick={() => setAcctMenu(!acctMenu)}>{((me?.display_name || who(user) || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || '?').toUpperCase()}</button>
+          {acctMenu && <>
+            <div className="modscrim" onClick={() => setAcctMenu(false)} />
+            <div className="phacct-menu" role="menu">
+              <div className="phacct-who"><b>{me?.display_name || who(user)}</b><small>{user}</small></div>
+              <button role="menuitem" onClick={() => { setAcctMenu(false); view === 'mine' ? go(lastView.current) : go('mine') }}>{t('My settings')}</button>
+              <button role="menuitem" onClick={() => { setAcctMenu(false); backend.signOut().then(() => setUser(null)) }}>{t('Sign out')}</button>
+            </div>
+          </>}
+        </span>
         <button className={`ghost small hdr-acct ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
         <button className="ghost small hdr-acct" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
       </header>
