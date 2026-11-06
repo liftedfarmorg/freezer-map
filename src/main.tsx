@@ -5,6 +5,8 @@ import './styles.css'
 import { applyTheme, savedTheme } from './theme'
 import { UpdateBanner } from './update'
 import { installTabHeader } from './tabid'
+import { installPreviewGuard } from './preview'
+installPreviewGuard()
 installTabHeader()
 
 applyTheme(savedTheme())
