@@ -1171,7 +1171,7 @@ export const ES: Record<string, string> = {
  "Modules": "Módulos"
 }
 export const EN: Record<string, string> = {
- "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Production's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
+ "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
  "PLAN_HOWTO_2": "Cut-by dates: G4 = first delivery − {root} days, G3 planted {veg} days before that and cut {g3root} days before planting, G2 {g2} days before G3, G1 {g1} days before G2.",
  "PLAN_HOWTO_3": "\"Have\" counts live mother lots for the season; +N is rooting now. Each generation only needs to cover what the one below is still short. Tap a strain to change its cuts per mom."
 }
