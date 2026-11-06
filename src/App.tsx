@@ -36,6 +36,7 @@ import type { SalesMode } from './reserves'
 import { Portal, PortalLink, PortalLogin } from './portal'
 import { BonusScreen } from './bonus'
 import { DriverHome, DriverLinkPage } from './driver'
+import type { DTab } from './driver'
 import { DistLocations } from './locations'
 import { DistDashboard } from './distdash'
 import { CULT_TABS, CULT_TAIL } from './cult/tabs'
@@ -488,6 +489,7 @@ export default function App() {
   const myMods = MODS.filter(x => x.on)
   const noMods = staff && myMods.length === 0
   const isDrv = !!me?.access?.driver
+  const [drvTab, setDrvTab] = useState<DTab>('loads')
   const inDrv = view === 'driver' && isDrv
   const modCount = myMods.length + (isDrv ? 1 : 0)
   const cur: Mod = myMods.some(x => x.m === mod) ? mod : myMods[0]?.m ?? 'dist'
@@ -875,12 +877,15 @@ export default function App() {
   const NAV: Record<Mod, { main: NavItem[]; tail: NavItem[] }> = {
     acct: { main: acctMain, tail: acctTail }, proc: { main: procMain, tail: procTail }, comp: { main: compMain, tail: compTail },
     dist: { main: distMain, tail: distTail }, sales: { main: salesMain, tail: salesTail }, cult: { main: cultMain, tail: cultTail }, nurs: { main: nurMain, tail: nurTail }, admin: { main: adminMain, tail: adminTail } }
+  // Msg #248: each department's vehicles and equipment (inspections, maintenance, incidents) live in its module
+  const MOD_DEPT: Partial<Record<Mod, 'distribution' | 'cultivation' | 'nursery' | 'processing'>> = { dist: 'distribution', cult: 'cultivation', nurs: 'nursery', proc: 'processing' }
+  const equipItem: NavItem | null = MOD_DEPT[cur] ? { k: 'fleet', l: cur === 'dist' ? t('Vehicles') : t('Equipment'), on: view === 'fleet' && !inDrv, go: () => go('fleet') } : null
+  if (equipItem) NAV[cur].tail.splice(Math.max(0, NAV[cur].tail.findIndex(x => x.k === 'activity')), 0, equipItem)
   const nav = NAV[cur]
   const all = [...nav.main, ...nav.tail]
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
   const extras: NavItem[] = [
-    ...(staff ? [{ k: 'fleet', l: t('Vehicles'), on: view === 'fleet', go: () => go('fleet') }] : []),
   ]
   const bottomRest = [...all.slice(4), ...extras]
   const restOn = bottomRest.some(x => x.on)
@@ -896,7 +901,7 @@ export default function App() {
     if (m === 'dist') go(t as View); else if (m === 'sales') setSalesTab(t as SalesTab); else if (m === 'cult') setCultTab(t as CultTab); else if (m === 'nurs') setNurTab(t as NTab); else if (m === 'acct') setAcctTab(t as ATab); else if (m === 'proc') setProcTab(t as PTab); else if (m === 'comp') setCompTab(t as CTab); else setAdminTab(t === 'users' ? 'settings' : t as AdminTab)
   }
   const appName = inDrv ? t('Driver') : ML(cur)
-  document.title = noMods ? 'Lifted Farms' : `${view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : view === 'driver' ? t('Driver') : ML(cur)} · Lifted Farms`
+  document.title = noMods ? 'Lifted Farms' : `${view === 'mine' ? t('My settings') : view === 'fleet' ? (cur === 'dist' ? t('Vehicles') : t('Equipment')) : view === 'driver' ? t('Driver') : ML(cur)} · Lifted Farms`
 
   return (
     <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${modCount > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
@@ -915,7 +920,8 @@ export default function App() {
           </div>}
           {inDrv ? <nav className="rail-screens" aria-label={t('Driver')}>
             <div className="rail-h">{t('Driver').toUpperCase()}</div>
-            <button className="on">{t('My loads')}</button>
+            <button className={drvTab === 'loads' ? 'on' : ''} onClick={() => setDrvTab('loads')}>{t('My loads')}</button>
+            <button className={drvTab === 'vehicles' ? 'on' : ''} onClick={() => setDrvTab('vehicles')}>{t('Trucks and inspections')}</button>
           </nav> :
           <nav className="rail-screens" aria-label={`${ML(cur)} screens`}>
             <div className="rail-h">{ML(cur).toUpperCase()}</div>
@@ -956,7 +962,6 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
-        {staff && <button className={`ghost small desk-only ${view === 'fleet' ? 'on-btn' : ''}`} title={t('Vehicles: inspections, maintenance, incidents')} onClick={() => (view === 'fleet' ? go(lastView.current) : go('fleet'))}>🚚<span className="hide-phone"> {t('Vehicles')}</span></button>}
         <button className={`ghost small ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
         <button className="ghost small" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
       </header>
@@ -970,8 +975,8 @@ export default function App() {
 
       <main>
         {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
-        {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} />}
-        {view === 'driver' && backend.client() && <DriverHome embedded sb={backend.client()!} nf={(me?.access?.prefs?.notify ?? {}) as Record<string, boolean>} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}
+        {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} dept={MOD_DEPT[cur]} title={MOD_DEPT[cur] ? `${ML(cur)} ${cur === 'dist' ? t('vehicles') : t('equipment')}` : undefined} />}
+        {view === 'driver' && backend.client() && <DriverHome embedded tab={drvTab} onTab={setDrvTab} sb={backend.client()!} nf={(me?.access?.prefs?.notify ?? {}) as Record<string, boolean>} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}
         {view === 'items' && <ItemsView sb={backend.client()} flash={flash} canEdit={isAnyAdmin() || !!me?.access?.owner} canPrice={salesAdmin || !!me?.access?.owner} />}
         {view === 'mine' && <MySettings backend={backend} me={me!} flash={flash} onSaved={(p, name) => setMe(m => m && ({ ...m, display_name: name ?? m.display_name, access: { ...m.access, prefs: p } }))} />}
         {noMods && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="list"><h2>No modules</h2><p className="muted">No parts of the app are switched on for your account yet. Ask someone with the Admin module to give you access.</p></div>}
@@ -1133,7 +1138,8 @@ export default function App() {
         <nav className={`bottom pbar ${canScan && !inDrv ? 'with-scan' : ''}`} aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
           <button className={`pmod ${restOn ? 'on' : ''}`} aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
             <span className="pmod-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{inDrv ? t('Driver') : t(MOD_SHORT[cur])} ▴</span></button>
-          {inDrv && <button className="ptab on"><span className="pti">{DRV_ICON}</span><span className="pl">{t('My loads')}</span></button>}
+          {inDrv && <button className={`ptab ${drvTab === 'loads' ? 'on' : ''}`} onClick={() => setDrvTab('loads')}><span className="pti">{DRV_ICON}</span><span className="pl">{t('My loads')}</span></button>}
+          {inDrv && <button className={`ptab ${drvTab === 'vehicles' ? 'on' : ''}`} onClick={() => setDrvTab('vehicles')}><span className="pti">{MOD_ICON.dist}</span><span className="pl">{t('Trucks')}</span></button>}
           {!inDrv && bottomFit.map((x, i) => <Fragment key={x.k}>
             {canScan && i === 2 && <div className="pscan-w"><button className="pscan" aria-label={t('Scan a METRC tag')} onClick={() => setScanning(true)}>{SCAN_ICON}</button></div>}
             <button className={`ptab ${x.on ? 'on' : ''}`} onClick={x.go}>

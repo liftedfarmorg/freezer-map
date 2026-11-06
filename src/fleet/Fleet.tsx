@@ -13,7 +13,8 @@ import './fleet.css'
 
 // Vehicles and equipment.
 //  - Compliance › Vehicles: the list, insurance and registrations (with expiry → Deadlines), every report, closing defects and incidents.
-//  - Top bar › Vehicles (everyone on staff): file an inspection, maintenance or incident report from a phone, with photos.
+//  - Each department module's Vehicles / Equipment screen and the Driver module (CrewFleet): file an inspection, maintenance
+//    or incident report from a phone, with photos. Everyone in the department can inspect its equipment (Msg #248).
 
 export const KIND_L: Record<AssetKind, string> = { vehicle: 'Vehicle', trailer: 'Trailer', equipment: 'Equipment' }
 export const LOG_L: Record<LogKind, string> = { maintenance: 'Maintenance', inspection: 'Inspection', incident: 'Incident' }
@@ -52,19 +53,25 @@ function inspDue(a: Asset) {
 // =====================================================================================================
 // Top bar › Vehicles: for everyone on staff
 // =====================================================================================================
-export function CrewFleet({ sb, flash }: { sb: SupabaseClient | null; flash: Flash }) {
+/** Inspections, maintenance and incidents for one department (its module's Vehicles / Equipment screen, and the Driver module).
+ *  Everyone in the department can inspect its vehicles and equipment; company-wide ones show in every department. (Msg #248) */
+export function CrewFleet({ sb, flash, dept, title, driver }: { sb: SupabaseClient | null; flash: Flash; dept?: Dept; title?: string; driver?: boolean }) {
   const { api, d, err, load } = useFleet(sb)
   const [rep, setRep] = useState<Partial<Log> | null>(null)
-  if (!api) return <div className="list"><h2>{t('Vehicles')}</h2><p className="muted">{t('Needs the database (not in the demo).')}</p></div>
-  if (err) return <div className="list"><h2>{t('Vehicles')}</h2><div className="warnbox">{err}</div></div>
-  if (!d) return <div className="list"><h2>{t('Vehicles')}</h2><p className="muted">{t('Loading…')}</p></div>
-  const mine = d.logs.filter(l => l.created_by === d.me).slice(0, 20)
-  const open = d.logs.filter(l => l.status === 'open')
+  const h = title ?? t('Vehicles and equipment')
+  if (!api) return <div className="list"><h2>{h}</h2><p className="muted">{t('Needs the database (not in the demo).')}</p></div>
+  if (err) return <div className="list"><h2>{h}</h2><div className="warnbox">{err}</div></div>
+  if (!d) return <div className="list"><h2>{h}</h2><p className="muted">{t('Loading…')}</p></div>
   const mineIds = new Set(d.drivers.filter(x => x.email && x.email === d.me).flatMap(x => x.asset_ids))
-  const dueNow = d.assets.filter(a => a.carrier_id == null && a.status === 'active' && (inspDue(a) ?? 99) <= 0).sort((a, b) => Number(mineIds.has(b.id)) - Number(mineIds.has(a.id)))
+  const inScope = (a: Asset) => a.carrier_id == null && (!dept || a.department === dept || a.department === 'company' || mineIds.has(a.id))
+  const ids = new Set(d.assets.filter(inScope).map(a => a.id))
+  const mine = d.logs.filter(l => l.created_by === d.me).slice(0, 20)
+  const open = d.logs.filter(l => l.status === 'open' && (l.asset_id == null || ids.has(l.asset_id)))
+  const dueNow = d.assets.filter(a => inScope(a) && a.status === 'active' && (inspDue(a) ?? 99) <= 0).sort((a, b) => Number(mineIds.has(b.id)) - Number(mineIds.has(a.id)))
+  const list = d.assets.filter(a => inScope(a) && a.status !== 'retired').sort((a, b) => Number(mineIds.has(b.id)) - Number(mineIds.has(a.id)) || assetName(a).localeCompare(assetName(b)))
   return <div className="list fleet comp">
-    <h2>{t('Vehicles and equipment')}</h2>
-    <p className="muted">{t('File a report from your phone. Photos help.')}</p>
+    <h2>{h}</h2>
+    <p className="muted">{driver ? t('Your trucks first. Inspect before you go, and report anything wrong. Photos help.') : t('File a report from your phone. Photos help.')}</p>
     <div className="fbig">
       <button className="fbtn" onClick={() => setRep({ kind: 'inspection' })}><b>{t('Inspection')}</b><span>{t('Pre-trip or equipment check')}</span></button>
       <button className="fbtn" onClick={() => setRep({ kind: 'maintenance' })}><b>{t('Maintenance')}</b><span>{t('Service, repair, oil change')}</span></button>
@@ -74,8 +81,14 @@ export function CrewFleet({ sb, flash }: { sb: SupabaseClient | null; flash: Fla
       <div className="dlist">{dueNow.map(a => <button key={a.id} className="drow linkrow" onClick={() => setRep({ kind: 'inspection', asset_id: a.id })}>
         <span className="grow"><b>{assetName(a)}</b> <span className="muted">{a.site ?? ''}</span></span><span className="pill cp-warn">{a.last_inspection ? t('last {d}', { d: fmtD(a.last_inspection) }) : t('never')}</span></button>)}</div></section>}
     {open.length > 0 && <section className="dcard"><h3>{t('Open items')}</h3><LogList d={d} logs={open} onOpen={l => setRep(l)} /></section>}
+    {dept && <section className="dcard"><h3>{driver ? t('Trucks and trailers') : t('Vehicles and equipment')}</h3>
+      {list.length ? <div className="dlist">{list.map(a => { const di = inspDue(a)
+        return <button key={a.id} className="drow linkrow" onClick={() => setRep({ kind: 'inspection', asset_id: a.id })}>
+          <span className="grow">{mineIds.has(a.id) ? '★ ' : ''}<b>{assetName(a)}</b> <span className="muted">{[a.body_type ?? t(KIND_L[a.kind]), a.site, a.department === 'company' ? t('company-wide') : ''].filter(Boolean).join(' · ')}</span></span>
+          {a.status === 'out_of_service' ? <span className="pill cp-bad">{t('Out of service')}</span> : di != null ? <span className={`pill ${di <= 0 ? 'cp-warn' : 'cp-ok'}`}>{di <= 0 ? t('inspection due') : t('inspect in {n}d', { n: di })}</span> : null}
+        </button> })}</div> : <p className="muted">{t('Nothing listed for this department yet. Admins add them in Settings › Vehicles.')}</p>}</section>}
     <section className="dcard"><h3>{t('My reports')}</h3>{mine.length ? <LogList d={d} logs={mine} onOpen={l => setRep(l)} /> : <p className="muted">{t('Nothing yet.')}</p>}</section>
-    {rep && <ReportSheet api={api} d={d} x0={rep} flash={flash} onClose={() => setRep(null)} onSaved={async m => { setRep(null); await load(); flash(m) }} />}
+    {rep && <ReportSheet api={api} d={d} x0={rep} flash={flash} only={dept ? ids : undefined} onClose={() => setRep(null)} onSaved={async m => { setRep(null); await load(); flash(m) }} />}
   </div>
 }
 
@@ -482,7 +495,7 @@ interface Det {
   location?: string; people?: string; injuries?: boolean; injury_notes?: string; damage?: string; police_report?: string; witnesses?: string; actions?: string; vehicle_other?: string
 }
 
-export function ReportSheet({ api, d, x0, flash, onClose, onSaved }: { api: FleetApi; d: FleetData; x0: Partial<Log>; flash: Flash; onClose: () => void; onSaved: (m: string) => Promise<void> }) {
+export function ReportSheet({ api, d, x0, flash, onClose, onSaved, only }: { api: FleetApi; d: FleetData; x0: Partial<Log>; flash: Flash; onClose: () => void; onSaved: (m: string) => Promise<void>; only?: Set<number> }) {
   const [x, setX] = useState<Partial<Log>>(() => ({ happened_on: today(), ...x0 }))
   const [det, setDet] = useState<Det>(() => ({ ...((x0.details ?? {}) as Det) }))
   const [files, setFiles] = useState<File[]>([])
@@ -507,7 +520,7 @@ export function ReportSheet({ api, d, x0, flash, onClose, onSaved }: { api: Flee
 
   // the vehicles this person drives come first
   const mine = new Set(d.drivers.filter(r => r.email && r.email === d.me).flatMap(r => r.asset_ids))
-  const assetOpts = d.assets.filter(y => (y.carrier_id == null && y.status !== 'retired') || y.id === x.asset_id)
+  const assetOpts = d.assets.filter(y => (y.carrier_id == null && y.status !== 'retired' && (!only || only.has(y.id))) || y.id === x.asset_id)
     .sort((p, q) => Number(mine.has(q.id)) - Number(mine.has(p.id)) || assetName(p).localeCompare(assetName(q)))
     .map(y => ({ v: y.id, l: `${mine.has(y.id) ? '★ ' : ''}${assetName(y)}${y.status === 'out_of_service' ? ` (${t('out of service')})` : ''}` }))
   const missing = kind !== 'incident' && !x.asset_id ? t('Pick the vehicle or equipment')

@@ -1157,7 +1157,17 @@ export const ES: Record<string, string> = {
  "Other alerts": "Otras alertas",
  "everything else for the modules you're in": "todo lo demás de tus módulos",
  "My notifications": "Mis notificaciones",
- "My loads and stops": "Mis cargas y paradas"
+ "My loads and stops": "Mis cargas y paradas",
+ "Trucks and inspections": "Camiones e inspecciones",
+ "Trucks": "Camiones",
+ "Trucks and trailers": "Camiones y remolques",
+ "Your trucks first. Inspect before you go, and report anything wrong. Photos help.": "Tus camiones primero. Inspecciona antes de salir y reporta cualquier problema. Las fotos ayudan.",
+ "company-wide": "toda la empresa",
+ "inspection due": "inspección pendiente",
+ "inspect in {n}d": "inspeccionar en {n}d",
+ "Nothing listed for this department yet. Admins add them in Settings › Vehicles.": "Aún no hay nada para este departamento. Los administradores los agregan en Ajustes › Vehículos.",
+ "equipment": "equipo",
+ "vehicles": "vehículos"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Production's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

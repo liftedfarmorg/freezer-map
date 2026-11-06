@@ -8,6 +8,7 @@ import type { Lang } from './i18n'
 import { kickNotify, pushOn, pushState } from './push'
 import type { PushState } from './push'
 import { NotifyBox } from './notifyprefs'
+import { CrewFleet } from './fleet/Fleet'
 import type { NotifyPrefs } from './notifyprefs'
 
 // Driver portal (215, Msg #239/#242): drivers record what happened at each stop.
@@ -123,7 +124,13 @@ function LangPick({ onLang }: { onLang?: (l: Lang) => void }) {
 // =====================================================================================================
 // a signed-in driver
 // =====================================================================================================
-export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0 }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean; nf?: NotifyPrefs }) {
+export type DTab = 'loads' | 'vehicles'
+export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0, tab: tab0, onTab }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean; nf?: NotifyPrefs
+  tab?: DTab; onTab?: (t: DTab) => void }) {
+  const [tabS, setTabS] = useState<DTab>('loads')
+  const tab = tab0 ?? tabS
+  const setTab = (x: DTab) => { setTabS(x); onTab?.(x) }
+  const [fmsg, setFmsg] = useState<{ m: string; bad?: boolean } | null>(null)
   const [nf, setNf] = useState<NotifyPrefs>(nf0 ?? {})
   const [nmsg, setNmsg] = useState<string | null>(null)
   const [loads, setLoads] = useState<DLoad[] | null>(null)
@@ -149,6 +156,10 @@ export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0 }: { s
   return <div className={`drv ${embedded ? '' : 'drv-full'}`}>
     {!embedded && <header className="drv-top"><b>{t('Lifted Farms · Driver')}</b><span className="grow" /><LangPick onLang={l => { onLang?.(l); bump(x => x + 1) }} />
       {signOut && <button className="ghost small" onClick={signOut}>{t('Sign out')}</button>}</header>}
+    {!onTab && <div className="drv-tabs"><div className="seg">{([['loads', t('My loads')], ['vehicles', t('Trucks and inspections')]] as [DTab, string][]).map(([k, l]) =>
+      <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div></div>}
+    {fmsg && <div className={`toast ${fmsg.bad ? 'bad' : ''}`} onClick={() => setFmsg(null)}>{fmsg.m}</div>}
+    {tab === 'vehicles' ? <CrewFleet sb={sb} dept="distribution" driver title={t('Trucks and inspections')} flash={(m: string, bad?: boolean) => { setFmsg({ m, bad }); setTimeout(() => setFmsg(null), 4000) }} /> :
     <div className="list">
       <div className="row between wrap"><h2>{t('My loads')}</h2>{embedded && <LangPick onLang={l => { onLang?.(l); bump(x => x + 1) }} />}</div>
       {name && <p className="muted">{t('Signed in as {u}', { u: name })}</p>}
@@ -163,7 +174,7 @@ export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0 }: { s
       {loads === null ? <p className="muted">{t('Loading…')}</p>
         : !loads.length ? <div className="card"><p className="muted">{t('No loads for you right now. When Distribution puts you on a load as the driver, it shows here.')}</p></div>
         : loads.map(l => <LoadCard key={l.id} l={l} mode={mode} qu={qu} />)}
-    </div>
+    </div>}
   </div>
 }
 

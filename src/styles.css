@@ -1226,3 +1226,4 @@ a.btnlink { display: inline-flex; align-items: center; text-decoration: none; co
 .modpill.m-driver { border-color: #1d4ed8; background: color-mix(in srgb, #2563eb 12%, var(--panel)); color: #1e40af; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .modpill.m-driver { color: #93c5fd; border-color: #93c5fd; } }
 :root[data-theme="dark"] .modpill.m-driver { color: #93c5fd; border-color: #93c5fd; }
+.drv-tabs { max-width: 720px; margin: 10px auto 0; padding: 0 16px; }
