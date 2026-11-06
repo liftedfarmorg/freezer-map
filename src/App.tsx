@@ -421,7 +421,7 @@ export default function App() {
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
   const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)
-  const [more, setMore] = useState(false)
+  const [more, setMore] = useState<false | 'mods' | 'more'>(false)   // 281 (phone): the top pill opens modules, the bottom More opens this module's other screens
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
   const [scanMiss, setScanMiss] = useState<{ tag: string; checked: boolean; range: string | null } | null>(null)
@@ -958,7 +958,7 @@ export default function App() {
         </aside>
       )}
       <header className="top">
-        {!noMods && <button className="phmod" aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
+        {!noMods && (modCount > 1 || isDrv) && <button className="phmod" aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore('mods')}>
           <span className="phmod-dot" />{inDrv ? t('Driver') : ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>}
         <div className="brand" onClick={() => nav.main[0]?.go()}>
           <img className="logo-img logo-l" src="/logo-light.svg" alt="Lifted Farms" /><img className="logo-img logo-d" src="/logo-dark.svg" alt="Lifted Farms" /> <span className="app-name">{appName}</span><span className="ptitle">{pageTitle}</span> {backend.demo && <span className="demo">DEMO</span>}
@@ -1181,8 +1181,8 @@ export default function App() {
       <DragGhost />
       {!noMods && <>
         <nav className={`bottom pbar ${canScan && !inDrv ? 'with-scan' : ''}`} aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
-          <button className={`pmod ${restOn ? 'on' : ''}`} aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
-            <span className="pmod-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{inDrv ? t('Driver') : t(MOD_SHORT[cur])} ▴</span></button>
+          <button className={`pmod pmore ${restOn ? 'on' : ''}`} aria-label={t('More in {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore('more')}>
+            <span className="pti"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{t('More')}</span></button>
           {inDrv && <button className={`ptab ${drvTab === 'loads' ? 'on' : ''}`} onClick={() => setDrvTab('loads')}><span className="pti">{DRV_ICON}</span><span className="pl">{t('My loads')}</span></button>}
           {inDrv && <button className={`ptab ${drvTab === 'vehicles' ? 'on' : ''}`} onClick={() => setDrvTab('vehicles')}><span className="pti">{MOD_ICON.dist}</span><span className="pl">{t('Trucks')}</span></button>}
           {!inDrv && bottomFit.map((x, i) => <Fragment key={x.k}>
@@ -1195,14 +1195,15 @@ export default function App() {
           <div className="scrim" onClick={() => setMore(false)}>
             <div className="sheet modsheet" onClick={e => e.stopPropagation()}>
               <div className="sheet-h"><span /><button className="ghost" aria-label={t('Close')} onClick={() => setMore(false)}>✕</button></div>
-              {modCount > 1 && <>
+              {more === 'mods' && (modCount > 1 || isDrv) && <>
                 <div className="msh">{t('Switch module')}</div>
                 <div className="modgrid">{myMods.map(x => <button key={x.m} className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => { setMore(false); goMod(x.m) }}>{MOD_ICON[x.m]}<span>{x.l}</span></button>)}
                   {isDrv && <button className={inDrv ? 'on' : ''} onClick={() => { setMore(false); go('driver') }}>{DRV_ICON}<span>{t('Driver')}</span></button>}</div>
               </>}
-              {!inDrv && <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>}
-              {!inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
-              {inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {more === 'more' && !inDrv && <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>}
+              {more === 'more' && !inDrv && !bottomRest.length && <p className="muted">{t('Everything in {m} is on the bar below.', { m: ML(cur) })}</p>}
+              {more === 'more' && !inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {more === 'more' && inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
             </div>
           </div>
         )}

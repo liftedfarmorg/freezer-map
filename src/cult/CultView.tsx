@@ -21,6 +21,7 @@ import { t } from '../i18n'
 import { ActivityTab, ReviewTab } from './review'
 import { HarvestTab } from './harvest'
 import { OpsLogs } from '../logs'
+import { useScanHandler } from '../scanroute'
 import type { CultTab as Tab } from './tabs'
 const remembered = <T extends string>(k: string, d: T): T => { try { return (localStorage.getItem(k) as T) || d } catch { return d } }
 const remember = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* private mode */ } }
@@ -44,6 +45,20 @@ export default function CultView({ backend, flash, onPalletsChanged, tab, go }: 
   useEffect(() => { load() }, [load])
   const c = useMemo(() => d && makeCtx(d), [d])
   const saved = useCallback(async (msg: string) => { await load(); flash(msg); if (/pallet/i.test(msg)) onPalletsChanged() }, [load, flash, onPalletsChanged])
+  // 281: the Scan button in Cultivation opens the planting a plant tag belongs to: its batch tags (immature planting)
+  // or its flowering tags (flowering plant batch). Package tags fall through to the pallet card.
+  const [openPl, setOpenPl] = useState<{ id: number; n: number } | null>(null)
+  useScanHandler(async (tag: string) => {
+    const sb = backend.client()
+    if (!sb || !d) return false
+    const T = tag.trim().toUpperCase()
+    const r = await sb.from('tag_assignments').select('planting_id,purpose,prefix,first_label,last_label,active').lte('first_label', T).gte('last_label', T).order('active', { ascending: false }).limit(20)
+    const hit = ((r.data ?? []) as { planting_id: number | null; prefix: string; first_label: string; last_label: string }[])
+      .find(x => x.planting_id != null && T.startsWith(x.prefix.toUpperCase()) && x.first_label.length === T.length && x.last_label.length === T.length)
+    if (!hit) return false
+    if (!d.plantings.some(p => p.id === hit.planting_id)) { flash(t('That tag is on a planting from another crop year. Switch the season to see it.'), true); return true }
+    go('plantings'); setOpenPl(o => ({ id: hit.planting_id!, n: (o?.n ?? 0) + 1 })); return true
+  })
 
   if (!api) return <div className="list"><h2>Cultivation</h2><p className="muted">Cultivation needs the database (not available in the demo).</p></div>
   if (err) return <div className="list"><h2>Cultivation</h2><div className="warnbox">Couldn't load cultivation data. If this is the first time, run 018_modules_sites_fields.sql and 019_cultivation.sql in Supabase. ({err})</div></div>
@@ -70,7 +85,7 @@ export default function CultView({ backend, flash, onPalletsChanged, tab, go }: 
       {tab === 'week' && <WeekTab d={d} c={c} site={site} onOpen={setOpen} />}
       {tab === 'testing' && <TestingTab d={d} c={c} site={site} api={api} flash={flash} onSaved={saved} />}
       {tab === 'avail' && <AvailabilityTab d={d} c={c} site={site} q={q} api={api} flash={flash} onSaved={saved} />}
-      {tab === 'plantings' && <PlantingsTab d={d} c={c} site={site} q={q} api={api} flash={flash} onSaved={saved} />}
+      {tab === 'plantings' && <PlantingsTab key={openPl?.n ?? 0} d={d} c={c} site={site} q={q} api={api} flash={flash} onSaved={saved} openId={openPl?.id} />}
       {tab === 'yields' && <YieldsTab d={d} c={c} site={site} q={q} api={api} />}
       {tab === 'plan' && <PlanTab d={d} c={c} api={api} flash={flash} q={q} />}
       {tab === 'harvest' && <HarvestTab key={logId ?? 'list'} openFirst={logId} d={d} c={c} site={site} api={api} flash={flash} onSaved={async m => { await load(); flash(m) }} />}

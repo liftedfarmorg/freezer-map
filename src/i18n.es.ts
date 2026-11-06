@@ -1168,7 +1168,10 @@ export const ES: Record<string, string> = {
  "equipment": "equipo",
  "vehicles": "vehículos",
  "Module": "Módulo",
- "Modules": "Módulos"
+ "Modules": "Módulos",
+ "Account menu": "Menú de cuenta",
+ "Everything in {m} is on the bar below.": "Todo lo de {m} está en la barra de abajo.",
+ "That tag is on a planting from another crop year. Switch the season to see it.": "Esa etiqueta es de una siembra de otro año. Cambia la temporada para verla."
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

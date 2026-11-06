@@ -57,7 +57,9 @@ const cross = (s: SeedLot) => [s.mother_strain, s.father_strain].filter(Boolean)
 const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }
 const f1 = (x: number | null) => (x == null ? '' : x.toFixed(1))
 
-export function BreedingTab({ sb, d, c, flash, me }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string }) {
+export function BreedingTab({ sb, d, c, flash, me, openTag }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string
+  /** 281: a scanned plant tag: open its pheno (flowering plant) or its pollination run (flowering planting) */
+  openTag?: { pheno?: number; hunt?: number; run?: number; n: number } | null }) {
   const [tab, setTab] = useState<'runs' | 'seeds' | 'hunts'>('runs')
   const [b, setB] = useState<BData | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -78,10 +80,16 @@ export function BreedingTab({ sb, d, c, flash, me }: { sb: SupabaseClient; d: ND
     setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
+  const [openPheno, setOpenPheno] = useState<number | null>(null)
+  useEffect(() => {
+    if (!b || !openTag) return
+    if (openTag.hunt != null) { setTab('hunts'); setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
+    else if (openTag.run != null) { const r = b.runs.find(x => x.id === openTag.run); if (r) { setTab('runs'); setHuntView(null); setRun(r) } }
+  }, [b, openTag?.n])
   const saved = async (m: string) => { await load(); flash(t(m)) }
   if (err) return <div className="warnbox">{err}</div>
   if (!b) return <p className="muted">{t('Loading…')}</p>
-  if (huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView sb={sb} d={d} c={c} b={b} h={h} me={me} flash={flash} onBack={() => setHuntView(null)} onSaved={saved} onEdit={() => setHunt(h)} /> }
+  if (huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView key={`${h.id}-${openPheno ?? ''}`} sb={sb} d={d} c={c} b={b} h={h} me={me} flash={flash} openPheno={openPheno} onBack={() => { setHuntView(null); setOpenPheno(null) }} onSaved={saved} onEdit={() => setHunt(h)} /> }
   const sown = (s: SeedLot) => s.sown ?? sum(b.hunts.filter(h => h.seed_lot_id === s.id).map(h => h.seeds_sown ?? 0))
   const lotPhenos = (id: number) => b.phenos.filter(p => p.seed_lot_id === id || (p.seed_lot_id == null && b.hunts.find(h => h.id === p.hunt_id)?.seed_lot_id === id))
   const projects = [...new Set(b.runs.map(r => r.project).filter((x): x is string => !!x))]
@@ -359,8 +367,8 @@ function HuntSheet({ sb, d, b, h0, flash, onClose, onSaved }: { sb: SupabaseClie
 }
 
 /** one hunt: numbered phenos (one cross or many), everyone's scores, the ranking, keepers */
-function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit }: { sb: SupabaseClient; d: NData; c: NCtx; b: BData; h: Hunt; me: string; flash: Flash; onBack: () => void; onSaved: (m: string) => Promise<void>; onEdit: () => void }) {
-  const [open, setOpen] = useState<Pheno | null>(null)
+function HuntView({ sb, d, c, b, h, me, flash, onBack, onSaved, onEdit, openPheno }: { sb: SupabaseClient; d: NData; c: NCtx; b: BData; h: Hunt; me: string; flash: Flash; onBack: () => void; onSaved: (m: string) => Promise<void>; onEdit: () => void; openPheno?: number | null }) {
+  const [open, setOpen] = useState<Pheno | null>(() => (openPheno != null ? b.phenos.find(p => p.id === openPheno) ?? null : null))
   const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled'>('growing')
   const [lotF, setLotF] = useState<number | null>(null)
   const [roomF, setRoomF] = useState<number | null>(null)

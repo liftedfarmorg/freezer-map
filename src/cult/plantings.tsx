@@ -11,8 +11,8 @@ import type { HeldRun } from './tagrun'
 
 const SOURCES: { v: Source; l: string }[] = [{ v: 'clone', l: 'Clone' }, { v: 'seed', l: 'Seed' }, { v: 'auto', l: 'Auto (seed)' }]
 
-export function PlantingsTab({ d, c, site, q, api, flash, onSaved }: { d: CultData; c: Ctx; site: string | null; q: string; api: CultApi; flash: Flash; onSaved: (m: string) => Promise<void> }) {
-  const [edit, setEdit] = useState<Partial<Planting> | null>(null)
+export function PlantingsTab({ d, c, site, q, api, flash, onSaved, openId }: { d: CultData; c: Ctx; site: string | null; q: string; api: CultApi; flash: Flash; onSaved: (m: string) => Promise<void>; openId?: number }) {
+  const [edit, setEdit] = useState<Partial<Planting> | null>(() => (openId != null ? d.plantings.find(p => p.id === openId) ?? null : null))   // 281: opened from a scanned tag
   const [rEdit, setREdit] = useState<Partial<Receipt> | null>(null)
   const [view, setView] = useState<'fields' | 'receiving'>('fields')
   const sel = useSel()

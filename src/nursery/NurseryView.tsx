@@ -1,5 +1,6 @@
 import { tagTxt } from '../mtag'
 import { ScanButton } from '../scan'
+import { sameTag, useScanHandler } from '../scanroute'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Backend } from '../api'
 import type { Customer, PaymentTerm } from '../types'
@@ -39,6 +40,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
   const [mother, setMother] = useState<Partial<Mother> | null>(null)
   const [doc, setDoc] = useState<{ kind: 'invoice' | 'nso'; id: number } | null>(null)
   const [sortDay, setSortDay] = useState(false)
+  const [openTag, setOpenTag] = useState<{ pheno?: number; hunt?: number; run?: number; n: number } | null>(null)
 
   const load = useCallback(async () => {
     if (!api) return
@@ -48,6 +50,21 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
   const cust = useMemo(() => new Map(customers.map(c => [c.id, c.name])), [customers])
   const c = useMemo(() => d && makeCtx(d, cust), [d, cust])
   const saved = useCallback(async (m: string) => { await load(); flash(t(m)) }, [load, flash])
+  // 281: the Scan button in Nursery opens what the tag is on: a mother lot, a clone package (batch),
+  // a flowering plant (pheno) or a flowering planting (pollination run receivers). Anything else falls through to the pallet card.
+  useScanHandler(async (tag: string) => {
+    if (!d || !sb) return false
+    const m = d.mothers.find(x => sameTag(x.plant_tag, tag))
+    if (m) { setMother(m); return true }
+    const bt = d.batches.find(x => sameTag(x.package_tag, tag) || (x.tags ?? []).some(y => sameTag(y, tag)))
+    if (bt) { setBatch(bt); return true }
+    const T = tag.trim()
+    const ph = await sb.from('phenos').select('id,hunt_id').ilike('plant_tag', T).limit(1)
+    if (ph.data?.length) { go('breeding'); setOpenTag(o => ({ pheno: ph.data![0].id, hunt: ph.data![0].hunt_id, n: (o?.n ?? 0) + 1 })); return true }
+    const rc = await sb.from('breed_receivers').select('id,run_id').ilike('plant_tag', T).limit(1)
+    if (rc.data?.length) { go('breeding'); setOpenTag(o => ({ run: rc.data![0].run_id, n: (o?.n ?? 0) + 1 })); return true }
+    return false
+  })
 
   const title = <h2>{tab === 'dashboard' ? '' : t(nurseryLabel(tab))} <span className="dev">{t('new')}</span></h2>
   if (!api || !sb) return <div className="list"><h2>{t('Nursery')}</h2><p className="muted">{t('The Nursery needs the database (not available in the demo).')}</p></div>
@@ -66,7 +83,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
       {tab === 'batches' && <BatchesTab d={d} c={c} q={q} onOpen={setBatch} onNew={() => setBatch({})} onSortDay={() => setSortDay(true)} />}
       {tab === 'plan' && <PlanTab d={d} c={c} api={api} flash={flash} onSaved={saved} />}
       {tab === 'mothers' && <MothersTab d={d} c={c} q={q} api={api} flash={flash} onSaved={saved} onOpen={setMother} onAdd={v => setMother(v ?? {})} />}
-      {tab === 'breeding' && <BreedingTab sb={sb} d={d} c={c} flash={flash} me={me ?? ''} />}
+      {tab === 'breeding' && <BreedingTab sb={sb} d={d} c={c} flash={flash} me={me ?? ''} openTag={openTag} />}
       {tab === 'logs' && <OpsLogs sb={sb} module="nursery" sites={d.sites.map(s => s.code)} areas={areas} strains={[...new Set([...d.mothers.map(m => m.strain), ...d.strains])]} flash={flash}
         wage={d.settings.wage} canEditRecipes={isAdmin} batches={d.batches.filter(b => b.stage !== 'cancelled').slice(0, 300).map(b => ({ id: b.id, strain: b.strain, label: `${fmtD(b.cut_on)} ${b.strain} ${GEN_LABEL[b.gen]} · ${n0(b.cuttings)}` }))}
         extraTabs={[{ k: 'leach', l: t('Leachate'), node: <Leachate sb={sb} d={d} flash={flash} /> }, { k: 'lab', l: t('Lab tests'), node: <LabTests d={d} c={c} api={api} flash={flash} onSaved={saved} /> }]} />}

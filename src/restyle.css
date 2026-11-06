@@ -206,7 +206,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .app.shell .phmod { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--r-line);
     background: var(--r-ink-3); color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; order: -1; }
   .phmod-dot { width: 8px; height: 8px; border-radius: 4px; background: var(--r-teal); }
-  .app.shell .top .brand { display: none; }
+  .app.shell.with-mods .top .brand, .app.shell .top:has(.phmod) .brand { display: none; }
 }
 
 /* Schedule: every column on every screen, the table scrolls sideways */
@@ -243,3 +243,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .app.shell .top .search { order: 2; flex: 1 1 100%; }
   .app.shell .top > .grow { display: none; }
 }
+
+/* phone bottom bar: the first button is More (this module's other screens); the top pill switches modules (Msg 281) */
+.pbar .pmore { color: var(--muted); font-weight: 600; }
+.pbar .pmore.on { color: var(--ink); }
+.pbar .pmore .pti { position: relative; }
