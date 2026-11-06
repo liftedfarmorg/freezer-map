@@ -975,7 +975,7 @@ export default function App() {
             </>}
           </div>
         )}
-        {cur === 'dist' && !noMods && <div className="seg">
+        {cur === 'dist' && !noMods && view !== 'inventory' && <div className="seg">
           {(['OHR', 'GVR'] as Site[]).map(s => (
             <button key={s} className={s === site ? 'on' : ''} onClick={() => { setSite(s); if (view === 'freezer') setView('map') }}>{s}</button>
           ))}
