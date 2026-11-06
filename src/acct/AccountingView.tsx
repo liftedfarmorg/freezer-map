@@ -11,6 +11,7 @@ import { ModulePeople } from '../users'
 import { dfmt, money as money2 } from '../docs'
 import { PayrollTab, PaySettings } from '../pay/PayrollView'
 import { BcPanel } from './BcPanel'
+import { StopAlerts } from '../driver'
 
 type Flash = (t: string, bad?: boolean) => void
 const money = money2
@@ -63,6 +64,7 @@ export default function AccountingView({ backend, flash, tab, go, isAdmin, canEd
 
   return (
     <div className="acct">
+      {(tab === 'dashboard' || tab === 'send') && <StopAlerts sb={sb} only={['accounting']} />}
       {tab === 'dashboard' && <Dashboard api={api} ov={ov} rows={rows} conn={conn} env={env} go={go} open={setOpen} banner={banner} />}
       {tab === 'send' && <SendList api={api} rows={rows} env={env} canEdit={canEdit && !!conn?.connected} flash={flash} open={setOpen} reload={load} banner={banner} />}
       {tab === 'sent' && <SentList api={api} rows={rows} env={env} flash={flash} open={setOpen} reload={load} lastSync={ov.last_sync} connected={!!conn?.connected} banner={banner} />}

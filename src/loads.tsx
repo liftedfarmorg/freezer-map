@@ -487,6 +487,11 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
                   const ds = dl?.stops.find(x => x.id === s.id)
                   const o = s.outcome ?? ds?.outcome
                   const officeOk = ctx.canRecord && !isPickup(l) && ['in_transit', 'delivered'].includes(l.status)
+                  // 224: taken off while departing (its manifest voided or never made)
+                  if (s.status === 'cancelled') return <span className="pill m-off">Taken off{s.off_reason ? ` (${s.off_reason})` : ''}</span>
+                  if (l.status === 'departing' && ctx.canRecord && s.status === 'pending') return <button className="ghost small" disabled={ctx.busy} onClick={() => ctx.confirm(
+                      `Take stop ${s.seq} (${c?.name}) off ${l.code}? Its pallets come off the truck into Needs a spot and its orders go back to Ready. If its METRC manifest is already made, a Void to-do goes to Compliance (approve it there). The other stops carry on.`,
+                      'Take stop off', async () => { await ctx.run(async () => { const { error } = await ctx.api.client()!.rpc('stop_off_departing', { p_stop: s.id }); if (error) throw new Error(error.message); await ctx.refreshOrders?.() }, `Stop ${s.seq} taken off ${l.code}`) })}>Take stop off</button>
                   if (o || s.status !== 'pending') {
                     const bad = o && o !== 'delivered' && o !== 'dropped_off'
                     return <span className="row" style={{ gap: 6 }}>

@@ -113,7 +113,7 @@ export interface Load { id: number; code: string; load_date: string; vehicle_id:
   /** 089: customer pickups, Depart in two steps, carrier cost */
   kind?: 'delivery' | 'pickup'; departing_at?: string | null; depart_error?: string | null; carrier_cost?: number | null
   pickup_driver?: string | null; pickup_dl?: string | null; pickup_make?: string | null; pickup_model?: string | null; pickup_plate?: string | null; pickup_license?: string | null }
-export interface LoadStop { id: number; load_id: number; seq: number; customer_id: number; manifest: string | null; status: 'pending' | 'delivered' | 'not_delivered'; delivered_at: string | null; delivered_by: string | null
+export interface LoadStop { id: number; load_id: number; seq: number; customer_id: number; manifest: string | null; status: 'pending' | 'delivered' | 'not_delivered' | 'cancelled'; off_reason?: string | null; delivered_at: string | null; delivered_by: string | null
   /** 215 driver portal */
   outcome?: 'delivered' | 'partly_rejected' | 'fully_rejected' | 'not_delivered' | 'dropped_off' | null; outcome_reason?: string | null; fixed_at?: string | null
   ship_override?: number | null; ship_override_reason?: string | null; ship_charge?: number | null; ship_value?: number | null; ship_rule?: string | null; ship_desc?: string | null; ship_saved_at?: string | null }

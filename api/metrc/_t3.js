@@ -3,7 +3,7 @@
 import { Held, Skip, Wait, adjustReasons, all, cached, db, enc, list, rpc, t3 } from './_core.js'
 import { NotReady, apiConfigured, routeLabel } from './_api.js'
 import { sendAdjust, sendCombine, sendFinish, sendNewPackageCheck, sendRepackage, sendRetag, sendShipCheck, sendSplit, sendTagCheck } from './_pkg.js'
-import { sendReceive, sendTransfer_ } from './_xfer.js'
+import { sendManifestVoid, sendReceive, sendTransfer_ } from './_xfer.js'
 import {
   sendFlower, sendHarvestFinish, sendHarvestPackage, sendHarvestPlants, sendHarvestWaste, sendNurseryClones, sendNurseryLoss,
   sendNurseryMothers, sendPlantLoss, sendPlanting,
@@ -57,7 +57,7 @@ export async function testConnection(by) {
 // ---------- senders, one per kind ----------
 const SENDERS = {
   adjust: sendAdjust, split: sendSplit, combine: sendCombine, finish: sendFinish, tag: sendTagCheck, new_package: sendNewPackageCheck, retag: sendRetag, repackage: sendRepackage,
-  transfer: sendTransfer_, manifest: sendTransfer_, ship_check: sendShipCheck, receive: sendReceive,
+  transfer: sendTransfer_, manifest: sendTransfer_, manifest_void: sendManifestVoid, ship_check: sendShipCheck, receive: sendReceive,
   nursery_clones: sendNurseryClones, nursery_mothers: sendNurseryMothers, nursery_loss: sendNurseryLoss,
   planting: sendPlanting, plant_loss: sendPlantLoss, flower: sendFlower,
   harvest_plants: sendHarvestPlants, harvest_package: sendHarvestPackage, harvest_waste: sendHarvestWaste, harvest_finish: sendHarvestFinish,
