@@ -402,13 +402,13 @@ begin
 
   -- each package: back on the truck, or gone (delivered / dropped off)
   create temp table if not exists _so_leaf (pallet_id bigint, top_id bigint, inside boolean, back boolean, reason text, note text, unit bigint) on commit drop;
-  delete from _so_leaf;
+  delete from _so_leaf where true;
   insert into _so_leaf select k2.pallet_id, k2.top_id, coalesce(pp.container_id = k2.top_id, false), false, null, null, k2.pallet_id
     from _stop_leaves(s.id) k2 join pallets pp on pp.id = k2.pallet_id;
   select count(*) into nleaves from _so_leaf;
   if nleaves = 0 then raise exception 'Nothing on this stop'; end if;
   if o in ('fully_rejected', 'not_delivered') then
-    update _so_leaf set back = true, reason = why, note = note_;
+    update _so_leaf set back = true, reason = why, note = note_ where true;
   elsif o = 'partly_rejected' then
     for rj in select * from jsonb_array_elements(coalesce(p -> 'rejects', '[]'::jsonb)) loop
       if nullif(rj ->> 'reason', '') is null then raise exception 'Pick a reason for each rejected package'; end if;
