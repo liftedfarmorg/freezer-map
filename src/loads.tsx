@@ -477,7 +477,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
           const waiting = canEdit && s.status === 'pending' && c?.kind === 'external' ? notLoaded(ctx, s.customer_id) : []
           const top = (id: number) => ctx.pallet(id)?.container_id ?? id
           const mine = new Set(sOrders.flatMap(palletIds).flatMap(id => [id, top(id)]))
-          const loose = c?.kind === 'external' ? its.filter(i => !mine.has(i.pallet_id)).length : 0
+          const loose = c?.kind === 'external' && ['planning', 'loading', 'departing'].includes(l.status) ? its.filter(i => !mine.has(i.pallet_id)).length : 0
           const carrying = site ? [...new Set(its.map(i => ctx.held(i.pallet_id)).filter((x): x is string => !!x))] : []
           return (
             <div key={s.id} className={`stopcard ${s.status}`} style={{ ['--sc' as string]: stopColor(s.seq) }}>

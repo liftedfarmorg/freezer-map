@@ -648,6 +648,12 @@ class SupaBackend implements Backend {
     if (missing.length) {
       const { data } = await this.sb.from('pallets').select('*').in('id', missing.slice(0, 500))
       pallets.push(...((data ?? []) as Pallet[]))
+      // Msg #278: the packages on a shipped mixed pallet too, so the stop shows its weight and knows they're on the order
+      const mixed = ((data ?? []) as Pallet[]).filter(p => p.kind === 'mixed').map(p => p.id)
+      if (mixed.length) {
+        const { data: kids } = await this.sb.from('pallets').select('*').in('container_id', mixed.slice(0, 300))
+        pallets.push(...((kids ?? []) as Pallet[]).filter(k => !pallets.some(p => p.id === k.id)))
+      }
     }
     const shipped = await this.sb.rpc('shipped_in_freezer').then(r => (r.error ? [] : r.data) as ShippedCheck[], () => [] as ShippedCheck[])
     const unmatched = await this.sb.rpc('unmatched_shipped_tags').then(r => (r.error ? [] : r.data) as UnmatchedTag[], () => [] as UnmatchedTag[])
