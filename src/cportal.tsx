@@ -97,7 +97,7 @@ const STEPS: [number, string][] = [[10, '10 lbs'], [50, '50 lbs'], [100, '100 lb
 const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ margin: '2px 0 0' }}>{msg}</p>
 
 /* ---------- data ---------- */
-type Screen = 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
+type Screen = 'yields' | 'yield' | 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 /** reserve history (mockup): one entry per request (with Lifted's decision) or per change Lifted made */
 export interface ActLine { s: string; y: number; from: number; to: number; ok?: number | null
   /** reserve after Lifted's decision on this line (null while waiting); when present it wins over the entry's status */
@@ -105,9 +105,14 @@ export interface ActLine { s: string; y: number; from: number; to: number; ok?: 
 export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string; kind: 'request' | 'adjust' | 'setup' | 'rejected'
   status?: 'waiting' | 'approved' | 'partly' | 'declined' | 'cancelled'; decidedAt?: string | null; decidedBy?: string | null
   lines: ActLine[]; note?: string | null; reply?: string | null; fromHold?: boolean }
+/** yields (mockup): what the customer got from each strain on a shipped order. Fresh frozen -> hash -> rosin */
+export type YUnit = 'g' | 'kg' | 'lb' | '%'
+export interface YieldLine { s: string; y: number; shipped: number; ff: number | null; made: { hash: boolean; rosin: boolean }
+  hashV: number | null; hashU: YUnit; rosinV: number | null; rosinU: YUnit; rating: number | null; note: string }
+export interface YieldReport { orderId: number; lines: YieldLine[]; sentAt: string | null; savedAt: string | null }
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
-  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; acts: Act[]; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
+  st: Statement | null; mc: MyContract | null; holds: SampleHold[]; holdDays: number; acts: Act[]; yields: YieldReport[] | null; prices: Record<number, number | null>; linePrices: Record<string, number | null>; qbo: Record<string, QboLine[]>
   /** 196: strain (lowercase name or alias) -> grade SHO/BHO and type short code (S, S/H, H, I/H, I) */
   tags: Record<string, Tag>
 }
@@ -133,6 +138,8 @@ async function loadAll(backend: Backend): Promise<Data> {
   const safe = <T,>(p: Promise<T>, d: T) => p.catch(() => d)
   const actFn = (backend as unknown as { reserveActivity?: () => Promise<Act[]> }).reserveActivity
   const acts = actFn ? await safe(actFn.call(backend), [] as Act[]) : []
+  const yFn = (backend as unknown as { myYields?: () => Promise<YieldReport[]> }).myYields
+  const yields = yFn ? await safe(yFn.call(backend), null) : null   // null = this backend doesn't do yields yet (screens stay hidden)
   const [terms, ys, menu, bal, reqs, orders, flags, st, mc, holds, hd] = await Promise.all([
     safe(backend.myTerms(), null), safe(backend.reserveYears(), null), safe(backend.openMenu(), [] as MenuRow[]), safe(backend.listBalances(), [] as Balance[]),
     safe(backend.listRequests(), [] as ReserveRequest[]), safe(backend.listOrders(), [] as Order[]), safe(backend.myOrderFlags(), [] as number[]),
@@ -152,7 +159,7 @@ async function loadAll(backend: Backend): Promise<Data> {
   const qbo = await safe(backend.qboInvoiceLines((st?.invoices ?? []).map(i => i.qbo_id).filter((x): x is string => !!x)), {} as Record<string, QboLine[]>)
   const prices: Record<number, number | null> = {}
   for (const [y, p] of ps) prices[y] = p != null ? Number(p) : (terms?.price_per_lb != null ? Number(terms.price_per_lb) : null)
-  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, acts, prices, linePrices, qbo, tags }
+  return { cy, contract: !!(terms?.reserves_enabled ?? mc?.reserves_enabled), terms, menu, bal, reqs, orders, flags, st, mc, holds, holdDays: hd ?? 10, acts, yields, prices, linePrices, qbo, tags }
 }
 
 /* ---------- the portal ---------- */
@@ -556,6 +563,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <p className={c('big')}>{fmt(thisMonth)} lbs <span style={{ fontSize: 13, fontWeight: 500 }}>picked up</span></p>
               <p className={c('foot')} style={{ marginTop: 4 }}>{min == null ? 'No monthly minimum' : leftMin ? <><b style={{ color: 'var(--blue)' }}>{fmt(leftMin)} to go</b> · {fmt(min)} lb min</> : <b>✓ {fmt(min)} lb min met</b>}</p></button>}
           </div>
+          {yToDo.length > 0 && <button className={c('tile ytile')} onClick={() => yToDo.length === 1 ? openYield(yToDo[0].o.order!.id) : go('yields')}>
+            <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Report Yields</p><p className={c('big')}>{plural(yToDo.length, 'order')} to report</p></div><span className={c('pillbtn')}>Report</span></div>
+            <p className={c('foot')}>{yToDo.slice(0, 3).map(x => x.o.label).join(', ')}{yToDo.length > 3 ? ` +${yToDo.length - 3} more` : ''} · how did your hash and rosin come out?</p></button>}
           {hs.length > 0 && <button className={c('tile')} style={{ background: 'var(--gold-bg)' }} onClick={() => go('holds')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')} style={{ color: 'var(--gold)' }}>Sample Holds for You</p><p className={c('big')}>{plural(hs.length, 'strain')} · {fmt(hs.reduce((a, h) => a + holdLbs(h), 0))} lbs</p></div><span className={c('pillbtn')} style={{ background: '#fff', color: 'var(--gold)' }}>Review</span></div>
             <p className={c('foot')} style={{ color: 'var(--ink)', fontWeight: 500 }}>{shown}</p>
@@ -630,6 +640,12 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 <div className={c('grow')}><p className={c('name')}>{o.label} {chip(o)}</p><p className={c('meta')}>Placed {shortDate(o.date)}{o.wanted ? <> · <b style={{ color: 'var(--ink)', fontWeight: 600 }}>Requested delivery {niceDate(o.wanted)}</b></> : ' · no date requested'}</p></div>
                 <div className={c('r')}><b className={c('num')}>{o.amount != null ? money(o.amount) : ''}</b><p className={c('meta')}>{fmt(o.lines.reduce((a, l) => a + (l.lbs ?? 0), 0))} lbs</p></div></button>)}
             </section>
+            {yToDo.length > 0 && <section className={c('card')}>
+              <div className={c('dcard-h')}><h2>Report Yields</h2><button className={c('linkish')} style={{ minWidth: 0 }} onClick={() => go('yields')}>All</button></div>
+              {yToDo.slice(0, 4).map(({ o, rep }) => <button key={o.key} className={c('li btnrow')} style={{ borderTop: '1px solid var(--line-2)' }} onClick={() => openYield(o.order!.id)}>
+                <div className={c('grow')}><p className={c('name')}>{o.label} {rep?.savedAt ? <span className={c('chip c-wait')}>Draft</span> : null}</p><p className={c('meta')}>Shipped {shortDate(o.date)} · {plural(new Set(o.order!.order_lines.map(l => l.strain)).size, 'strain')}</p></div>
+                <span className={c('pillbtn')}>{rep?.savedAt ? 'Finish' : 'Report'}</span></button>)}
+            </section>}
             {hs.length > 0 && <section className={c('card')} style={{ background: 'var(--gold-bg)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Sample Holds for You</h2><button className={c('pillbtn')} style={{ border: 0, background: '#fff', color: 'var(--gold)' }} onClick={() => go('holds')}>Review</button></div>
               {hs.map(h => { const dl = daysUntil(h.until); return <div key={h.line_id} className={c('row')} style={{ fontSize: 14, gap: 8 }}><span className={c('grow')}>{h.strain} {yrTag(h.crop_year)}</span><b style={{ width: 70, textAlign: 'right' }}>{fmt(holdLbs(h))} lbs</b>
@@ -741,14 +757,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   function sidebar() {
-    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0]]
-    const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order' }
+    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0], ['yields', 'Report Yields', !!d?.yields]]
+    const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields' }
     const on = group[screen] ?? screen
     return (
       <aside className={c('side')}>
         <a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a>
         <nav aria-label="Portal">{nav.filter(n => n[2]).map(([s0, label]) => <button key={s0} className={c(`nav ${on === s0 ? 'on' : ''}`)} aria-current={on === s0 ? 'page' : undefined} onClick={() => { if (s0 === 'orders') setFilter('all'); go(s0) }}>
-          {label}{s0 === 'holds' && <span className={c('chip c-wait')}>{liveHolds.length}</span>}</button>)}</nav>
+          {label}{s0 === 'holds' && <span className={c('chip c-wait')}>{liveHolds.length}</span>}{s0 === 'yields' && yToDo.length > 0 && <span className={c('chip c-wait')}>{yToDo.length}</span>}</button>)}</nav>
         <button className={c(`btn full ${on === 'order' ? 'on' : ''}`)} style={{ marginTop: 18 }} onClick={() => on === 'order' ? undefined : newOrder()}>Place an order</button>
         <div className={c('side-acct')}>
           <p style={{ margin: 0, color: '#fff', fontWeight: 600 }}>{me.display_name ?? me.customer_name}</p>
@@ -1360,6 +1376,114 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     )
   }
 
+  // ---------- yields (mockup) ----------
+  const G_PER: Record<YUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0 }
+  const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '%']]
+  // shipped orders made in the app, newest first, with their report (if any)
+  const yOrders = useMemo(() => (d?.yields ? orows.filter(o => o.status === 'shipped' && o.order && o.order.order_lines.length) : [])
+    .map(o => ({ o, rep: d?.yields?.find(r => r.orderId === o.order!.id) ?? null })), [orows, d])
+  const yToDo = yOrders.filter(x => !x.rep?.sentAt)
+  const [yOrder, setYOrder] = useState<number | null>(null)
+  const [yDraft, setYDraft] = useState<YieldLine[]>([])
+  const openYield = (orderId: number) => {
+    const x = yOrders.find(z => z.o.order!.id === orderId); if (!x) return
+    // one line per strain + crop year on the order (samples included); fresh frozen run starts at what shipped
+    const by = new Map<string, YieldLine>()
+    for (const l of x.o.order!.order_lines) { const y0 = l.crop_year ?? cy, k = l.strain + '|' + y0, v = by.get(k)
+      if (v) v.shipped += Number(l.lbs); else by.set(k, { s: l.strain, y: y0, shipped: Number(l.lbs), ff: null, made: { hash: true, rosin: true }, hashV: null, hashU: 'g', rosinV: null, rosinU: 'g', rating: null, note: '' }) }
+    const saved = x.rep?.lines ?? []
+    setYDraft([...by.values()].map(l => ({ ...l, ...(saved.find(z => z.s === l.s && z.y === l.y) ?? {}), shipped: l.shipped })).map(l => ({ ...l, ff: l.ff ?? l.shipped })))
+    setYOrder(orderId); go('yield')
+  }
+  // grams for each step, and the yields worked out from them
+  const yCalc = (l: YieldLine) => {
+    const ffG = (l.ff ?? 0) * G_PER.lb
+    const hashG = !l.made.hash || l.hashV == null ? null : l.hashU === '%' ? ffG * l.hashV / 100 : l.hashV * G_PER[l.hashU]
+    const rosinG = !l.made.rosin || l.rosinV == null ? null : l.rosinU === '%' ? (hashG == null ? null : hashG * l.rosinV / 100) : l.rosinV * G_PER[l.rosinU]
+    return { ffG, hashG, rosinG, hashPct: hashG != null && ffG > 0 ? hashG / ffG * 100 : null,
+      rosinOfHash: rosinG != null && hashG ? rosinG / hashG * 100 : null, rosinOfFF: rosinG != null && ffG > 0 ? rosinG / ffG * 100 : null }
+  }
+  const pct = (n: number | null) => n == null ? '–' : `${n < 10 ? n.toFixed(2) : n.toFixed(1)}%`
+  const gFmt = (g: number | null) => g == null ? '' : g >= 1000 ? `${(g / 1000).toFixed(2)} kg` : `${Math.round(g).toLocaleString()} g`
+  const yDone = (l: YieldLine) => l.hashV != null || l.rosinV != null
+  async function saveYields(send: boolean) {
+    if (yOrder == null) return
+    const fn = (backend as unknown as { saveYields?: (id: number, lines: YieldLine[], send: boolean) => Promise<void> }).saveYields
+    const ok = await run(async () => { if (fn) await fn.call(backend, yOrder, yDraft, send); return true })
+    if (ok === undefined) return
+    toast(send ? 'Yields sent to Lifted. Thank you!' : 'Saved. You can finish later.'); await reload(); go('yields')
+  }
+
+  function YieldsScreen() {
+    const chipOf = (r: YieldReport | null) => r?.sentAt ? <span className={c('chip c-ok')}>Sent</span> : r?.savedAt ? <span className={c('chip c-wait')}>Draft</span> : <span className={c('chip c-sub')}>To report</span>
+    return (
+      <div className={c('screen ylist')}>
+        <header className={c('hdr')}>{back('home', 'Home')}<h1>Report Yields</h1>
+          <p className={c('sub')}>Tell us how each strain ran: hash and rosin from the fresh frozen you got. It helps us grow better strains for you.</p></header>
+        <main className={c('main')}>
+          {yToDo.length > 0 && <div className={c('note teal')}><b>{plural(yToDo.length, 'order')}</b> waiting for yields. It takes a minute per strain, and you can save and finish later.</div>}
+          <section className={c('card')}>
+            {yOrders.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>Once an order ships, it shows up here.</p>}
+            {yOrders.map(({ o, rep }) => { const ls = o.order!.order_lines, strains = [...new Set(ls.map(l => l.strain))], done = rep?.lines.filter(yDone).length ?? 0
+              return <button key={o.key} className={c('li btnrow')} onClick={() => openYield(o.order!.id)}>
+                <div className={c('grow')}><p className={c('name')}>{o.label} {chipOf(rep)}</p>
+                  <p className={c('meta')}>Shipped {shortDate(o.date)} · {strains.length <= 3 ? strains.join(', ') : `${strains.slice(0, 3).join(', ')} +${strains.length - 3} more`}</p>
+                  {rep && !rep.sentAt && <p className={c('meta')}>{done} of {plural(strains.length, 'strain')} filled in</p>}</div>
+                <span className={c('pillbtn')}>{rep?.sentAt ? 'View / edit' : rep?.savedAt ? 'Finish' : 'Report'}</span></button> })}
+          </section>
+        </main>
+      </div>
+    )
+  }
+
+  function YieldScreen() {
+    const x = yOrders.find(z => z.o.order!.id === yOrder)
+    if (!x) return <div className={c('screen')}><header className={c('hdr')}>{back('yields', 'Report Yields')}<h1>Report yields</h1></header><p className={c('loading')}>Pick an order to report.</p></div>
+    const set = (i: number, p: Partial<YieldLine>) => setYDraft(yDraft.map((l, j) => j === i ? { ...l, ...p } : l))
+    const num = (v: string) => { const t = v.replace(/[^0-9.]/g, ''); return t === '' ? null : Number(t) }
+    const amount = (i: number, l: YieldLine, which: 'hash' | 'rosin') => {
+      const v = which === 'hash' ? l.hashV : l.rosinV, u = which === 'hash' ? l.hashU : l.rosinU
+      return <span className={c('yamt')}>
+        <input type="text" inputMode="decimal" placeholder="0" value={v ?? ''} aria-label={`${l.s} ${which} amount`}
+          onChange={e => set(i, which === 'hash' ? { hashV: num(e.target.value) } : { rosinV: num(e.target.value) })} />
+        <select value={u} aria-label={`${l.s} ${which} unit`} onChange={e => set(i, which === 'hash' ? { hashU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
+          {UNITS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
+    }
+    const stars = (i: number, l: YieldLine) => <span className={c('ystars')} role="radiogroup" aria-label={`${l.s} quality`}>
+      {[1, 2, 3, 4, 5].map(n => <button key={n} type="button" role="radio" aria-checked={l.rating === n} aria-label={`${n} of 5`} className={c(l.rating != null && n <= l.rating ? 'on' : '')}
+        onClick={() => set(i, { rating: l.rating === n ? null : n })}>★</button>)}</span>
+    const filled = yDraft.filter(yDone).length
+    return (
+      <div className={c('screen yform')}>
+        <header className={c('hdr')}>{back('yields', 'Report Yields')}<h1>Yields · {x.o.label}</h1>
+          <p className={c('sub')}>Shipped {shortDate(x.o.date)}. Fill in what you have; leave a strain blank if you haven't run it yet.</p></header>
+        <main className={c('main')}>
+          <p className={c('meta yhint')}>Enter hash and rosin in grams, kg or lbs, or pick <b>%</b> to type the yield: hash % is of the fresh frozen, rosin % is of the hash.</p>
+          {desk && <div className={c('yrow head')}><span>Strain</span><span>Fresh frozen run</span><span>Hash</span><span>Rosin</span><span>Quality</span></div>}
+          {yDraft.map((l, i) => { const k = yCalc(l)
+            return <section key={l.s + l.y} className={c(`card ycard ${yDone(l) ? 'done' : ''}`)}>
+              <div className={c('yrow')}>
+                <div className={c('ystrain')}><p className={c('name')}>{l.s} {tagPill(l.s)} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
+                  <div className={c('ymade')} role="group" aria-label={`What you made from ${l.s}`}>
+                    <label><input type="checkbox" checked={l.made.hash} onChange={e => set(i, { made: { ...l.made, hash: e.target.checked } })} /> Hash</label>
+                    <label><input type="checkbox" checked={l.made.rosin} onChange={e => set(i, { made: { ...l.made, rosin: e.target.checked } })} /> Rosin</label></div></div>
+                <div className={c('yfield')}><span className={c('ylbl')}>Fresh frozen run</span>
+                  <span className={c('yamt')}><input type="text" inputMode="decimal" value={l.ff ?? ''} aria-label={`${l.s} fresh frozen run, lbs`} onChange={e => set(i, { ff: num(e.target.value) })} /><span className={c('yunit')}>lbs</span></span></div>
+                <div className={c(`yfield ${l.made.hash ? '' : 'off'}`)}><span className={c('ylbl')}>Hash</span>
+                  {l.made.hash ? <>{amount(i, l, 'hash')}<span className={c('yres')}>{k.hashPct != null ? <><b>{pct(k.hashPct)}</b> of fresh frozen{l.hashU !== 'g' ? ` · ${gFmt(k.hashG)}` : ''}</> : ' '}</span></> : <span className={c('meta')}>Not made</span>}</div>
+                <div className={c(`yfield ${l.made.rosin ? '' : 'off'}`)}><span className={c('ylbl')}>Rosin</span>
+                  {l.made.rosin ? <>{amount(i, l, 'rosin')}<span className={c('yres')}>{k.rosinOfHash != null || k.rosinOfFF != null ? <>{k.rosinOfHash != null && <><b>{pct(k.rosinOfHash)}</b> of hash</>}{k.rosinOfHash != null && k.rosinOfFF != null ? ' · ' : ''}{k.rosinOfFF != null && <>{pct(k.rosinOfFF)} of FF</>}</> : ' '}</span></> : <span className={c('meta')}>Not made</span>}</div>
+                <div className={c('yfield')}><span className={c('ylbl')}>Quality</span>{stars(i, l)}</div>
+              </div>
+              <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => set(i, { note: e.target.value })} /></label>
+            </section> })}
+        </main>
+        <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>
+          <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || filled === 0} onClick={() => saveYields(true)}>{filled === 0 ? 'Fill in a strain' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>
+      </div>
+    )
+  }
+
   function OrdersScreen() {
     const f = filter
     const list = orows.filter(o => f === 'all' || (f === 'submitted' && o.status === 'submitted') || (f === 'approved' && o.status === 'approved') || (f === 'fulfillment' && o.status === 'fulfillment') || (f === 'shipped' && o.status === 'shipped') || (f === 'unpaid' && o.paid === false) || (f === 'paid' && o.paid === true))
@@ -1399,7 +1523,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => modify(o.order!)}>Modify order</button>
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--red)', flex: 1 }} onClick={() => setConfirmCancel(o)}>Cancel order</button></div>
                   : o.status === 'fulfillment' ? <div className={c('note')} style={{ background: 'var(--ful-bg)', color: 'var(--ful)', fontSize: 13, padding: '10px 12px' }}>Lifted is packing this order, so it can't be changed or cancelled here. Contact your Lifted rep to make changes.</div>
-                  : o.inv ? <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', gap: 8 }} onClick={() => viewInvoice(o)}>{I.doc}View invoice (PDF)</button> : null}
+                  : o.inv || (d?.yields && o.order) ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
+                    {o.inv && <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', gap: 8, flex: 1 }} onClick={() => viewInvoice(o)}>{I.doc}View invoice (PDF)</button>}
+                    {d?.yields && o.order && <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => openYield(o.order!.id)}>{d.yields.find(r => r.orderId === o.order!.id)?.sentAt ? 'View / edit yields' : 'Report yields'}</button>}</div> : null}
               </div>}</div>
           }) : <p className={c('meta')} style={{ padding: 16 }}>Nothing here.</p>}</section>
         </main>
@@ -1498,7 +1624,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   const SCREENS: Record<Screen, () => React.ReactElement> = {
     activity: ActivityScreen, resmenu: ResMenuScreen, home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, reqReview: ReqReviewScreen, sent: SentScreen, menu: MenuScreen,
-    order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen,
+    order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen, yields: YieldsScreen, yield: YieldScreen,
   }
   return (
     <div className={['cp', typing ? 'cp-typing' : '', desk ? 'cp-desk' : ''].filter(Boolean).join(' ')}>

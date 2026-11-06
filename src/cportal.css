@@ -501,3 +501,40 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-rmbar .cp-filters button, .cp-desk .cp-stepset > span { white-space: nowrap; }
 .cp-desk .cp-rmcard .cp-rmbar { flex-wrap: wrap; }
 .cp-desk .cp-rmcard .cp-rmbar .cp-search { margin-left: auto; }
+/* yields (mockup): one card per strain; phones stack the fields, desktop lays them out in columns */
+.cp .cp-ytile { background: var(--teal-tint); border: 1px solid var(--teal); }
+.cp .cp-yhint { margin: 0 4px; font-size: 13px; line-height: 1.45; }
+.cp .cp-ycard { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.cp .cp-ycard.cp-done { box-shadow: inset 0 0 0 1.5px var(--teal); }
+.cp .cp-yrow { display: flex; flex-direction: column; gap: 12px; }
+.cp .cp-ystrain .cp-name { margin: 0; }
+.cp .cp-ystrain .cp-meta { margin: 2px 0 0; }
+.cp .cp-ymade { display: flex; gap: 14px; margin-top: 8px; font-size: 14px; }
+.cp .cp-ymade label { display: inline-flex; align-items: center; gap: 6px; }
+.cp .cp-ymade input { width: 18px; height: 18px; accent-color: var(--teal-dk); }
+.cp .cp-yfield { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 4px; }
+.cp .cp-yfield .cp-yres { grid-column: 2; font-size: 13px; color: var(--muted); min-height: 0; }
+.cp .cp-yfield .cp-yres b { color: var(--teal-ink); }
+.cp .cp-ylbl { font-size: 14px; font-weight: 600; color: var(--ink); }
+.cp .cp-yamt { display: inline-flex; align-items: stretch; height: 44px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; max-width: 220px; }
+.cp .cp-yamt:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-tint); }
+.cp .cp-yamt input { flex: 1; min-width: 0; width: 90px; border: 0; outline: 0; padding: 0 12px; font: inherit; font-size: 16px; text-align: right; font-variant-numeric: tabular-nums; background: transparent; color: var(--ink); }
+.cp .cp-yamt select { border: 0; border-left: 1px solid var(--line); background: #f7f9f6; font: inherit; font-size: 15px; padding: 0 8px; color: var(--ink); outline: 0; }
+.cp .cp-yamt .cp-yunit { display: inline-flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--line); background: #f7f9f6; font-size: 15px; color: var(--muted); }
+.cp .cp-ystars { display: inline-flex; gap: 2px; }
+.cp .cp-ystars button { border: 0; background: none; font-size: 26px; line-height: 1; padding: 2px; color: #d6dbd5; cursor: pointer; }
+.cp .cp-ystars button.cp-on { color: #e2a400; }
+.cp .cp-ynote { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; column-gap: 10px; }
+.cp .cp-ynote input { height: 44px; border-radius: 12px; border: 1px solid var(--line); padding: 0 12px; font: inherit; font-size: 15px; min-width: 0; }
+.cp-desk .cp-yform .cp-main { max-width: 1180px; }
+.cp-desk .cp-yrow { display: grid; grid-template-columns: minmax(150px, 1fr) 112px 190px 190px 132px; column-gap: 14px; align-items: start; }
+.cp-desk .cp-ystars button { font-size: 22px; padding: 1px; }
+.cp-desk .cp-ycard .cp-yamt { width: 100%; }
+.cp-desk .cp-ycard .cp-yamt input { width: 60px; }
+.cp-desk .cp-yrow.cp-head { padding: 0 16px; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: -6px; }
+.cp-desk .cp-ycard .cp-yfield { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cp-desk .cp-ycard .cp-yfield > .cp-ylbl { display: none; }
+.cp-desk .cp-ycard .cp-yamt { max-width: 100%; }
+.cp-desk .cp-ycard .cp-yfield .cp-yres { min-height: 18px; }
+.cp-desk .cp-ynote { grid-template-columns: auto minmax(0, 1fr); }
+.cp-desk .cp-ylist .cp-main { max-width: 900px; }
