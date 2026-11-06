@@ -1122,7 +1122,26 @@ export const ES: Record<string, string> = {
  "This load is finished. The link is closed.": "Esta carga ya terminó. El enlace está cerrado.",
  "Driver": "Chofer",
  "Driver: my loads and stops": "Chofer: mis cargas y paradas",
- "Couldn't deliver": "No se pudo entregar"
+ "Couldn't deliver": "No se pudo entregar",
+ "Driving for {c}": "Manejando para {c}",
+ "To get notifications on iPhone: tap Share, then Add to Home Screen, and open Lifted from the Home Screen.": "Para recibir notificaciones en iPhone: toca Compartir, luego Agregar a inicio, y abre Lifted desde la pantalla de inicio.",
+ "Notifications are blocked for this app. Allow them in the phone settings to get alerts about your loads.": "Las notificaciones están bloqueadas para esta app. Permítelas en los ajustes del teléfono para recibir avisos de tus cargas.",
+ "Get a notification when you're put on a load and when it leaves.": "Recibe una notificación cuando te asignen una carga y cuando salga.",
+ "Turn on notifications": "Activar notificaciones",
+ "Notifications are on for this device.": "Las notificaciones están activadas en este dispositivo.",
+ "Notifications": "Notificaciones",
+ "Delivery alerts, the loads you drive, and alerts for the modules you run.": "Alertas de entregas, las cargas que manejas y alertas de tus módulos.",
+ "Push on this device": "Notificaciones en este dispositivo",
+ "This browser can't show notifications.": "Este navegador no puede mostrar notificaciones.",
+ "Notifications are blocked for this site. Allow them in the browser or phone settings.": "Las notificaciones están bloqueadas para este sitio. Permítelas en los ajustes del navegador o del teléfono.",
+ "Turn off on this device": "Desactivar en este dispositivo",
+ "On for this device": "Activadas en este dispositivo",
+ "Push": "Notificación",
+ "on every device you turned it on for": "en cada dispositivo donde las activaste",
+ "starts once Lifted's email sending is connected": "empieza cuando se conecte el envío de correos de Lifted",
+ "to {p}, once texting is connected": "a {p}, cuando se conecten los mensajes de texto",
+ "add your phone above first": "primero agrega tu teléfono arriba",
+ "Text": "Mensaje de texto"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Production's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

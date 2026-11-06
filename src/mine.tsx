@@ -4,6 +4,8 @@ import { MODULES } from './types'
 import type { Me, ModKey, Prefs, Site } from './types'
 import { applyTheme } from './theme'
 import { LANGS, lang, t } from './i18n'
+import { pushOff, pushOn, pushState } from './push'
+import type { PushState } from './push'
 
 /** Top bar ⚙: your own settings. Nothing here changes anyone else's view. */
 export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; me: Me; flash: (t: string, bad?: boolean) => void; onSaved: (p: Prefs, name: string | null) => void }) {
@@ -64,6 +66,8 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
           {seg(p.start_site ?? 'OHR' as Site, [['OHR', 'OHR'], ['GVR', 'GVR']], v => savePref({ start_site: v }))}</div>}
       </section>
 
+      <NotifySection backend={backend} p={p} busy={busy} savePref={savePref} phone={phone0} />
+
       {lv.sales && <section className="dcard"><h3>{t('Emails')}</h3>
         {lv.sales === 'admin' && <label className="check"><input type="checkbox" disabled={busy} checked={p.notify?.requests !== false}
           onChange={e => savePref({ notify: { ...p.notify, requests: e.target.checked } })} /><span><b>{t('Reserve requests')}</b> <span className="muted">{t('when a customer asks to change a reserve')}</span></span></label>}
@@ -84,4 +88,37 @@ export function MySettings({ backend, me, flash, onSaved }: { backend: Backend; 
       </section>
     </div>
   )
+}
+
+/** 216: alerts (deliveries, your loads, your modules' alerts) by push, email or text */
+function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend; p: Prefs; busy: boolean; savePref: (x: Prefs, msg?: string) => Promise<void>; phone: string }) {
+  const [st, setSt] = useState<PushState | null>(null)
+  const [work, setWork] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  useEffect(() => { pushState().then(setSt).catch(() => setSt('unsupported')) }, [])
+  const sb = backend.client()
+  const nf = (p.notify ?? {}) as Record<string, boolean | undefined>
+  const set = (k: string, v: boolean) => savePref({ notify: { ...p.notify, [k]: v } })
+  async function toggle() {
+    if (!sb) return
+    setWork(true); setMsg(null)
+    try { if (st === 'on') { await pushOff(sb); setSt('off') } else { await pushOn(sb); setSt('on') } }
+    catch (e) { setMsg((e as Error).message) } finally { setWork(false) }
+  }
+  return <section className="dcard"><h3>{t('Notifications')}</h3>
+    <p className="muted">{t('Delivery alerts, the loads you drive, and alerts for the modules you run.')}</p>
+    <div className="field"><label>{t('Push on this device')}</label>
+      {st === 'ios_needs_home' ? <p className="muted small">{t('To get notifications on iPhone: tap Share, then Add to Home Screen, and open Lifted from the Home Screen.')}</p>
+        : st === 'unsupported' ? <p className="muted small">{t("This browser can't show notifications.")}</p>
+        : st === 'blocked' ? <p className="warn-t small">{t('Notifications are blocked for this site. Allow them in the browser or phone settings.')}</p>
+        : <div className="row"><button className={st === 'on' ? 'ghost small' : 'primary small'} disabled={work || !st} onClick={toggle}>{st === 'on' ? t('Turn off on this device') : t('Turn on notifications')}</button>
+            {st === 'on' && <span className="muted small">{t('On for this device')}</span>}</div>}
+      {msg && <p className="neg small">{msg}</p>}</div>
+    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_push !== false} onChange={e => set('alerts_push', e.target.checked)} />
+      <span><b>{t('Push')}</b> <span className="muted">{t('on every device you turned it on for')}</span></span></label>
+    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_email === true} onChange={e => set('alerts_email', e.target.checked)} />
+      <span><b>{t('Email')}</b> <span className="muted">{t('starts once Lifted\'s email sending is connected')}</span></span></label>
+    <label className="check"><input type="checkbox" disabled={busy} checked={nf.alerts_text === true} onChange={e => set('alerts_text', e.target.checked)} />
+      <span><b>{t('Text')}</b> <span className="muted">{phone ? t('to {p}, once texting is connected', { p: phone }) : t('add your phone above first')}</span></span></label>
+  </section>
 }

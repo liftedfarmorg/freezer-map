@@ -111,8 +111,8 @@ function ComingBack({ sb, flash, onChanged }: { sb: SupabaseClient | null; flash
     try {
       const { data, error } = await sb.rpc('receive_returns', { p_ids: use, p_site: st })
       if (error) throw new Error(error.message)
-      const r = data as { received: number; restaged: number }
-      flash(`${r.received} received back at ${st}${r.restaged ? `. ${r.restaged} GVR pallet${r.restaged === 1 ? ' is' : 's are'} staged at OHR again: Move back to GVR or put on a load (Fulfillment)` : ''}`)
+      const r = data as { received: number; restaged: number; ready?: number }
+      flash(`${r.received} received back at ${st}${r.ready ? `. ${r.ready} rescheduled order${r.ready === 1 ? ' is' : 's are'} back to Ready in Fulfillment` : ''}${r.restaged ? `. ${r.restaged} GVR pallet${r.restaged === 1 ? ' is' : 's are'} staged at OHR again: Move back to GVR or put on a load (Fulfillment)` : ''}`)
       setSel(new Set()); onChanged(); await load()
     } catch (e) { flash(e instanceof Error ? e.message : String(e), true) } finally { setBusy(false) }
   }

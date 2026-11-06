@@ -11,6 +11,7 @@ import { PickupForm, PickupPanel, ShipLine, money, rpc } from './ship'
 import { STATE_LABEL, orderGot, orderLbs } from './fulfill'
 import { StopAlerts, StopOutcomeSheet, outcomeText } from './driver'
 import type { DLoad, DStop } from './driver'
+import { kickNotify } from './push'
 
 // Everything the transit screens need from the app, passed in to avoid circular imports.
 export interface LoadCtx {
@@ -560,7 +561,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
         onSave={async p => {
           const { error } = await ctx.api.client()!.rpc('record_stop_outcome', { p_stop: outFor.id, p })
           if (error) throw new Error(error.message)
-          setOutFor(null); loadDl(); await ctx.run(async () => { await ctx.refreshOrders?.() }, 'Outcome saved')
+          setOutFor(null); loadDl(); kickNotify(ctx.api.client()); await ctx.run(async () => { await ctx.refreshOrders?.() }, 'Outcome saved')
         }} />}
       {placeItem && <div className="movebar"><div><b>Moving {ctx.pallet(placeItem.pallet_id)?.code} on the truck</b><div className="muted">Tap a position.</div></div><button className="ghost" onClick={() => setPlaceItem(null)}>Cancel</button></div>}
 

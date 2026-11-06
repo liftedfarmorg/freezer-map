@@ -5,6 +5,8 @@ import { sameTag } from './scanroute'
 import { openMetrcManifest } from './metrcCall'
 import { LANGS, lang, setLang, t } from './i18n'
 import type { Lang } from './i18n'
+import { kickNotify, pushOn, pushState } from './push'
+import type { PushState } from './push'
 
 // Driver portal (215, Msg #239/#242): drivers record what happened at each stop.
 //  * DriverHome: a signed-in driver's loads (driver-only logins land here; app users who drive open it from the Driver button)
@@ -17,7 +19,7 @@ export interface DStop { id: number; seq: number; customer: string; site: string
   status: 'pending' | 'delivered' | 'not_delivered'; outcome: Outcome | null; outcome_reason: string | null; outcome_note: string | null; receiver_name: string | null
   outcome_at: string | null; outcome_by: string | null; outcome_via: string | null; has_photo: boolean; back_started: boolean; packages: DPkg[]; pallets: number }
 export interface DLoad { id: number; code: string; status: string; load_date: string; depart_planned: string | null; departed_at: string | null; driver: string | null; notes: string | null
-  vehicle: string | null; stops: DStop[]; coming_back: number; back_to: string | null; link_driver?: string | null; carrier?: string | null }
+  vehicle: string | null; stops: DStop[]; coming_back: number; back_to: string | null; link_driver?: string | null; carrier?: string | null; driving_for?: string | null }
 export type Outcome = 'delivered' | 'partly_rejected' | 'fully_rejected' | 'not_delivered' | 'dropped_off'
 export type DMode = { kind: 'auth'; sb: SupabaseClient } | { kind: 'link'; sb: SupabaseClient; token: string }
 
@@ -68,7 +70,7 @@ function useQueue(sb: SupabaseClient, onSent: () => void) {
     const now = readQ()
     setQ(now)
     if (e.length) setErrs(x => [...x, ...e])
-    if (now.filter(x => !x.error).length < before) onSent()
+    if (now.filter(x => !x.error).length < before) { onSent(); kickNotify(sb) }
   }, [sb, onSent])
   useEffect(() => {
     flush()
@@ -147,6 +149,7 @@ export function DriverHome({ sb, name, onLang, signOut, embedded }: { sb: Supaba
       <div className="row between wrap"><h2>{t('My loads')}</h2>{embedded && <LangPick onLang={l => { onLang?.(l); bump(x => x + 1) }} />}</div>
       {name && <p className="muted">{t('Signed in as {u}', { u: name })}</p>}
       <QueueBox qu={qu} />
+      <PushBanner sb={sb} />
       {err && <p className="neg">{err}</p>}
       {loads === null ? <p className="muted">{t('Loading…')}</p>
         : !loads.length ? <div className="card"><p className="muted">{t('No loads for you right now. When Distribution puts you on a load as the driver, it shows here.')}</p></div>
@@ -206,11 +209,12 @@ function LoadCard({ l, mode, qu, open: open0 }: { l: DLoad; mode: DMode; qu: Ret
   const done = l.stops.filter(s => s.outcome || s.status !== 'pending' || queuedFor(s)).length
   return <div className="card drv-load">
     <button className="drv-loadhead" onClick={() => setOpen(o => !o)}>
-      <div><b>{l.code}</b> <span className={`pill s-${l.status}`}>{t(STATUS_L[l.status] ?? l.status)}</span>
+      <div><b>{l.code}</b> <span className={`pill s-${l.status}`}>{t(STATUS_L[l.status] ?? l.status)}</span>{l.driving_for && <span className="pill">{l.driving_for}</span>}
         <div className="muted small">{day(l.load_date)}{l.vehicle ? ` · ${l.vehicle}` : ''}{l.departed_at ? ` · ${t('left {d}', { d: when(l.departed_at) })}` : l.depart_planned ? ` · ${t('leaves {d}', { d: when(l.depart_planned) })}` : ''}</div></div>
       <span className="muted">{t('{a} of {b} stops', { a: done, b: l.stops.length })} {open ? '▾' : '▸'}</span>
     </button>
     {open && <>
+      {l.driving_for && <div className="infobox">🚚 {t('Driving for {c}', { c: l.driving_for })}</div>}
       {l.notes && <p className="muted small">{l.notes}</p>}
       {!left && <div className="infobox">{t('Waiting for Distribution to depart this load. You can look at the stops; outcomes open once it leaves.')}</div>}
       {msg && <p className="neg small">{msg}</p>}
@@ -346,4 +350,17 @@ export function StopAlerts({ sb, only }: { sb: SupabaseClient | null; only?: str
       <div className="small"><b>{a.title}</b><div className="muted">{a.body}</div></div>
       <button className="ghost small" onClick={() => sb?.rpc('stop_alert_done', { p_id: a.id }).then(load)}>{t('Done')}</button></div>)}
   </div>
+}
+
+/** "Turn on notifications" for this phone (Driver screen) */
+export function PushBanner({ sb }: { sb: SupabaseClient }) {
+  const [st, setSt] = useState<PushState | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  useEffect(() => { pushState().then(setSt).catch(() => setSt('unsupported')) }, [])
+  if (!st || st === 'on' || st === 'unsupported') return msg ? <p className="muted small">{msg}</p> : null
+  if (st === 'ios_needs_home') return <div className="infobox small">{t('To get notifications on iPhone: tap Share, then Add to Home Screen, and open Lifted from the Home Screen.')}</div>
+  if (st === 'blocked') return <div className="warnbox small">{t('Notifications are blocked for this app. Allow them in the phone settings to get alerts about your loads.')}</div>
+  return <div className="infobox row between wrap" style={{ gap: 8 }}><span>{t('Get a notification when you\'re put on a load and when it leaves.')}</span>
+    <button className="primary small" onClick={() => pushOn(sb).then(() => { setSt('on'); setMsg(t('Notifications are on for this device.')) }).catch(e => setMsg((e as Error).message))}>{t('Turn on notifications')}</button>
+    {msg && <span className="neg small">{msg}</span>}</div>
 }

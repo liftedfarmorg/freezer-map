@@ -86,6 +86,10 @@ export function UsersTab({ backend, me, customers, flash }: {
               login: kind === 'staff' && u.login_kind && u.login_kind !== edit.login_kind ? u.login_kind : null })
             if (kind === 'staff' && (u.prefs?.lang ?? 'en') !== (edit.prefs?.lang ?? 'en')) await backend.setUserLang(u.email!, u.prefs?.lang ?? 'en')
             if ((u.phone ?? '').trim() !== (edit.phone ?? '').trim()) await backend.setUserPhone(u.email!, u.phone ?? '')
+            if (kind === 'staff' && u.driver != null && u.driver !== u.driver0) {
+              const { error } = await backend.client()!.rpc('set_user_driver', { p_email: u.email, p_on: u.driver })
+              if (error) throw new Error(/Could not find the function|schema cache/i.test(error.message) ? 'Saved, but the Driver setting needs 216 in Supabase first' : error.message)
+            }
             await load(); flash('Saved')
             // new customer: keep the card open so the invite link can be made right away
             if (kind === 'customer' && !edit.created_at) setEdit({ ...u, role: 'customer', created_at: new Date().toISOString(), added_by: me.email }); else setEdit(null)
@@ -125,6 +129,12 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
   const run = (f: () => Promise<void>) => { setBusy(true); f().finally(() => setBusy(false)) }
   const external = customers.filter(c => c.active && c.kind === 'external')
   const a = u.access ?? {}
+  // 216: a driver card for this person (Vehicles › Drivers)
+  useEffect(() => {
+    const sb = backend.client(); if (!sb || isNew || !user.email) return
+    sb.from('fleet_drivers').select('id').eq('email', user.email).is('carrier_id', null).eq('active', true).then(({ data, error }) => {
+      if (!error) { const on = (data ?? []).length > 0; setU(v => ({ ...v, driver: on, driver0: on })) } })
+  }, [user.email])
   return (
     <div className="scrim" onClick={onClose}>
       <div className="sheet form" onClick={e => e.stopPropagation()}>
@@ -186,10 +196,12 @@ function UserForm({ user, customers, me, isMe, onClose, onSave, onRemove, backen
                   )
                 })}
               </div>
-              {!MODULES.some(m => a[m.key]) && <p className="warn-t small">With every module off they'll only see a "no modules" message.</p>}
+              {!MODULES.some(m => a[m.key]) && <p className="warn-t small">{u.driver ? 'With every module off they only see the Driver screen (a driver-only login).' : 'With every module off they\'ll only see a "no modules" message.'}</p>}
             </div>
           )}
         </>)}
+        {kind === 'staff' && <label className="check"><input type="checkbox" checked={!!u.driver} disabled={locked} onChange={e => set({ driver: e.target.checked, driver0: u.driver0 ?? false })} />
+          <span><b>Driver</b> <span className="muted">Makes (or links) their card in Vehicles › Drivers. Loads they drive show on their Driver screen. Turning it off makes the card inactive.</span></span></label>}
         {!isNew && !isMe && !user.owner && (iOwn || (!protectedU && (user.role === 'customer' ? myLv.sales === 'admin' : MODULES.some(m => manages(m.key) && (user.access ?? {})[m.key])))) && (
           <div className="field"><label>See what they see</label>
             <div className="row"><button className="ghost small" disabled={busy} onClick={() => run(async () => { await backend.startViewAs(user.email!); location.reload() })}>View as {user.display_name || user.email}</button>

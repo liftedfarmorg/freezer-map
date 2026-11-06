@@ -324,6 +324,10 @@ function DriverSheet({ api, d, x0, flash, onClose, onSaved }: { api: FleetApi; d
   const carrier = d.carriers.find(c => c.id === x.carrier_id)
   const ours = d.assets.filter(a => a.carrier_id == null && a.status !== 'retired' && a.kind !== 'equipment' || (x.asset_ids ?? []).includes(a.id))
   const live = d.drivers.find(r => r.id === x.id)
+  // 216: app users, so a card can be tied to someone's app login (ours, or a carrier card for someone who also drives for us)
+  const [users, setUsers] = useState<{ email: string; name: string; phone: string | null; cards: { id: number; name: string; carrier: string | null; active: boolean }[] | null }[]>([])
+  useEffect(() => { api.sb.rpc('driver_app_users').then(({ data }) => setUsers((data ?? []) as typeof users)) }, [])
+  const known = users.find(u => u.email === (x.email ?? '').trim().toLowerCase())
   async function save() {
     setBusy(true)
     try { const { has_login: _h, ...p } = x as Driver; const id = await api.saveDriver(isCarrier ? { ...p, asset_ids: undefined } : p); if (!x.id) set({ id }); await onSaved(x.id ? 'Saved' : `${x.name} added`) }
@@ -357,7 +361,10 @@ function DriverSheet({ api, d, x0, flash, onClose, onSaved }: { api: FleetApi; d
         {txt('name', 'Name')}
         {!isCarrier && <F label="Department"><Pick value={(x.department ?? 'distribution') as Dept} options={DEPTS.filter(k => d.my_depts.includes(k) || k === x.department).map(k => ({ v: k, l: DEPT_L[k] }))} onChange={v => set({ department: v })} /></F>}
         {txt('phone', 'Phone')}
-        {!isCarrier && txt('email', 'Email', 'their app login', 'name@…')}
+        <F label="App login" hint={isCarrier ? 'if this driver also uses our app (e.g. drives for us too): their loads for this carrier show on their Driver screen' : 'their loads show on their Driver screen'}>
+          <Pick value={known ? known.email : x.email ? '__other' : ''} options={[{ v: '', l: 'None' }, ...users.map(u => ({ v: u.email, l: `${u.name} · ${u.email}${u.cards?.some(c => c.id !== x.id && c.active) ? ` (also ${u.cards.filter(c => c.id !== x.id && c.active).map(c => c.carrier ?? 'our card').join(', ')})` : ''}` })), ...(!isCarrier ? [{ v: '__other', l: 'Someone else (type their email)…' }] : [])]}
+            onChange={v => { if (v === '__other') set({ email: x.email && !known ? x.email : '' }); else { const u = users.find(y => y.email === v); set({ email: v || null, ...(u && !x.name?.trim() ? { name: u.name } : {}), ...(u && !x.phone && u.phone ? { phone: u.phone } : {}) }) } }} /></F>
+        {!isCarrier && !known && x.email != null && txt('email', 'Email', 'for a driver-only login', 'name@…')}
         {txt('license_no', "Driver's license #")}
         {txt('license_class', 'Class', 'C, B, A…')}
         <F label="License expires" hint="shows on Deadlines"><DateIn value={x.license_expires} onChange={v => set({ license_expires: v })} /></F>
