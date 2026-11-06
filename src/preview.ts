@@ -17,7 +17,8 @@ export const READ_ONLY: boolean = (() => {
 })()
 
 // My settings: changes to your own account still work on the preview.
-const OWN_SETTINGS = new Set(['set_my_prefs', 'set_my_name', 'set_my_phone', 'set_user_lang', 'push_subscribe', 'push_unsubscribe'])
+// whoami is the sign-in check: it only stamps your own "last seen" time (the same thing signing in on the live app does).
+const OWN_SETTINGS = new Set(['whoami', 'set_my_prefs', 'set_my_name', 'set_my_phone', 'set_user_lang', 'push_subscribe', 'push_unsubscribe'])
 
 export const PREVIEW_MSG = 'Preview: look only, nothing was saved'
 
