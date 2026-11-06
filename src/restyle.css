@@ -179,3 +179,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .hday-arw { min-width: 40px; font-size: 18px; line-height: 1; }
 .hcard { cursor: pointer; }
 .hcard .hstart { flex: none; margin-left: 8px; }
+
+/* wider content on big screens so full METRC tags fit */
+.app.shell main { max-width: 1480px; }
+.app.shell .cwrap { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--r-shadow); border-radius: 16px; }
+.app.shell .ctable td.small .mtag, .app.shell .ctable .mtag { font-size: 12.5px; }
