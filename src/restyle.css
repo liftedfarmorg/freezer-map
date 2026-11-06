@@ -198,3 +198,4 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .ostat { display: inline-flex; flex-wrap: wrap; margin: 4px 0 10px; }
 .otable tr.open td { background: var(--r-teal-bg); }
 .odetail { border: 0; padding: 4px 0; background: transparent; box-shadow: none; }
+.ctable .nw, .otable .nw { white-space: nowrap; }
