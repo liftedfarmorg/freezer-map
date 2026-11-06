@@ -178,7 +178,9 @@ export interface LinkInfo { kind: 'invite' | 'reset'; email: string; display_nam
 export interface Reserve { id: number; customer_id: number; strain: string; product: string; lbs: number; notes: string | null; updated_by: string | null; updated_at: string; crop_year?: number }
 export interface Balance { id: number; customer_id: number; strain: string; reserved: number; shipped: number; pending: number; remaining: number; crop_year?: number
   /** on submitted orders not yet approved (reserve_balances.submitted) */
-  submitted?: number }
+  submitted?: number
+  /** 227: lbs rejected at Partly rejected stops, back on the reserve (Sales lowers it by hand if needed) */
+  rejected?: number }
 /** reserve crop years: the current crop plus future crops with a request deadline */
 export interface ReserveYears { current: number; years: { year: number; deadline: string | null; open: boolean }[] }
 export interface CustomerTerms { customer_id: number; crop_year: number; price_per_lb: number | null; contract_lbs: number | null; monthly_min_lbs: number | null; deposit_usd: number | null; storage_fee: number | null }

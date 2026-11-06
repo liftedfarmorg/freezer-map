@@ -197,7 +197,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 <tbody>
                   {c.rs.map(r => (
                     <tr key={r.id} className={isAdmin ? 'tap' : ''} onClick={() => isAdmin && setEdit({ customer_id: c.id, strain: r.strain, lbs: String(r.reserved), isNew: false })}>
-                      <td><StrainLink name={r.strain} /></td><td className="num">{n0(Number(r.reserved))}</td><td className="num">{n0(Number(r.shipped))}</td>
+                      <td><StrainLink name={r.strain} /></td><td className="num">{n0(Number(r.reserved))}</td><td className="num">{n0(Number(r.shipped))}{Number(r.rejected ?? 0) > 0 && <div className="small warn-t" title="Rejected at delivery and back on this reserve. Lower the reserve if they shouldn't get these lbs back.">{n0(Number(r.rejected))} rejected, back on reserve</div>}</td>
                       <td className="num">{n0(Number(r.pending))}</td><td className="num"><b>{n0(Number(r.remaining))}</b></td>
                     </tr>
                   ))}
