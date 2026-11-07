@@ -1,7 +1,7 @@
 // Customer portal (redesign, 150): mobile-first home with tiles, Contract Reserves, Open Menu, Place an order,
 // Orders & Statement, My Contract and Sample Holds for You. Layout and behaviour follow the approved prototype
 // (see the project doc customer-portal-redesign-spec.md). Styles live in cportal.css, scoped under .cp.
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import './cportal.css'
 import { downloadStatement } from './statement'
@@ -537,7 +537,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     return (
       <div className={c('screen')}>
         <header className={c('hdr home-hdr')}>
-          <div className={c('top')}><a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a><button className={c('iconbtn')} onClick={() => setAcct(true)} aria-label="Account settings">{I.user}</button></div>
+          <div className={c('top')}><a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a><span className={c('row')} style={{ gap: 8 }}><button className={c('iconbtn')} onClick={openHelp} aria-label="Help & feedback">{I.chat}</button><button className={c('iconbtn')} onClick={() => setAcct(true)} aria-label="Account settings">{I.user}</button></span></div>
           <p className={c('cust')}>{me.customer_name}</p>
           <p className={c('bal')}>{balance ? money2(balance.amount) : '—'}</p>
           {balance && balance.past_due > 0
@@ -664,33 +664,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   // ---------- help & feedback: a note to Lifted (not a ticket; Sales sees them in Sales > Customer feedback) ----------
   const [fb, setFb] = useState<{ kind: 'problem' | 'question' | 'idea'; text: string; sent: boolean } | null>(null)
-  // on desktop the ribbon lines up with the edges of whatever is on the screen above it (tables, cards), not the window
-  const hbRef = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const bar = hbRef.current; const scr = bar?.previousElementSibling as HTMLElement | null
-    if (!bar || !scr) return
-    const fit = () => {
-      if (!desk) { bar.style.marginLeft = ''; bar.style.width = ''; return }
-      let l = Infinity, r = -Infinity
-      for (const el of Array.from(scr.children) as HTMLElement[]) {
-        const b = el.getBoundingClientRect(); if (b.width < 1 || b.height < 1) continue
-        l = Math.min(l, b.left); r = Math.max(r, b.right)
-      }
-      if (!isFinite(l)) { bar.style.marginLeft = ''; bar.style.width = ''; return }
-      const col = bar.parentElement!; const cb = col.getBoundingClientRect(); const pad = parseFloat(getComputedStyle(col).paddingLeft) || 0
-      bar.style.marginLeft = `${Math.round(l - cb.left - pad)}px`; bar.style.width = `${Math.round(r - l)}px`
-    }
-    fit()
-    const ro = new ResizeObserver(fit); ro.observe(scr); ro.observe(bar.parentElement!); for (const el of Array.from(scr.children)) ro.observe(el)
-    return () => ro.disconnect()
-  })
-  const helpButton = () => <div ref={hbRef} className={c('helpbar')}>
-    <span>Something not working, or have a question or idea?</span>
-    <button className={c('btn ghost helpbtn')} onClick={() => setFb({ kind: 'problem', text: '', sent: false })}>{I.chat} Help &amp; feedback</button></div>
+  // which part of the portal they're in, named the way the left menu names it (sent with feedback so the team knows where it came from)
+  const NAV_OF: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', menu: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields', ysent: 'yields' }
+  const NAV_LABEL: Partial<Record<Screen, string>> = { home: 'Home', resmenu: 'Reserves & Menu', yields: 'Yields', holds: 'Sample Holds', orders: 'Orders & Statement', contract: 'My Contract', activity: 'Reserve History', order: 'Place an order' }
+  const navOn = NAV_OF[screen] ?? screen, moduleName = NAV_LABEL[navOn] ?? navOn
+  const openHelp = () => { setAcct(false); setFb({ kind: 'problem', text: '', sent: false }) }
   async function sendFeedback() {
     if (!fb || !fb.text.trim()) return
     const device = `${desk ? 'Desktop' : 'Phone'} · ${navigator.userAgent.slice(0, 160)}`
-    const ok = await run(async () => { const r = await backend.client()?.rpc('send_portal_feedback', { p_kind: fb.kind, p_message: fb.text.trim(), p_screen: screen, p_device: device })
+    const ok = await run(async () => { const r = await backend.client()?.rpc('send_portal_feedback', { p_kind: fb.kind, p_message: fb.text.trim(), p_screen: moduleName, p_device: device })
       if (r?.error) throw new Error(r.error.message); return true })
     if (ok) setFb({ ...fb, sent: true })
   }
@@ -711,7 +693,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <label className={c('field')}>{fb.kind === 'problem' ? 'What happened?' : fb.kind === 'question' ? 'Your question' : 'Your idea'}
             <textarea className={c('fbtext')} rows={5} maxLength={5000} autoFocus value={fb.text} onChange={e => setFb({ ...fb, text: e.target.value })}
               placeholder={fb.kind === 'problem' ? 'What were you trying to do, and what went wrong?' : fb.kind === 'question' ? 'Ask us anything about the portal, your orders or reserves' : 'What would make the portal better for you?'} /></label>
-          <p className={c('meta')} style={{ margin: 0, fontSize: 13 }}>We'll see your name, which screen you were on, and whether you're on a phone or computer.</p>
+          <p className={c('meta')} style={{ margin: 0, fontSize: 13 }}>We'll see your name, that you were in <b>{moduleName}</b>, and whether you're on a phone or computer.</p>
           <div className={c('row')} style={{ gap: 10 }}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => setFb(null)}>Cancel</button>
             <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || !fb.text.trim()} onClick={sendFeedback}>{busy ? 'Sending…' : 'Send to Lifted'}</button></div></>}
       </div></>
@@ -818,14 +800,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function sidebar() {
     const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['yields', 'Yields', !!d?.yields], ['holds', 'Sample Holds', liveHolds.length > 0], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length]]
-    const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields', ysent: 'yields' }
-    const on = group[screen] ?? screen
+    const on = navOn
     return (
       <aside className={c('side')}>
         <a className={c('logolink')} href="https://www.liftedfarms.com" target="_blank" rel="noopener noreferrer" aria-label="Lifted website (opens in a new tab)"><img className={c('logo')} src="/logo-dark.svg" alt="Lifted" /></a>
         <nav aria-label="Portal">{nav.filter(n => n[2]).map(([s0, label]) => <button key={s0} className={c(`nav ${on === s0 ? 'on' : ''}`)} aria-current={on === s0 ? 'page' : undefined} onClick={() => { if (s0 === 'orders') setFilter('all'); go(s0) }}>
           {label}{s0 === 'holds' && <span className={c('chip c-wait')}>{liveHolds.length}</span>}{s0 === 'yields' && yToDo.length > 0 && <span className={c('chip c-wait')}>{yToDo.length}</span>}</button>)}</nav>
         <button className={c(`btn full ${on === 'order' ? 'on' : ''}`)} style={{ marginTop: 18 }} onClick={() => on === 'order' ? undefined : newOrder()}>Place an order</button>
+        <button className={c('nav helpnav')} onClick={openHelp}>{I.chat}<span>Help &amp; feedback</span></button>
         <div className={c('side-acct')}>
           <p style={{ margin: 0, color: '#fff', fontWeight: 600 }}>{me.display_name ?? me.customer_name}</p>
           <p style={{ margin: '2px 0 10px', wordBreak: 'break-all' }}>{me.email}</p>
@@ -1851,6 +1833,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             {pw2.length > 0 && pw !== pw2 && <p className={c('err')} style={{ margin: 0 }}>Passwords don't match</p>}
             <button className={c('btn')} disabled={busy || pw.length < 8 || pw !== pw2}>Change password</button>
           </form>
+          {!desk && <button className={c('btn ghost full helpbtn')} onClick={openHelp}>{I.chat} Help &amp; feedback</button>}
           <button className={c('btn ghost full')} onClick={signOut}>Sign out</button></>}
       </div></>
   }
@@ -1871,7 +1854,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <p className={c('cust')}>{me.customer_name}</p></header>
           <p className={c('loading')}>{loadErr ? <>Couldn't load your account: {loadErr} <button className={c('linkish')} onClick={reload}>Try again</button></> : 'Loading…'}</p></div>
           : desk && screen === 'home' ? DeskHome() : desk && screen === 'order' ? DeskOrderScreen() : SCREENS[screen]()}
-        {d && helpButton()}
       </div>
       {account()}
       {feedbackSheet()}

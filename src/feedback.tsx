@@ -50,7 +50,7 @@ export function FeedbackView({ sb, flash }: { sb: SupabaseClient | null; flash: 
           <div><b>{r.customer ?? 'Unknown customer'}</b> <span className={`pill ${kc}`}>{kl}</span>{seenAt && r.created_at > seenAt && <> <span className="pill m-bad">New</span></>}
             <div className="muted small">{r.user_name ?? r.user_email ?? ''}{r.user_name && r.user_email ? ` · ${r.user_email}` : ''}</div></div>
           <div className="muted small" style={{ textAlign: 'right' }}>{when(r.created_at)}
-            {(r.screen || r.device) && <div>{r.screen ? `on ${SCREEN[r.screen] ?? r.screen}` : ''}{r.screen && r.device ? ' · ' : ''}{r.device ? r.device.split(' · ')[0] : ''}</div>}</div>
+            {(r.screen || r.device) && <div>{r.screen ? `from ${SCREEN[r.screen] ?? r.screen}` : ''}{r.screen && r.device ? ' · ' : ''}{r.device ? r.device.split(' · ')[0] : ''}</div>}</div>
         </div>
         <div style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{r.message}</div>
         {r.user_email && <div className="small" style={{ marginTop: 8 }}><a href={`mailto:${r.user_email}?subject=${encodeURIComponent('Re: your note in the Lifted portal')}`}>Reply by email</a></div>}
