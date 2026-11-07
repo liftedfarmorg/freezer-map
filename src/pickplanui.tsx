@@ -45,8 +45,9 @@ export function PlanMyPick({ orders, cands, loc, pallet, backend, reload, flash,
     cands: cands(l).filter(p => { const L = loc(p); return L.fz != null && !L.staging }) })), [allLines, cands, loc])
   const sites = useMemo(() => {
     const m = new Map<string, number>()
-    for (const l of all) for (const p of l.cands) { const s = loc(p).site; if (s) m.set(s, (m.get(s) ?? 0) + w(p)) }
-    for (const r of held) { const s = loc(r.pallet).site; if (s && !m.has(s)) m.set(s, 0) }
+    // open on the site with the most work: assigned pallets to pull, then free lbs for lines that still need some
+    for (const l of all) for (const p of l.cands) { const s = loc(p).site; if (s) m.set(s, (m.get(s) ?? 0) + (l.need > 0.5 ? Math.min(w(p), l.need) : 0)) }
+    for (const r of held) { const s = loc(r.pallet).site; if (s) m.set(s, (m.get(s) ?? 0) + 1e6) }
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s)
   }, [all, held, loc])
   const [site, setSite] = useState<string | null>(null)
