@@ -503,6 +503,7 @@ export default function App() {
   const isAdminOf = (m: Mod) => lv[MOD_KEY[m]] === 'admin'
   const goMod = (m: Mod) => {
     setModS(m); store('fm.mod', m); setModMenu(false)
+    setNewOrder(false); setPalletId(null)   // Msg 310: a side card left open doesn't follow you to the next module
     if (m === 'cult') setCultTab('dashboard'); else if (m === 'nurs') setNurTab('dashboard'); else if (m === 'acct') setAcctTab('dashboard'); else if (m === 'proc') setProcTab('dashboard'); else if (m === 'comp') setCompTab('dashboard'); else if (m === 'sales') setSalesTab('dash'); else if (m === 'admin') setAdminTab('dash'); else go('dash')
   }
   // signed in: personal settings (theme, where to start, which site)
@@ -918,7 +919,10 @@ export default function App() {
   const MOD_DEPT: Partial<Record<Mod, 'distribution' | 'cultivation' | 'nursery' | 'processing'>> = { dist: 'distribution', cult: 'cultivation', nurs: 'nursery', proc: 'processing' }
   const equipItem: NavItem | null = MOD_DEPT[cur] ? { k: 'fleet', l: cur === 'dist' ? t('Vehicles') : t('Equipment'), on: view === 'fleet' && !inDrv, go: () => go('fleet') } : null
   if (equipItem) NAV[cur].tail.splice(Math.max(0, NAV[cur].tail.findIndex(x => x.k === 'activity')), 0, equipItem)
-  const nav = NAV[cur]
+  // Msg 310: going to another screen closes the app-wide side cards (new order, package) so they don't squeeze the next screen
+  const closeSides = () => { setNewOrder(false); setPalletId(null) }
+  const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); x.go() } })
+  const nav = { ...NAV[cur], main: NAV[cur].main.map(wrapGo), tail: NAV[cur].tail.map(wrapGo) }
   const all = [...nav.main, ...nav.tail]
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
