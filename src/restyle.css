@@ -408,3 +408,27 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .drv .list > .card { border-radius: 16px; padding: 18px 20px; }
 .drv .drv-tabs { max-width: 860px; margin: 0 auto 4px; }
 @media (max-width: 767px) { .app.shell .drv .list { padding: 0 0 12px; } .drv .list > .card { padding: 14px 16px; } }
+/* PICK-2 */
+.pmp-hint { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 7px; background: #fff7e0; color: #6b5200; white-space: nowrap; }
+.pmp-hint.ok { background: var(--r-teal-bg); color: var(--r-teal-ink); }
+.pmp-do.held { background: var(--empty); color: var(--muted); }
+.pmp-chg { min-width: 56px; text-align: right; }
+.pmp-tag { display: inline-block; color: #fff; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 7px; margin-right: 4px; white-space: nowrap; }
+.walk h2 { margin: 2px 0; }
+.walk-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 6px 0 10px; }
+.walk-bar i { display: block; height: 8px; background: var(--brand); }
+.walk-done { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin: 6px 0; }
+.walk-card { border: 2px solid var(--brand); border-radius: 14px; background: var(--panel); padding: 14px; margin: 8px 0; display: flex; flex-direction: column; gap: 10px; }
+.walk-k { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--r-teal-ink); }
+.walk-spot { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.walk-spot b { font-size: 44px; line-height: 1; }
+.walk-spot span { color: var(--muted); }
+.walk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.walk-grid span { display: block; font-size: 12px; color: var(--muted); }
+.walk-grid b { font-size: 17px; }
+.walk-do { background: var(--r-ink); color: #fff; border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 16px; }
+.walk-do.split { background: #fff7e0; color: #6b5200; }
+.walk-act { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.walk-act > * { flex: 1 1 140px; min-height: 52px; font-size: 16px; }
+.walk-alt { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; min-height: 56px; margin-top: 6px; color: var(--ink); }
+.walk-alt > b { min-width: 44px; font-size: 16px; }

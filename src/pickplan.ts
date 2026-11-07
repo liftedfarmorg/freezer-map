@@ -12,6 +12,7 @@ export interface Loc {
   front: number            // 1 = at the door
   side: string             // "Left" / "Right" / ""
   inFront: number[]        // pallet ids between this one and the door (same side)
+  staging?: boolean        // PICK-2: in Staging (left out of Plan my pick)
 }
 export interface PLine { id: number; strain: string; need: number; cands: Pallet[] }
 export type Mode = 'freezers' | 'oldest' | 'splits'
@@ -68,7 +69,7 @@ function score(lines: PLine[], rows: PRow[], loc: (p: Pallet) => Loc): Plan {
 }
 
 /** walk order: freezers in the site's order, door to back inside each */
-export function route(rows: PRow[], loc: (p: Pallet) => Loc): PRow[] {
+export function route<T extends PRow>(rows: T[], loc: (p: Pallet) => Loc): T[] {
   return [...rows].sort((a, b) => {
     const la = loc(a.pallet), lb = loc(b.pallet)
     return la.sort - lb.sort || (la.fz ?? 0) - (lb.fz ?? 0) || la.front - lb.front || la.spot.localeCompare(lb.spot)

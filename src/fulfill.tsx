@@ -20,6 +20,19 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 const isPk = (o: FOrder) => o.stop?.load_kind === 'pickup' || !!o.stop?.load?.startsWith('P-')
 export const STATE_LABEL: Record<string, string> = { open: 'Needs pallets', needs_ok: 'Waiting on Sales', ready: 'Ready to load', loaded: 'On a load', shipped: 'Shipped', cancelled: 'Cancelled', submitted: 'Not confirmed', draft: 'Draft' }
 const GROUPS: FState[] = ['open', 'needs_ok', 'ready', 'loaded', 'shipped']
+/** PICK-2: pallets already assigned to these orders that are still sitting in a freezer (not Staging): they're on the pull route too */
+export function heldInFreezers(os: FOrder[], pal: Map<number, Pallet> | ((id: number) => Pallet | undefined), loc: (p: Pallet) => Loc) {
+  const get = typeof pal === 'function' ? pal : (id: number) => pal.get(id)
+  const out: { lineId: number; pallet: Pallet; lbs: number; whole: boolean; held: true }[] = []
+  for (const o of os) for (const l of o.lines) for (const pk of l.picks) {
+    const p = get(pk.pallet_id)
+    if (!p || p.status !== 'in_freezer' || p.container_id) continue
+    const L = loc(p)
+    if (L.fz == null || L.staging) continue
+    out.push({ lineId: l.id, pallet: p, lbs: Number(pk.lbs), whole: true, held: true })
+  }
+  return out
+}
 const got = (l: FLine) => l.picks.reduce((a, p) => a + Number(p.lbs), 0)
 export const orderLbs = (o: FOrder) => o.lines.reduce((a, l) => a + Number(l.lbs), 0)
 export const orderGot = (o: FOrder) => o.lines.reduce((a, l) => a + got(l), 0)
@@ -160,8 +173,14 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
   for (const l of o.lines) for (const pk of l.picks) { const p = pal.get(pk.pallet_id); const s = p ? (p.status === 'in_transit' ? 'truck' : siteOf(p) ?? '?') : '?'; at.set(s, (at.get(s) ?? 0) + 1) }
   const sites = [...at.keys()].filter(s => s === 'OHR' || s === 'GVR').sort()
   const moving = o.state !== 'shipped' && o.state !== 'loaded'
-  const planBar = o.lines.some(l => !l.cant_fill && Number(l.lbs) - got(l) > 5)
-  if (planning && loc) return <PlanMyPick o={o} cands={freeFor} loc={loc} backend={backend} reload={reload} flash={flash} back={() => { setPlanning(false); scrollTop() }} />
+  // PICK-2: freezers this order already uses (for the notes on + Assign pallets)
+  const orderFz = new Set(loc ? o.lines.flatMap(l => l.picks.map(pk => pal.get(pk.pallet_id))).filter((p): p is Pallet => !!p && p.status === 'in_freezer').map(p => loc(p).fz) : [])
+  const needs = o.lines.some(l => !l.cant_fill && Number(l.lbs) - got(l) > 5)
+  const toPull = loc ? heldInFreezers([o], pal, loc).length : 0
+  const planBar = needs || toPull > 0
+  if (planning && loc) return <PlanMyPick orders={[o]} cands={freeFor} loc={loc} pallet={id => pal.get(id)} backend={backend} reload={reload} flash={flash}
+    back={() => { setPlanning(false); scrollTop() }} title="Plan my pick" sub={o.customer} backLabel={o.so ?? `Order #${o.id}`} walkKey={`pmp-walk:o${o.id}`}
+    held={heldInFreezers([o], pal, loc)} />
   return (
     <div className="list fulfill">
       <button className="ghost small" onClick={back}>‹ Fulfillment</button>
@@ -172,8 +191,8 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
       </div>
       {o.notes && <p className="muted">"{o.notes}"</p>}
       {editable && loc && planBar && <div className="pmp-bar">
-        <div className="grow"><b>{orderGot(o) > 0 ? 'Still needs pallets' : 'Nothing picked yet'}</b><div className="small">Let the app find the rest in as few freezers as it can.</div></div>
-        <button className="primary" onClick={() => { setPlanning(true); scrollTop() }}>Plan my pick ›</button></div>}
+        <div className="grow"><b>{!needs ? `${toPull} assigned pallet${toPull === 1 ? '' : 's'} still in freezers` : orderGot(o) > 0 ? 'Still needs pallets' : 'Nothing picked yet'}</b><div className="small">{needs ? 'Let the app find the rest in as few freezers as it can.' : 'Walk the route to pull them, door to back.'}</div></div>
+        <button className="primary" onClick={() => { setPlanning(true); scrollTop() }}>{needs ? 'Plan my pick ›' : 'Pull route ›'}</button></div>}
       {editable && <p className="muted small-note scanhint">Tap Scan and scan a pallet's tag to assign it to the line it matches.</p>}
       {scanRes && (
         <div className="scrim" onClick={() => setScanRes(null)}>
@@ -224,7 +243,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
                 {g === 0 && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.cantFill(l.id, true), `${l.strain} marked can't fill`)}>Can't fill</button>}</div>}
               {editable && adding === l.id && <Pick line={l} need={Math.max(0, Number(l.lbs) - g)} busy={busy} close={() => setAdding(null)}
                 cands={freeFor(l)}
-                where={where} rank={rank}
+                where={where} rank={rank} loc={loc} orderFz={orderFz}
                 onWhole={p => run(() => backend.pickPallet(l.id, p.id), `${p.code} assigned`).then(() => setAdding(null))}
                 onPart={(p, lbs, tag) => run(() => backend.pickPart(l.id, p.id, lbs, tag), `${n0(lbs)} lbs from ${p.code} assigned. Split it when you pull it.`).then(() => setAdding(null))} />}
             </div>
@@ -315,16 +334,27 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
 }
 
 /** pallets to choose from: ones that cover what's left first (smallest), then front slots first */
-function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart }: {
+function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart, loc, orderFz }: {
   line: FLine; need: number; cands: Pallet[]; where: (p: Pallet) => string; rank: (p: Pallet) => number; busy: boolean; close: () => void
+  loc?: (p: Pallet) => Loc; orderFz?: Set<number | null>
   onWhole: (p: Pallet) => void; onPart: (p: Pallet, lbs: number, tag: string | null) => void
 }) {
   const [part, setPart] = useState<{ p: Pallet; lbs: string; tag: string } | null>(null)
   const w = (p: Pallet) => Number(p.current_weight ?? 0)
+  // PICK-2: freezers this order already goes to come first inside each group
+  const going = (p: Pallet) => loc && orderFz?.size && orderFz.has(loc(p).fz) ? 0 : 1
   const sorted = [...cands].sort((a, b) => {
     const ca = w(a) >= need ? 0 : 1, cb = w(b) >= need ? 0 : 1
-    return ca - cb || (ca === 0 ? w(a) - w(b) : w(b) - w(a)) || rank(a) - rank(b)
+    return ca - cb || going(a) - going(b) || (ca === 0 ? w(a) - w(b) : w(b) - w(a)) || rank(a) - rank(b)
   })
+  const hint = (p: Pallet) => {
+    if (!loc) return null
+    const L = loc(p)
+    if (L.fz == null || L.staging) return null
+    const g = orderFz?.has(L.fz)
+    const t = [orderFz?.size ? (g ? `Already going to ${L.fzLabel.replace(/^\w+ /, '')}` : '+1 freezer') : '', L.inFront.length ? `${L.inFront.length} in the way` : ''].filter(Boolean).join(' · ')
+    return t ? <span className={`pmp-hint ${g ? 'ok' : ''}`}>{t}</span> : null
+  }
   const total = cands.reduce((a, p) => a + w(p), 0)
   // suggestions first; "Show all" lists every free pallet; search or scan to find a particular one
   const [all, setAll] = useState(false)
@@ -341,7 +371,7 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart }: 
   const list = qq ? sorted.filter(hit) : all ? sorted : sorted.slice(0, 5)
   const row = (p: Pallet, on = false) => (
     <div key={p.id} className={`drow ${on ? 'picked' : ''}`}>
-      <span className="grow"><b>{p.code}</b> <span className="muted">{where(p)}{p.package_tag ? ` · ${tagTxt(p.package_tag)}` : ''}</span></span>
+      <span className="grow"><b>{p.code}</b> <span className="muted">{where(p)}{p.package_tag ? ` · ${tagTxt(p.package_tag)}` : ''}</span> {hint(p)}</span>
       <b>{n0(w(p))} lbs</b>
       {need > 0 && w(p) > need && <button className="primary small" disabled={busy} onClick={() => setPart({ p, lbs: String(Math.round(need * 100) / 100), tag: '' })}>Take {n0(need)}</button>}
       {w(p) > 0 && <button className="ghost small" disabled={busy} onClick={() => setPart({ p, lbs: '', tag: '' })}>Part…</button>}
@@ -358,7 +388,7 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart }: 
       {!cands.length && <p className="muted">Nothing free for this strain. Pallets already held for an order, on a load or in a processing run don't show.</p>}
       {chosen && <>{row(chosen, true)}</>}
       {!chosen && <>
-        {!qq && !all && cands.length > 0 && <div className="muted small">Suggested (covers what's left first, then the closest spots)</div>}
+        {!qq && !all && cands.length > 0 && <div className="muted small">Suggested (covers what's left first{orderFz?.size ? ', freezers this order already goes to' : ''}, then the closest spots)</div>}
         {list.map(p => row(p))}
         {qq && !list.length && <p className="muted small">No free {line.strain} pallet matches "{q}". Held, on a load or a different crop year ones don't show.</p>}
         {!qq && sorted.length > 5 && <button className="ghost small" onClick={() => setAll(v => !v)}>{all ? 'Suggestions only' : `Show all ${sorted.length}`}</button>}
