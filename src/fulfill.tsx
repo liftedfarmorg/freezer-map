@@ -65,24 +65,28 @@ export function FulfillView(props: FulfillProps) {
         return (
           <section key={g}>
             <h3 className="grouph">{STATE_LABEL[g]} <span className="muted">{all.length}</span></h3>
-            {os.map(o => {
+            <div className="cwrap settable-w"><table className="ctable settable ftable">
+              <thead><tr><th className="pin">Customer</th><th>Order</th><th className="num">Strains</th><th className="num">Lbs</th>
+                {(g === 'open' || g === 'needs_ok') && <th>Picked</th>}<th>{g === 'shipped' ? 'Shipped' : 'Requested'}</th><th>Load</th><th>Status</th></tr></thead>
+              <tbody>{os.map(o => {
               const want = orderLbs(o), have = orderGot(o)
               const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
               return (
-                <button key={o.id} className="li setrow forder" onClick={() => { setOpenId(o.id); scrollTop() }}>
-                  <div className="grow">
-                    <div><b>{o.customer}</b> <span className="muted">{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? ' · portal' : o.source === 'roshi' ? ' · Roshi' : o.source === 'qbo' ? ' · QuickBooks' : ''}</span></div>
-                    <div className="muted">{o.lines.length} strains · {n0(want)} lbs{o.wanted_date ? <> · <span className={late ? 'bad-t' : ''}>requested delivery {fmt(o.wanted_date)}</span></> : o.order_date ? ` · ordered ${fmt(o.order_date)}` : ''}
-                      {o.stop ? ` · ${o.stop.load} ${fmt(o.stop.load_date)}` : g === 'shipped' && o.shipped_date ? ` · shipped ${fmt(o.shipped_date)}` : ''}</div>
-                    {(g === 'open' || g === 'needs_ok') && <Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} />}
-                  </div>
-                  <span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
+                <tr key={o.id} className="tap" tabIndex={0} onClick={() => { setOpenId(o.id); scrollTop() }} onKeyDown={e => { if (e.key === 'Enter') { setOpenId(o.id); scrollTop() } }}>
+                  <td className="pin"><b>{o.customer}</b></td>
+                  <td>{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? <span className="muted"> · portal</span> : o.source === 'roshi' ? <span className="muted"> · Roshi</span> : o.source === 'qbo' ? <span className="muted"> · QuickBooks</span> : ''}</td>
+                  <td className="num">{o.lines.length}</td>
+                  <td className="num"><b>{n0(want)}</b></td>
+                  {(g === 'open' || g === 'needs_ok') && <td className="fmeter"><Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} /><span className="muted small">{n0(have)} lbs</span></td>}
+                  <td>{g === 'shipped' ? (o.shipped_date ? fmt(o.shipped_date) : <span className="muted">—</span>) : o.wanted_date ? <span className={late ? 'bad-t' : ''}>{fmt(o.wanted_date)}</span> : o.order_date ? <span className="muted">ordered {fmt(o.order_date)}</span> : <span className="muted">—</span>}</td>
+                  <td>{o.stop ? <>{o.stop.load} <span className="muted">{fmt(o.stop.load_date)}</span></> : <span className="muted">—</span>}</td>
+                  <td><span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
                     : g === 'loaded' && o.fill && o.fill !== 'ready' ? `${isPk(o) ? 'Pickup' : 'On a load'} · ${o.fill === 'open' ? 'needs pallets' : 'needs OK'}`
                     : g === 'loaded' && isPk(o) ? 'Customer pickup'
-                    : g === 'shipped' && o.stop?.stop_status === 'delivered' ? 'Delivered' : STATE_LABEL[g]}</span>
-                </button>
+                    : g === 'shipped' && o.stop?.stop_status === 'delivered' ? 'Delivered' : STATE_LABEL[g]}</span></td>
+                </tr>
               )
-            })}
+            })}</tbody></table></div>
             {cut && <button className="ghost small" onClick={() => setAllShipped(true)}>Show all {all.length} shipped</button>}
           </section>
         )
