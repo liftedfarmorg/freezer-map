@@ -531,7 +531,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .app.shell .scrim > .sheet.form.side, .app.shell .scrim > .sheet.side { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border-radius: 0; overflow-y: auto; padding: 20px 24px;
     box-shadow: -10px 0 30px rgb(0 0 0 / .10); border-left: 1px solid var(--line); }
   .app.shell:has(.scrim > .sheet.side) main { padding-right: calc(var(--sidew) + 12px); }
-  .app.shell:has(.scrim > .sheet.side) table.slimmable :is(th, td):not(.slim) { display: none; }
+  .app.shell:has(.scrim > .sheet.side) table.slimmable > :is(thead, tbody, tfoot) > tr > :is(th, td):not(.slim) { display: none; }
   .app.shell:has(.scrim > .sheet.side) table.slimmable { min-width: 0; width: 100%; }
 }
 
@@ -548,7 +548,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 
 /* Msg 300: Customers on a phone: one tidy row per customer (name, balance, ordering), filters scroll sideways */
 @media (max-width: 699px) {
-  .app.shell table.t-customers :is(th, td):not(.slim) { display: none; }
+  .app.shell table.t-customers > :is(thead, tbody) > tr > :is(th, td):not(.slim) { display: none; }
   .app.shell table.t-customers { min-width: 0; width: 100%; }
   .app.shell table.t-customers td { white-space: normal; padding: 12px 10px; }
   .app.shell table.t-customers td.pin { position: static; box-shadow: none; }
