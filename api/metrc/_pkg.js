@@ -1,6 +1,6 @@
 // Package senders: weight adjustments, splits, combines, finish (used up), tag and hand-made package checks, ship checks.
 import {
-  LB, Skip, Wait, all, cached, db, enc, inputs, itemId, lc, locationFrom, one, packageAnywhere, packageByTag, pallet, r4, reasonFrom, setting,
+  LB, Skip, Wait, all, rpc, cached, db, enc, inputs, itemId, lc, locationFrom, one, packageAnywhere, packageByTag, pallet, r4, reasonFrom, setting,
   tagIdFor, tol, up, write, ymd, adjustReasons,
 } from './_core.js'
 
@@ -82,6 +82,8 @@ export async function sendSplit(job, ctx) {
   const d = job.details || {}
   const child = await pallet(job.pallet_id)
   if (!child) throw new Error('The new piece is gone from the app')
+  // merged into a combine before it had a tag (233): the combine takes these lbs straight from the parent, no split
+  if (child.merged_into && !child.package_tag) throw new Skip(`Not needed: ${child.code} went into a combine before it had a tag; METRC takes it straight from the parent`)
   if (!child.package_tag) throw new Wait(`${child.code} has no METRC tag yet (tag pending). Set the tag, then send.`)
   const tag = up(child.package_tag)
   if (await packageByTag(job.license, tag)) throw new Skip(`METRC already has ${tag}`)
@@ -166,14 +168,29 @@ export async function sendCombine(job, ctx) {
   const tag = up(m.package_tag)
   if (await packageByTag(job.license, tag)) throw new Skip(`METRC already has ${tag}`)
   // whole pallets merged in (emptied and finished), and pieces taken off pallets that stay (Fulfillment's combine for an order)
-  const whole = await db(`pallets?merged_into=eq.${m.id}&select=id,code,package_tag,current_weight&order=code`) ?? []
+  const whole = await db(`pallets?merged_into=eq.${m.id}&select=id,code,package_tag,current_weight,parent_id&order=code`) ?? []
   const cut = await db(`events?type=eq.combine_part&details->>into_id=eq.${m.id}&select=pallet_id,lbs&order=id`) ?? []
   const cutPallets = cut.length ? await db(`pallets?id=in.(${[...new Set(cut.map(e => e.pallet_id))].join(',')})&select=id,code,package_tag,current_weight`) ?? [] : []
   if (!whole.length && !cut.length) throw new Error('No source packages found for this combine')
   const t = await tol()
   const sources = [], names = []
+  const folded = []   // pieces merged before they had a tag (233): METRC takes their lbs straight from the parent package
   for (const s of whole) {
-    if (!s.package_tag) throw new Error(`${s.code} has no METRC tag in the app`)
+    if (!s.package_tag) {
+      const par = s.parent_id ? await pallet(s.parent_id) : null
+      if (!par?.package_tag) throw new Error(`${s.code} has no METRC tag in the app`)
+      const sp = await db(`comp_metrc_actions?select=id,push_state,status,push_request&kind=eq.split&pallet_id=eq.${s.id}&order=id.desc&limit=1`) ?? []
+      // really split in METRC = sent WITH a request; a skip ("not needed") or a closed to-do is sent with no request
+      if ((sp[0]?.push_state === 'sent' && sp[0]?.push_request) || sp[0]?.push_state === 'sending') throw new Error(`${s.code} was already split off ${par.code} in METRC but has no tag in the app. Set ${s.code}'s tag, then send.`)
+      const p = await packageByTag(job.license, par.package_tag)
+      if (!p) throw new Error(`${up(par.package_tag)} (${par.code}, where ${s.code} came from) isn't an active package on ${job.license} in METRC`)
+      lbsOnly(p, par.package_tag)
+      const take = r4(s.current_weight ?? 0)
+      if (!(take > 0)) throw new Error(`${s.code} has no weight`)
+      folded.push({ tag: par.package_tag, p, take, par, piece: s, split: sp[0]?.id ?? null })
+      names.push(`${s.code} (${take} lb off ${par.code})`)
+      continue
+    }
     const p = await packageByTag(job.license, s.package_tag)
     if (!p) throw new Error(`${up(s.package_tag)} (${s.code}) isn't an active package on ${job.license} in METRC`)
     lbsOnly(p, s.package_tag)
@@ -198,14 +215,31 @@ export async function sendCombine(job, ctx) {
     sources.push({ tag: s.package_tag, p, take: finish ? r4(p.quantity) : take, finish })
     names.push(`${s.code} (${take} lb)`)
   }
+  // folded pieces: one ingredient per parent package (two pieces off the same pallet add up); a parent the app has at 0
+  // with METRC holding about what's taken is emptied and finished
+  for (const f of folded) {
+    const hit = sources.find(x => up(x.tag) === up(f.tag))
+    if (hit) { hit.take = r4(hit.take + f.take); continue }
+    sources.push({ tag: f.tag, p: f.p, take: f.take, finish: false, par: f.par })
+  }
+  for (const x of sources) {
+    if (!x.par) continue
+    if (r4(x.p.quantity) + t < x.take) throw new Error(`METRC has only ${x.p.quantity} lb in ${up(x.tag)} (${x.par.code}); the combine takes ${x.take} lb from it. Fix ${x.par.code}'s weight first.`)
+    if (Number(x.par.current_weight ?? 1) <= 0.0001 && Math.abs(r4(x.p.quantity) - x.take) <= t) { x.take = r4(x.p.quantity); x.finish = true }
+  }
   const items = [...new Set(sources.map(s => itemId(s.p)))]
   if (items.length > 1) throw new Error(`The sources are different METRC items (${[...new Set(sources.map(s => s.p.item?.name))].join(' / ')}). Combine them by hand.`)
   const units = [...new Set(sources.map(s => s.p.unitOfMeasureId))]
   if (units.length > 1) throw new Error('The sources are in different units in METRC. Combine them by hand.')
-  return createFromPackages(ctx, job, {
+  const r = await createFromPackages(ctx, job, {
     tag, qty: r4(m.og_weight ?? m.current_weight), item: items[0], sources,
     note: `Lifted app combine: ${m.code} from ${names.join(', ')}`,
   })
+  // the folded pieces' split to-dos aren't needed any more (233 closes them when merged; this catches any left open)
+  const open = folded.map(f => f.split).filter(Boolean)
+  if (ctx.live && open.length) await rpc('metrc_close_siblings', { p_ids: open, p_by: ctx.by ?? null, p_note: `Not needed: taken straight from the parent in combine ${m.code}` }).catch(() => {})
+  if (folded.length) r.info += ` · ${folded.map(f => `${f.piece.code} taken straight from ${f.par.code}`).join(', ')}`
+  return r
 }
 
 // ---------- Remove: used up (adjust to 0 and finish) ----------

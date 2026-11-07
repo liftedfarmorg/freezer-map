@@ -522,7 +522,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
           const waiting = canEdit && s.status === 'pending' && c?.kind === 'external' ? notLoaded(ctx, s.customer_id) : []
           const top = (id: number) => ctx.pallet(id)?.container_id ?? id
           const mine = new Set(sOrders.flatMap(palletIds).flatMap(id => [id, top(id)]))
-          const loose = c?.kind === 'external' ? its.filter(i => !mine.has(i.pallet_id)).length : 0
+          const loose = c?.kind === 'external' && ['planning', 'loading', 'departing'].includes(l.status) ? its.filter(i => !mine.has(i.pallet_id)).length : 0
           const carrying = site ? [...new Set(its.map(i => ctx.held(i.pallet_id)).filter((x): x is string => !!x))] : []
           return (
             <div key={s.id} className={`stopcard ${s.status}`} style={{ ['--sc' as string]: stopColor(s.seq) }}>
@@ -553,10 +553,12 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
               <div className="muted">{its.length} pallet{its.length === 1 ? '' : 's'} · {lbs(w)}</div>
               {(() => { const ds = dl?.stops.find(x => x.id === s.id); if (!ds || !ds.outcome) return null
                 const back = ds.packages.filter(p => p.back)
+                // everything off this stop is back in inventory (Receive back done): say so instead of "coming back"
+                const allBack = ds.back_started && its.every(i => { const p = ctx.pallet(i.pallet_id); return !!p && (p.status === 'in_freezer' || p.status === 'unslotted') })
                 return <div className="small-note stop-outcome">
                   {ds.receiver_name ? <>Received by <b>{ds.receiver_name}</b> · </> : ''}{ds.outcome_by}{ds.outcome_via === 'office' ? ' (office)' : ds.outcome_via === 'link' ? '' : ' (driver)'}{ds.outcome_at ? ` · ${new Date(ds.outcome_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
                   {ds.outcome_note && <div>Note: {ds.outcome_note}</div>}
-                  {back.length > 0 && <div className="warn-t">↩ {back.length} coming back{ds.back_started ? ' (receiving started)' : ''}: {back.map(p => `${p.code}${p.reason ? ` (${p.reason.replace('_', ' ')})` : ''}`).join(', ')}</div>}
+                  {back.length > 0 && <div className="warn-t">↩ {back.length} {allBack ? 'received back' : `coming back${ds.back_started ? ' (receiving started)' : ''}`}: {back.map(p => `${p.code}${p.reason ? ` (${p.reason.replace('_', ' ')})` : ''}`).join(', ')}</div>}
                   {ds.has_photo && <button className="ghost small" onClick={() => rpc<string | null>(ctx.api.client(), 'stop_photo', { p_stop: s.id }, '215_driver_portal').then(u => { if (u) { const w = window.open(); if (w) w.document.write(`<img src="${u}" style="max-width:100%">`) } }).catch(e => ctx.run(() => Promise.reject(e), ''))}>📷 Photo</button>}
                 </div> })()}
               {(sOrders.length > 0 || waiting.length > 0 || loose > 0 || carrying.length > 0) && <div className="stoporders">
@@ -639,10 +641,13 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
                   const p = ctx.pallet(i.pallet_id)
                   const s = stopOf(i.stop_id)
                   return (
-                    <span key={i.id} className={`titem ${s?.status === 'delivered' ? 'done' : ''}`} style={{ ['--sc' as string]: stopColor(s?.seq ?? 1) }}>
+                    <span key={i.id} className={`titem ${s?.status === 'delivered' || l.status === 'delivered' ? 'done' : ''}`} style={{ ['--sc' as string]: stopColor(s?.seq ?? 1) }}>
                       <b>{p?.code}</b> <span className="tstop">{s?.seq}</span>{here.length > 1 && <span className="tlayer">{i === here[0] ? 'top' : i === here[here.length - 1] ? 'bottom' : 'middle'}</span>}
                       <span className="strain">{p ? label(ctx, p) : ''}</span>
-                      <span className="w">{p ? lbs(ctx.weight(p)) : ''} · {s?.status === 'delivered' ? '✓ delivered' : i.loaded ? '✓ on truck' : p ? ctx.freezerSpot(p.slot_id) : ''}</span>
+                      <span className="w">{p ? lbs(ctx.weight(p)) : ''} · {p && (p.status === 'in_freezer' || p.status === 'unslotted') && (s?.status === 'delivered' || l.status === 'delivered')
+                          ? `${s?.status === 'delivered' ? '✓' : '↩'} ${p.slot_id ? ctx.freezerSpot(p.slot_id) : 'needs a spot'}${(() => { const h = ctx.held(p.id) ?? ctx.contents(p.id).map(x => ctx.held(x.id)).find(Boolean); return h ? ` · ${h.split(' · ')[0]}` : '' })()}`
+                        : s?.status === 'delivered' ? `✓ ${ctx.customers.find(c => c.id === s.customer_id)?.name ?? 'delivered'}`
+                        : i.loaded ? '✓ on truck' : p ? ctx.freezerSpot(p.slot_id) : ''}</span>
                     </span>
                   )
                 })}
@@ -766,7 +771,16 @@ function PositionSheet({ ctx, load, pos, items: raw, stops, onClose, onMove, onS
             <div key={i.id} className="mixline">
               <div className="row between">
                 <div>{items.length > 1 && <span className="tlayer">{k === 0 ? 'top' : k === items.length - 1 ? 'bottom' : 'middle'}</span>} <a onClick={() => { onClose(); ctx.openPallet(p.id) }}><b>{p.code}</b></a> {label(ctx, p)} <span className="muted">· {lbs(ctx.weight(p))}</span></div>
-                <span className={`pill ${i.loaded ? 's-in_transit' : 's-planning'}`}>{i.loaded ? 'On truck' : 'Planned'}</span>
+                {(() => {
+                  // after the load left: the stop's outcome, not the truck plan
+                  const st = stops.find(x => x.id === i.stop_id)
+                  const spot = p.slot_id != null ? ctx.freezerSpot(p.slot_id) : 'Needs a spot'
+                  const here = p.status === 'in_freezer' || p.status === 'unslotted'
+                  // received at our site: where it is now (e.g. GVR Staging · 18); came back: same, marked back
+                  if (st?.status === 'delivered') return <span className="pill s-delivered">{here ? `✓ ${spot}` : 'Delivered'}</span>
+                  if (load.status === 'delivered' && here) return <span className="pill s-back">↩ {spot}</span>
+                  return <span className={`pill ${i.loaded ? 's-in_transit' : 's-planning'}`}>{i.loaded ? 'On truck' : 'Planned'}</span>
+                })()}
               </div>
               {!i.loaded && <div className="muted">Pull from {p.slot_id != null ? ctx.freezerSpot(p.slot_id) : ctx.where(p)}</div>}
               {canEdit && (

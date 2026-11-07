@@ -431,7 +431,10 @@ export default async function handler(req, res) {
     }
     let closed = 0
     try { closed = await rpc('metrc_autoclose', {}) } catch { /* 071 missing */ }
-    return send(res, 200, { done: results.every(r => r.complete), closed, results, ms: Date.now() - t0 })
+    // 225: rejected / accepted packages in METRC vs what the driver recorded at each stop (alerts once per finding)
+    let flagged = 0
+    try { flagged = await rpc('metrc_stop_check', {}) } catch { /* 225 missing */ }
+    return send(res, 200, { done: results.every(r => r.complete), closed, flagged, results, ms: Date.now() - t0 })
   } catch (e) {
     return send(res, 500, { error: String(e.message || e) })
   }
