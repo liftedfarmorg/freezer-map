@@ -275,7 +275,7 @@ function Walk({ walk, save, pallet, loc, altsFor, chip, busy, lineOf, tol, close
             <div className="small" style={{ marginTop: 8 }}><b>Pick another</b></div>
             {altsFor(swapRow.lineId, swapRow.lbs, new Set(rows.map(r => r.id)), new Set(left.filter(r => r.id !== swapRow.id).map(r => loc(r.p).fz))).slice(0, 5).map(a => (
               <button key={a.p.id} className="walk-alt" onClick={() => doSwap(a.p)}>
-                <b>{a.L.spot}</b><span className="grow"><b>{a.p.code}</b> · {n0(w(a.p))} lbs<span className={`small ${a.same ? 'ok-t' : 'warn-t'}`}> {a.text}</span></span><span aria-hidden="true">›</span>
+                <b>{a.L.spot}</b><span className="grow"><b>{a.p.code}</b> · {a.L.fzLabel.replace(/^\w+ /, '')} · {n0(w(a.p))} lbs<span className={`small ${a.same ? 'ok-t' : 'warn-t'}`}> {a.text}</span></span><span aria-hidden="true">›</span>
               </button>))}
             <div className="muted small" style={{ marginTop: 6 }}>Or scan a different {lineOf(swapRow.lineId)?.strain} pallet off the shelf: close this and use + Assign pallets on the order.</div>
           </div>
