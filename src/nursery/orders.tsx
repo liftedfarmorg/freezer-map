@@ -28,7 +28,7 @@ export function OrdersTab({ d, c, q, onOpen, onNew }: { d: NData; c: NCtx; q: st
       <div className="seg">{([['open', `${t('Open')} (${open.length})`], ['done', t('Delivered / cancelled')], ['all', t('All')]] as const).map(([k, l]) => <button key={k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>{l}</button>)}</div>
       <button className="primary" onClick={onNew}>{t('+ New order')}</button>
     </div>
-    {f === 'open' && <p className="muted small-note">{t('Production\'s nursery deliveries for {sites} show up here by themselves. Add orders for outside farms with New order.', { sites: d.sites.map(s => s.code).join(', ') })}</p>}
+    {f === 'open' && <p className="muted small-note">{t('Cultivation\'s nursery deliveries for {sites} show up here by themselves. Add orders for outside farms with New order.', { sites: d.sites.map(s => s.code).join(', ') })}</p>}
     {!rows.length ? <p className="muted">{t('No orders here.')}</p> : <div className="cwrap"><table className="ctable">
       <thead><tr><th>{t('Deliver')}</th><th>{t('Strain')}</th><th>{t('To')}</th><th className="num">{t('Plants')}</th><th className="num">{t('Delivered')}</th><th className="num hide-s">{t('Cut')}</th><th className="hide-s">{t('SO')}</th><th>{t('Status')}</th></tr></thead>
       <tbody>{rows.map(o => (
@@ -80,10 +80,10 @@ export function OrderSheet({ d, c, o: o0, customers, terms, api, flash, isAdmin,
           <span>{t('Price')}</span><b>{money(price)} {t('each')} · {money(price * (o0.plants ?? 0))}</b>
           <span>{t('Terms')}</span><b>{terms.find(t => t.code === (o0.payment_terms ?? d.settings.terms))?.label ?? o0.payment_terms ?? d.settings.terms}</b>
           {o0.po_number && <><span>{t('PO')}</span><b>{o0.po_number}</b></>}
-          {o0.plan_id && <><span>{t('From')}</span><b>{t('Production plan')}</b></>}
+          {o0.plan_id && <><span>{t('From')}</span><b>{t('Cultivation plan')}</b></>}
         </div>
         {o0.notes && <p className="muted">{o0.notes}</p>}
-        {o0.status === 'planned' && <p className="muted">{t('Production has this planned but hasn\'t ordered it yet. Confirm it to give it an SO number and start cutting.')}</p>}
+        {o0.status === 'planned' && <p className="muted">{t('Cultivation has this planned but hasn\'t ordered it yet. Confirm it to give it an SO number and start cutting.')}</p>}
         <div className="row wrap docact">
           {c.isOpen(o0 as NOrder) && <button className="primary" disabled={busy} onClick={() => setDeliver(true)}>{t('Deliver…')}</button>}
           {(o0.status === 'planned' || o0.status === 'ordered') && <button className="ghost" disabled={busy} onClick={() => run(() => api.setStatus(o0.id!, 'confirmed'), t('Confirmed'), false)}>{t('Confirm')}</button>}
@@ -98,7 +98,7 @@ export function OrderSheet({ d, c, o: o0, customers, terms, api, flash, isAdmin,
             {vs.some(z => z.batch_id) ? ` · ${vs.map(z => d.batches.find(b => b.id === z.batch_id)?.name ?? (z.batch_id ? `${t('batch')} ${z.batch_id}` : t('no batch'))).join(', ')}` : ''}
             {v.manifest ? ` · ${t('manifest')} ${v.manifest}` : ` · ${t('no manifest')}`}</span></span>
             {v.invoice_id && <button className="ghost small" onClick={() => onDoc('invoice', v.invoice_id!)}>{t('Invoice')}</button>}
-            {isAdmin && <button className="ghost small" disabled={busy} title={t('Entered by mistake')} onClick={() => { if (confirm(t('Take back this delivery? Its invoice is voided and the plants come off Production\'s received list.'))) run(() => api.undoDelivery(r), t('Delivery taken back'), false) }}>{t('Undo')}</button>}
+            {isAdmin && <button className="ghost small" disabled={busy} title={t('Entered by mistake')} onClick={() => { if (confirm(t('Take back this delivery? Its invoice is voided and the plants come off Cultivation\'s received list.'))) run(() => api.undoDelivery(r), t('Delivery taken back'), false) }}>{t('Undo')}</button>}
           </div>
         })}</div></>}
       </>}
@@ -121,7 +121,7 @@ export function OrderSheet({ d, c, o: o0, customers, terms, api, flash, isAdmin,
           {d.sites.length > 1 && <F label={t('Nursery')}><Pick value={x.nursery_site} options={d.sites.map(s => ({ v: s.code, l: s.name }))} onChange={v => set({ nursery_site: v ?? undefined })} /></F>}
         </div>
         <F label={t('Notes')}><TextIn value={x.notes} onChange={v => set({ notes: v })} /></F>
-        {!isNew && o0.plan_id && <p className="muted small-note">{t('This came from Production\'s plan. Changes here show up there too.')}</p>}
+        {!isNew && o0.plan_id && <p className="muted small-note">{t('This came from Cultivation\'s plan. Changes here show up there too.')}</p>}
         <SaveBar busy={busy} disabled={!x.strain?.trim() || !(Number(x.plants) > 0) || (!x.site && !x.customer_id)} saveLabel={isNew ? t('Add order') : t('Save')}
           onCancel={() => (isNew ? onClose() : (setX(o0), setEdit(false)))}
           onSave={() => run(() => api.saveOrder({ id: x.id, nursery_site: x.nursery_site ?? d.sites[0]?.code, site: x.site ?? null, customer_id: x.customer_id ?? null, strain: x.strain!.trim(), plants: Number(x.plants),
@@ -161,7 +161,7 @@ function DeliverSheet({ d, c, o, api, flash, onClose, onDone }: { d: NData; c: N
         if (sh.undone) throw new Error(`METRC didn't take the transfer, so nothing shipped: ${sh.error}`)
         extra = sh.sent ? (sh.live ? ' · METRC transfer made' : ' · METRC dry run OK') : sh.info ? ` · ${sh.info}` : sh.error ? ` · METRC transfer not made yet (${sh.error}); it's on the to-do list` : ''
       }
-      await onDone(`${t('{n} plants delivered', { n: n0(r.plants) })}${r.invoice ? ` · ${r.invoice}` : ''}${extra}${o.site ? `. ${o.site} counts them in Production › Receiving.` : ''}`, r.invoice_id)
+      await onDone(`${t('{n} plants delivered', { n: n0(r.plants) })}${r.invoice ? ` · ${r.invoice}` : ''}${extra}${o.site ? `. ${o.site} counts them in Cultivation › Receiving.` : ''}`, r.invoice_id)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
   return (
@@ -182,7 +182,7 @@ function DeliverSheet({ d, c, o, api, flash, onClose, onDone }: { d: NData; c: N
       <F label={t('Notes')}><input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('Optional')} /></F>
       <p className="muted small-note">{t('Sending {n} of {owed} owed', { n: n0(total), owed: n0(owed) })}{d.settings.deliverPct ? ` (${t('aim: order + {p}%', { p: d.settings.deliverPct })})` : ''}.{' '}
         {t('This makes the invoice from {who}', { who: d.licenses.find(l => l.license_no === d.sites.find(s => s.code === o.nursery_site)?.license)?.entity ?? t('the nursery') })}
-        {o.site ? t(' and adds the plants to {site}\'s received list in Production.', { site: o.site }) : '.'}</p>
+        {o.site ? t(' and adds the plants to {site}\'s received list in Cultivation.', { site: o.site }) : '.'}</p>
       {over && <p className="warn-t">{over.name ?? `#${over.id}`} {t('only has {n} left.', { n: n0(c.left(over)) })}</p>}
       <SaveBar busy={busy} disabled={total <= 0 || !!over} saveLabel={t('Deliver {n}', { n: n0(total) })} onCancel={onClose} onSave={save} />
     </Sheet>

@@ -52,7 +52,7 @@ export function TestRows({ sb, palletId, flash }: { sb: SupabaseClient | null; p
       {(x.total_thc != null || x.total_cannabinoids != null || x.moisture != null) && <div className="small">
         {[x.total_thc != null && `THC ${num(x.total_thc)}`, x.total_cannabinoids != null && `Total cannabinoids ${num(x.total_cannabinoids)}`, x.moisture != null && `Moisture ${num(x.moisture)}`].filter(Boolean).join(' · ')}</div>}
       {x.files.length > 0 ? <div className="trace-files">{x.files.map(f => <FileChip key={f.id} api={api} f={f} flash={flash} />)}</div>
-        : <div className="muted small">No results file yet (Production › Testing).</div>}
+        : <div className="muted small">No results file yet (Cultivation › Testing).</div>}
     </>}</dd>
     {t.docs.length > 0 && <><dt>COA / docs</dt><dd><div className="trace-files">{t.docs.map(f => <FileChip key={f.id} api={api} f={f} flash={flash} />)}</div></dd></>}
   </>

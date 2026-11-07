@@ -13,4 +13,5 @@ const demoData = {
   },
 }
 
-export default defineConfig({ plugins: [react(), demoData] })
+// Look-only preview (Msg #264): Vercel sets VERCEL_ENV=preview on branch builds; src/preview.ts reads it.
+export default defineConfig({ plugins: [react(), demoData], define: { __VERCEL_ENV__: JSON.stringify(process.env.VERCEL_ENV ?? '') } })

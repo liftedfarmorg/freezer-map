@@ -1,3 +1,4 @@
+import { tagTxt } from './mtag'
 import { Select } from './combo'
 import { Scanner } from './scan'
 import { routeScan, sameTag } from './scanroute'
@@ -22,6 +23,7 @@ import type { Jump } from './admin'
 import { DeadlinesPanel, SalesDashboard, SalesReview } from './salesdash'
 import { MySettings } from './mine'
 import { ContractProductPrices, DocSheet, InvoicesView, MarketPricePanel, NewOrderSheet, SharedDocPage, TermsPanel } from './invoices'
+import type { Loc } from './pickplan'
 import { FulfillView, STATE_LABEL } from './fulfill'
 import { applyTheme } from './theme'
 import { money } from './docs'
@@ -54,6 +56,7 @@ import { LicensesPanel, PURPOSE_LABEL } from './licenses'
 import { TestRows } from './comp/trace'
 import { PackageActions } from './pkgactions'
 import { MetrcWeightRow } from './comp/metrcweight'
+import { CatListPanel, DEFAULT_CATEGORIES, DEFAULT_NURSERIES, NURSERIES_KEY, PRODUCT_CATEGORIES_KEY } from './catlists'
 import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
@@ -79,21 +82,21 @@ const AccountingView = lazy(() => import('./acct/AccountingView'))
 const ProcessingView = lazy(() => import('./proc/ProcessingView'))
 const ComplianceView = lazy(() => import('./comp/ComplianceView'))
 
-type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'driver' | 'inbound' | 'archived' | 'items'
+type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'driver' | 'inbound' | 'archived' | 'items' | 'customers'
 // modules: each person has a level (User / Admin) per module; Owners have all of them (Admin > Settings > Users)
 type Mod = 'dist' | 'sales' | 'cult' | 'nurs' | 'proc' | 'acct' | 'comp' | 'admin'
 const MOD_KEY: Record<Mod, ModKey> = { dist: 'distribution', sales: 'sales', cult: 'cultivation', nurs: 'nursery', proc: 'processing', acct: 'accounting', comp: 'compliance', admin: 'admin' }
 const KEY_MOD: Record<ModKey, Mod> = { distribution: 'dist', sales: 'sales', cultivation: 'cult', nursery: 'nurs', processing: 'proc', accounting: 'acct', compliance: 'comp', admin: 'admin' }
 /** Admin > Settings: every module's settings in one place */
-const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distribution'], ['sales', 'Sales'], ['cult', 'Production'], ['nurs', 'Nursery'], ['proc', 'Processing'], ['acct', 'Accounting'], ['comp', 'Compliance']]
-const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Production', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
+const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distribution'], ['sales', 'Sales'], ['cult', 'Cultivation'], ['nurs', 'Nursery'], ['proc', 'Processing'], ['acct', 'Accounting'], ['comp', 'Compliance']]
+const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Cultivation', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
-type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings'
-type AdminTab = 'dash' | 'review' | 'activity' | 'settings'
+type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'review' | 'activity' | 'settings' | 'customers'
+type AdminTab = 'dash' | 'customers' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
-const MOD_SHORT: Record<Mod, string> = { dist: 'Dist', sales: 'Sales', cult: 'Prod', nurs: 'Nursery', proc: 'Proc', acct: 'Acct', comp: 'Comp', admin: 'Admin' }
+const MOD_SHORT: Record<Mod, string> = { dist: 'Dist', sales: 'Sales', cult: 'Cult', nurs: 'Nursery', proc: 'Proc', acct: 'Acct', comp: 'Comp', admin: 'Admin' }
 const MOD_ICON: Record<Mod, ReactNode> = {
   dist: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="1" y="7" width="14" height="10" /><path d="M15 10h4l3 3v4h-7" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="19" r="2" /></svg>,
   sales: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>,
@@ -231,7 +234,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
     case 'split_from': { const d = e.details as { parent?: string; tag?: string | null; mixed?: string } | null
       return `${code} created from ${d?.parent} (${lbs(e.lbs)})${d?.mixed ? ` onto ${d.mixed}` : ''}${d?.tag ? '' : ', tag pending'}` }
     case 'repackage': { const d = e.details as { from?: string; to?: string; item_name?: string } | null
-      return `${code} repackaged onto …${(d?.to ?? '').slice(-6)} (was …${(d?.from ?? '').slice(-6)}), ${lbs(e.lbs)}${d?.item_name ? `, item ${d.item_name}` : ''}` }
+      return `${code} repackaged onto ${tagTxt(d?.to)} (was ${tagTxt(d?.from)}), ${lbs(e.lbs)}${d?.item_name ? `, item ${d.item_name}` : ''}` }
     case 'merge': { const d = e.details as { sources?: string[] } | null
       return `${code} made by merging ${(d?.sources ?? []).join(', ')} (${lbs(e.lbs)})` }
     case 'merged_into': { const d = e.details as { into?: string } | null
@@ -245,7 +248,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       return `${code} weight set ${d?.from != null ? `from ${lbs(d.from)} ` : ''}to ${lbs(d?.to)} in the app only (audit, not sent to METRC)` }
     case 'manifest_sync': { const d = e.details as { manifest?: string; tag?: string; to_site?: string; shipped_to?: string; new?: boolean; from?: string | number; to?: number } | null
       const m = `manifest ${d?.manifest ?? ''} (already in METRC)`
-      const tg = d?.tag ? ` …${d.tag.slice(-6)}` : ''
+      const tg = d?.tag ? ` ${tagTxt(d.tag)}` : ''
       if (d?.shipped_to) return d.new ? `${code}${tg} added as shipped to ${d.shipped_to} from ${d.from ?? ''}: ${m}` : `${code}${tg} shipped to ${d.shipped_to}: ${m}`
       if (d?.to_site) return d.new ? `${code}${tg} made from ${d.from ?? ''} and sent to ${d.to_site}: ${m}` : `${code} tagged${tg}, sent to ${d.to_site}: ${m}`
       if (typeof d?.from === 'number' || d?.to != null) return `${code} weight ${d?.from != null ? `from ${lbs(Number(d.from))} ` : ''}to ${lbs(d?.to)}: ${m}`
@@ -310,7 +313,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       if (e.type === 'fulfill_unloaded') return `${o} taken off ${d?.load}`
       return `${o}: Sales OK'd ${d?.strain} at ${lbs(Number(d?.to ?? 0))} (ordered ${lbs(Number(d?.from ?? 0))})` }
     case 'user_access': { const d = e.details as { email?: string; owner?: boolean; kind?: string; access?: Record<string, string> } | null
-      return `${d?.email}: ${d?.kind !== 'staff' ? d?.kind : d?.owner ? 'Owner' : Object.entries(d?.access ?? {}).map(([m, l]) => `${m === 'cultivation' ? 'production' : m} ${l}`).join(', ') || 'no modules'}` }
+      return `${d?.email}: ${d?.kind !== 'staff' ? d?.kind : d?.owner ? 'Owner' : Object.entries(d?.access ?? {}).map(([m, l]) => `${m} ${l}`).join(', ') || 'no modules'}` }
     case 'app_setting': { const d = e.details as { key?: string; value?: string } | null; return `App setting ${d?.key} set to ${d?.value}` }
     case 'user_hidden_modules': { const d = e.details as { email?: string; hidden?: string[] } | null
       return `${d?.email} hidden modules: ${(d?.hidden ?? []).join(', ') || 'none'}` }
@@ -322,7 +325,7 @@ function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
       return `${code} wet package: ${d?.strain} from ${d?.site} ${d?.field ?? ''} (${lbs(e.lbs)})${d?.tag ? '' : ', tag pending'}${d?.sent ? `, sent to ${d.processor}` : ''}` }
     case 'proc_sent': { const d = e.details as { processor?: string } | null; return `${code} sent to ${d?.processor} for drying (${lbs(e.lbs)})` }
     case 'proc_received': { const d = e.details as { processor?: string; site?: string; new_tag?: string | null } | null
-      return `${code} back from ${d?.processor ?? 'the processor'} unbucked, at ${d?.site}${d?.new_tag ? ` (new tag …${d.new_tag.slice(-6)})` : ''}` }
+      return `${code} back from ${d?.processor ?? 'the processor'} unbucked, at ${d?.site}${d?.new_tag ? ` (new tag ${tagTxt(d.new_tag)})` : ''}` }
     case 'proc_dried': return `${code} dried in house, now unbucked`
     case 'proc_run_started': { const d = e.details as { run?: string; kind?: string; strain?: string; packages?: string[] } | null
       return `${d?.run} ${d?.kind === 'buck' ? 'bucking' : 'trimming'} started: ${d?.strain}, ${(d?.packages ?? []).join(', ')} (${lbs(e.lbs)})` }
@@ -422,7 +425,9 @@ export default function App() {
   const [acctTab, setAcctTabS] = useState<ATab>(GO_ACCT ? (QBO_BACK || GO_ACCT_SETTINGS ? 'settings' : 'dashboard') : 'dashboard')
   const [nurTab, setNurTabS] = useState<NTab>(() => ([...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === stored('nur.tab'))?.t ?? 'dashboard'))
   const [modMenu, setModMenu] = useState(false)
-  const [more, setMore] = useState(false)
+  const [railMenu, setRailMenu] = useState(false)
+  const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)
+  const [more, setMore] = useState<false | 'mods' | 'more'>(false)   // 281 (phone): the top pill opens modules, the bottom More opens this module's other screens
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
   const [scanMiss, setScanMiss] = useState<{ tag: string; checked: boolean; range: string | null } | null>(null)
@@ -502,6 +507,7 @@ export default function App() {
   const isAdminOf = (m: Mod) => lv[MOD_KEY[m]] === 'admin'
   const goMod = (m: Mod) => {
     setModS(m); store('fm.mod', m); setModMenu(false)
+    setNewOrder(false); setPalletId(null)   // Msg 310: a side card left open doesn't follow you to the next module
     if (m === 'cult') setCultTab('dashboard'); else if (m === 'nurs') setNurTab('dashboard'); else if (m === 'acct') setAcctTab('dashboard'); else if (m === 'proc') setProcTab('dashboard'); else if (m === 'comp') setCompTab('dashboard'); else if (m === 'sales') setSalesTab('dash'); else if (m === 'admin') setAdminTab('dash'); else go('dash')
   }
   // signed in: personal settings (theme, where to start, which site)
@@ -522,6 +528,10 @@ export default function App() {
   const [fErr, setFErr] = useState<string | null>(null)
   const [doc, setDoc] = useState<{ kind: 'invoice' | 'so'; id: number } | null>(null)
   const [newOrder, setNewOrder] = useState(false)
+  // Msg 323: drag the sidebar's screens into your own order (per module, saved to your login). Dashboard stays first; the 3 under
+  // it are the phone bar. menuDrag = the order while a drag is going on; dragRef tracks the press before it becomes a drag.
+  const [menuDrag, setMenuDrag] = useState<{ mod: string; keys: string[]; k: string } | null>(null)
+  const dragRef = useRef<{ k: string; y: number; keys: string[]; mod: string; started: boolean; moved: boolean } | null>(null)
   const [ordersKey, setOrdersKey] = useState(0)
   const refreshF = useCallback(async () => {
     if (!canFulfill) return
@@ -698,6 +708,22 @@ export default function App() {
     if (p.status === 'unslotted' && p.received_site) return `Received at ${p.received_site}, needs a spot`
     return whereIs(ix, p.slot_id)
   }
+  // PICK-1: freezer, spot and what sits between a pallet and the door (Plan my pick)
+  const locCache = new Map<number, Loc>()
+  const locOf = (p: Pallet): Loc => locCache.get(p.id) ?? (locCache.set(p.id, locCalc(p)), locCache.get(p.id)!)
+  const locCalc = (p: Pallet): Loc => {
+    const top = p.container_id ? ix.pallet.get(p.container_id) ?? p : p
+    const s = top.slot_id != null ? ix.slot.get(top.slot_id) : undefined
+    const f = s ? ix.freezer.get(s.freezer_id) : undefined
+    if (!s || !f) return { fz: null, fzLabel: 'Needs a spot', sort: 9999, site: top.received_site ?? null, spot: '', front: 99, side: '', inFront: [] }
+    const staging = f.kind === 'staging', trailer = f.kind === 'trailer'
+    const inFront: number[] = []
+    if (!staging) for (const o of ix.slot.values()) if (o.freezer_id === f.id && o.col === s.col && o.front_rank < s.front_rank)
+      for (const q of ix.inSlot.get(o.id) ?? []) inFront.push(q.id)
+    return { fz: f.id, fzLabel: staging ? `${f.site} Staging` : trailer ? `${f.site} ${fName(f)}` : `${f.site} Freezer ${f.number}`,
+      sort: staging ? 0 : trailer ? 1000 + f.number : f.number, site: f.site, staging, spot: staging ? `S${s.row}` : trailer ? s.code.slice(2) : s.code,
+      front: staging ? s.row : s.front_rank, side: staging ? '' : s.col === 1 ? 'Left' : 'Right', inFront }
+  }
   const siteOf = (p: Pallet): string | null => {
     const top = p.container_id ? ix.pallet.get(p.container_id) ?? p : p
     const fz = top.slot_id != null ? ix.freezer.get(ix.slot.get(top.slot_id)?.freezer_id ?? -1) : undefined
@@ -707,6 +733,9 @@ export default function App() {
   const openLoads = (snap.loads ?? []).filter(l => ['planning', 'loading', 'in_transit'].includes(l.status))
   const heldBy = new Map<number, FOrder>()
   for (const o of forders ?? []) if (o.state !== 'shipped') for (const l of o.lines) for (const pk of l.picks) heldBy.set(pk.pallet_id, o)
+  // Msg 327: the customer(s) a pallet is held or loaded for; a mixed pallet goes by the packages on it
+  const custOne = (id: number) => heldBy.get(id)?.customer ?? (ix.loadOf.has(id) ? (snap.customers ?? []).find(c => c.id === ix.loadOf.get(id)!.stop.customer_id)?.name : undefined)
+  const custFor = (id: number) => { const names = [...new Set([custOne(id), ...(ix.contentsOf.get(id) ?? []).map(k => custOne(k.id))].filter(Boolean) as string[])]; return names.length ? names.join(', ') : undefined }
   const toFulfill = (forders ?? []).filter(o => o.state === 'open' || o.state === 'ready').length
   const canonOf = (() => { const m = new Map<string, string>(); for (const st of snap.strains ?? []) for (const n of [st.name, ...(st.aliases ?? [])]) m.set(n.toLowerCase(), st.name.toLowerCase()); return (x: string | null | undefined) => { const k = (x ?? '').trim().toLowerCase(); return m.get(k) ?? k } })()
   const ctx: LoadCtx = {
@@ -729,6 +758,10 @@ export default function App() {
     newMixedOnStop: (stop, onTruck) => setForm({ kind: 'stopmixed', stop, onTruck }),
     putBack: (item, p) => { setView('map'); startPlacing({ title: `Putting ${p.code} back in a freezer`, sub: 'Open a freezer and tap the slot.', run: slot => act(() => backend.unloadPallet(item.id, slot.id), `${p.code} back in ${slot.code}`) }) },
     api: backend,
+    loc: locOf, backend, flash, reloadAll: async () => { await reload(); await refreshF() },
+    freeFor: l => snap.pallets.filter(p => (p.status === 'in_freezer' || p.status === 'unslotted') && p.pushed !== false && !p.container_id && p.kind !== 'mixed' && (p.current_weight ?? 0) > 0
+      && canonOf(p.strain) === canonOf(l.strain) && (p.product ?? 'fresh_frozen') === (l.product ?? 'fresh_frozen')
+      && (p.crop_year == null || l.crop_year == null || p.crop_year === l.crop_year) && !heldBy.has(p.id) && !ix.loadOf.has(p.id) && !snap.inRun?.[p.id]),
   }
   const invCtx: InvCtx = {
     pallets: snap.pallets, pallet: id => ix.pallet.get(id), where, grade: p => gradeOf(ix, p),
@@ -823,8 +856,14 @@ export default function App() {
   // each module's settings, used in the module and again in Admin > Settings
   const distSettings = <SettingsView key="dist-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Distribution settings" lists={['strains']}
     extra={[{ k: 'locations', l: 'Locations', node: <DistLocations sb={backend.client()} flash={flash} onChanged={() => { reload() }} /> }, { k: 'vehicles', l: 'Vehicles', node: <CompFleet sb={backend.client()} flash={flash} dept="distribution" /> }, { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="distribution" flash={flash} /> }]} />
+  // Msg 300: Customers has its own home in the sidebar (Sales and Admin), with Customer logins beside it
+  const customersHome = (k: string, ro = false) => <SettingsView key={k} home readOnly={ro} backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Customers" focus="sales"
+    lists={['customers']} canTerms={salesAdmin} extra={ro ? [] : [{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> }]} />
   const salesSettings = <SettingsView key="sales-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Sales settings" focus="sales"
-    lists={['customers', 'strains']} canTerms={salesAdmin} extra={[{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
+    lists={['strains']} canTerms={salesAdmin} extra={[
+      { k: 'categories', l: 'Product categories', node: <CatListPanel backend={backend} k={PRODUCT_CATEGORIES_KEY} dflt={DEFAULT_CATEGORIES} title="Product categories" noun="Category" canEdit={salesAdmin} flash={flash}
+        intro="What a customer can be marked as buying (on each customer's Overview). Internal for Sales: used to sort and filter customers. Sales admins add, rename, reorder and remove them."
+        usedBy={c => (snap.customers ?? []).filter(x => (x.product_categories ?? []).includes(c)).length} /> },
       { k: 'terms', l: 'Payment terms', node: <TermsPanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'market', l: 'Market price', node: <MarketPricePanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'contract', l: 'Contract product prices', node: <ContractProductPrices backend={backend} flash={flash} canEdit={salesAdmin} /> },
@@ -833,8 +872,12 @@ export default function App() {
       { k: 'fulfill', l: 'Fulfillment', node: <FillTolerance sb={backend.client()} flash={flash} canEdit={salesAdmin || isAdminOf('dist')} /> },
       { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="sales" flash={flash} /> }]} />
   const cultSettings = <Suspense fallback={<p className="muted">Loading…</p>}><CultView backend={backend} flash={flash} tab="setup" go={setCultTab} onPalletsChanged={() => { reload() }} /></Suspense>
-  const strainSettings = <div className="modset"><SettingsView key="cult-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Strains" lists={['strains']} focus="cult" /></div>
-  const nurStrainSettings = <div className="modset"><SettingsView key="nurs-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Strains" lists={['strains']} focus="nurs" /></div>
+  const strainSettings = <div className="modset"><SettingsView key="cult-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Cultivation" lists={['strains']} focus="cult" extra={[{ k: 'nurseries', l: 'Nurseries', node: <CatListPanel backend={backend} k={NURSERIES_KEY} dflt={DEFAULT_NURSERIES} title="Nurseries" noun="Nursery" canEdit={isAdminOf('cult') || isAdminOf('nurs')} flash={flash}
+    intro="Where our plants come from: our own nursery (1PN) and outside nurseries. Pick them on each strain. Cultivation and Nursery admins edit this list."
+    usedBy={n => (snap.strains ?? []).filter(x => (x.nurseries ?? []).includes(n)).length} /> }]} /></div>
+  const nurStrainSettings = <div className="modset"><SettingsView key="nurs-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Nursery" lists={['strains']} focus="nurs" extra={[{ k: 'nurseries', l: 'Nurseries', node: <CatListPanel backend={backend} k={NURSERIES_KEY} dflt={DEFAULT_NURSERIES} title="Nurseries" noun="Nursery" canEdit={isAdminOf('cult') || isAdminOf('nurs')} flash={flash}
+    intro="Where our plants come from: our own nursery (1PN) and outside nurseries. Pick them on each strain. Cultivation and Nursery admins edit this list."
+    usedBy={n => (snap.strains ?? []).filter(x => (x.nurseries ?? []).includes(n)).length} /> }]} /></div>
   const selWeight = sel.reduce((a, id) => { const p = ix.pallet.get(id); return a + (p ? weightOf(ix, p) : 0) }, 0)
 
   // ---------- navigation: the same shape in every module ----------
@@ -851,6 +894,7 @@ export default function App() {
     { k: 'transit', l: <>Transit{badge(openLoads.length)}</>, s: 'Transit', n: openLoads.length, on: view === 'transit' || view === 'load', go: () => go('transit') },
     ...(staff ? [{ k: 'inbound', l: 'Inbound', on: view === 'inbound', go: () => go('inbound') }] : []),
     ...(staff ? [{ k: 'archived', l: 'Archived', on: view === 'archived', go: () => { setArchQ(null); go('archived') } }] : []),
+    ...(isAdminOf('dist') ? [{ k: 'customers', l: 'Customers', on: view === 'customers', go: () => go('customers') }] : []),
   ]
   const distTail: NavItem[] = [
     { k: 'review', l: <>Review{badge(reviewCount, true)}</>, s: 'Review', n: reviewCount, warn: true, on: view === 'review', go: () => go('review') },
@@ -859,14 +903,14 @@ export default function App() {
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
   const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
-    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain')]
+    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('customers', 'Customers')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
   const cultMain = [...CULT_TABS.map(x => cItem(x.t, t(x.l))), itemsNav]
   const cultTail = CULT_TAIL.filter(x => x.t !== 'setup' || isAdminOf('cult')).map(x => cItem(x.t, t(x.l)))
   const aItem = (t: AdminTab, l: string): NavItem => ({ k: t, l, on: view === 'admin' && adminTab === t, go: () => setAdminTab(t) })
-  const adminMain = [aItem('dash', 'Dashboard')], adminTail = [aItem('review', 'Review'), aItem('activity', 'Activity'), aItem('settings', 'Settings')]
+  const adminMain = [aItem('dash', 'Dashboard'), aItem('customers', 'Customers')], adminTail = [aItem('review', 'Review'), aItem('activity', 'Activity'), aItem('settings', 'Settings')]
   const nItem = (t: NTab, l: string): NavItem => ({ k: t, l, on: view === 'nursery' && nurTab === t, go: () => setNurTab(t) })
   const nurMain = [...NURSERY_TABS.map(x => nItem(x.t, t(x.l))), itemsNav]
   const nurTail = NURSERY_TAIL.filter(x => x.t !== 'settings' || isAdminOf('nurs')).map(x => nItem(x.t, t(x.l)))
@@ -886,7 +930,48 @@ export default function App() {
   const MOD_DEPT: Partial<Record<Mod, 'distribution' | 'cultivation' | 'nursery' | 'processing'>> = { dist: 'distribution', cult: 'cultivation', nurs: 'nursery', proc: 'processing' }
   const equipItem: NavItem | null = MOD_DEPT[cur] ? { k: 'fleet', l: cur === 'dist' ? t('Vehicles') : t('Equipment'), on: view === 'fleet' && !inDrv, go: () => go('fleet') } : null
   if (equipItem) NAV[cur].tail.splice(Math.max(0, NAV[cur].tail.findIndex(x => x.k === 'activity')), 0, equipItem)
-  const nav = NAV[cur]
+  // Msg 310: going to another screen closes the app-wide side cards (new order, package) so they don't squeeze the next screen
+  const closeSides = () => { setNewOrder(false); setPalletId(null) }
+  const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); x.go() } })
+  const orderMain = (items: NavItem[]): NavItem[] => {
+    if (items.length < 3) return items
+    const [first, ...rest] = items
+    const want = menuDrag && menuDrag.mod === cur ? menuDrag.keys : me?.access?.prefs?.menu_order?.[cur]
+    if (!want?.length) return items
+    const pos = new Map(want.map((k, i) => [k, i]))
+    // screens in the saved order first; screens added since keep their place after them
+    const known = rest.filter(x => pos.has(x.k)).sort((a, b) => pos.get(a.k)! - pos.get(b.k)!), fresh = rest.filter(x => !pos.has(x.k))
+    return [first, ...known, ...fresh]
+  }
+  const nav = { ...NAV[cur], main: orderMain(NAV[cur].main).map(wrapGo), tail: NAV[cur].tail.map(wrapGo) }
+  const saveMenuOrder = (mod: string, keys: string[]) => {
+    const prefs = { ...(me?.access?.prefs ?? {}), menu_order: { ...(me?.access?.prefs?.menu_order ?? {}), [mod]: keys } }
+    setMe(m => m && ({ ...m, access: { ...m.access, prefs } }))
+    backend.setMyPrefs({ menu_order: prefs.menu_order }).catch(e => flash(`Menu order not saved: ${(e as Error).message}`, true))
+  }
+  const railPress = (x: NavItem, e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    const keys = nav.main.slice(1).map(n => n.k)
+    dragRef.current = { k: x.k, y: e.clientY, keys, mod: cur, started: false, moved: false }
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current; if (!d) return
+      if (!d.started && Math.abs(ev.clientY - d.y) > 5) { d.started = true; setMenuDrag({ mod: d.mod, keys: d.keys, k: d.k }) }
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
+      const d = dragRef.current
+      if (d?.started) { setMenuDrag(null); if (d.moved) saveMenuOrder(d.mod, d.keys); setTimeout(() => { dragRef.current = null }, 0) }
+      else dragRef.current = null
+    }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+  }
+  const railEnter = (x: NavItem, i: number) => {
+    const d = dragRef.current
+    if (!d?.started || x.k === d.k || i === 0) return
+    const keys = d.keys.filter(k => k !== d.k); keys.splice(i - 1, 0, d.k)
+    d.keys = keys; d.moved = true; setMenuDrag({ mod: d.mod, keys, k: d.k })
+  }
+  const railClick = (x: NavItem) => { if (dragRef.current?.started) return; x.go() }
   const all = [...nav.main, ...nav.tail]
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
@@ -895,7 +980,7 @@ export default function App() {
   const bottomRest = [...all.slice(4), ...extras]
   const restOn = bottomRest.some(x => x.on)
   const restBadge = all.slice(4).reduce((a, x) => a + (x.n ?? 0), 0)
-  const canScan = cur === 'dist' || cur === 'proc'
+  const canScan = cur === 'dist' || cur === 'proc' || cur === 'cult' || cur === 'nurs'   // 279: Cultivation and Nursery get the Scan button too
   const shortL = (x: NavItem) => x.k === 'dash' || x.k === 'dashboard' ? t('Home') : x.s ?? (typeof x.l === 'string' ? x.l : x.k)
   const curScreen = all.find(x => x.on) ?? extras.find(x => x.on)
   const pageTitle = view === 'mine' ? t('My settings') : inDrv ? t('My loads') : !curScreen || curScreen.k === 'dash' || curScreen.k === 'dashboard' ? ML(cur) : typeof curScreen.l === 'string' ? curScreen.l : curScreen.s ?? ML(cur)
@@ -910,19 +995,35 @@ export default function App() {
 
   return (
     <TagSuggestProvider sb={backend.client()} site={site}><div className={`app shell ${noMods ? '' : 'with-rail'} ${modCount > 1 ? 'with-mods' : ''} ${banner ? 'is-moving' : ''} mod-${cur} ${!noMods && lv[MOD_KEY[cur]] === 'view' ? 'viewonly' : ''}`}
-      style={{ ['--navw' as string]: modCount > 1 ? '284px' : '200px' }}>
+      style={{ ['--navw' as string]: '248px' }}>
       {viewBar}
       {!noMods && (
         <aside className="rail" aria-label="Navigation">
-          {modCount > 1 && <div className="rail-mods">
+          <div className="rail-head">
             <img className="rail-logo" src="/logo-dark.svg" alt="Lifted Farms" />
-            {myMods.map(x => (
-              <button key={x.m} className={`rail-mod ${cur === x.m && !inDrv ? 'on' : ''}`} onClick={() => goMod(x.m)}>
-                {MOD_ICON[x.m]}<span>{x.l}</span>
+            {modCount > 1 && <div className="rail-pick">
+              <button className="rail-pickbtn" aria-haspopup="menu" aria-expanded={railMenu} onClick={() => setRailMenu(!railMenu)}>
+                <span className="rail-pick-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}</span>
+                <span className="rail-pick-l"><small>{t('Module')}</small><b>{inDrv ? t('Driver') : ML(cur)}</b></span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
               </button>
-            ))}
-            {isDrv && <button className={`rail-mod ${inDrv ? 'on' : ''}`} onClick={() => go('driver')}>{DRV_ICON}<span>{t('Driver')}</span></button>}
-          </div>}
+              {railMenu && <>
+                <div className="modscrim" onClick={() => setRailMenu(false)} />
+                <div className="rail-menu" role="menu">
+                  {myMods.map(x => <button key={x.m} role="menuitem" className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => { setRailMenu(false); goMod(x.m) }}>
+                    {MOD_ICON[x.m]}<span><b>{x.l}</b><small>{t(MOD_WHAT[x.m])}</small></span></button>)}
+                  {isDrv && <button role="menuitem" className={inDrv ? 'on' : ''} onClick={() => { setRailMenu(false); go('driver') }}>
+                    {DRV_ICON}<span><b>{t('Driver')}</b><small>{t('My loads and stops')}</small></span></button>}
+                </div>
+              </>}
+            </div>}
+          </div>
+          {/* tablet (768 to 999px): module icons only, the screens sit in a tab row under the header */}
+          <div className="rail-icons" role="group" aria-label={t('Modules')}>
+            {modCount > 1 && myMods.map(x => <button key={x.m} className={cur === x.m && !inDrv ? 'on' : ''} title={x.l} onClick={() => goMod(x.m)}>{MOD_ICON[x.m]}<span>{t(MOD_SHORT[x.m])}</span></button>)}
+            {modCount > 1 && isDrv && <button className={inDrv ? 'on' : ''} title={t('Driver')} onClick={() => go('driver')}>{DRV_ICON}<span>{t('Driver')}</span></button>}
+            {canScan && !inDrv && <button className="rail-iscan" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>{SCAN_ICON}<span>{t('Scan')}</span></button>}
+          </div>
           {inDrv ? <nav className="rail-screens" aria-label={t('Driver')}>
             <div className="rail-h">{t('Driver').toUpperCase()}</div>
             <button className={drvTab === 'loads' ? 'on' : ''} onClick={() => setDrvTab('loads')}>{t('My loads')}</button>
@@ -931,13 +1032,26 @@ export default function App() {
           <nav className="rail-screens" aria-label={`${ML(cur)} screens`}>
             <div className="rail-h">{ML(cur).toUpperCase()}</div>
             {canScan && <button className="rail-scan" onClick={() => setScanning(true)}>{SCAN_ICON}<span>{t('Scan a tag')}</span></button>}
-            {nav.main.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
+            <div className={`rail-main ${menuDrag ? 'dragging' : ''}`}>{nav.main.map((x, i) => i === 0
+              ? <button key={x.k} className={`${x.on ? 'on' : ''} rail-lock`} onClick={x.go}>{x.l}</button>
+              : <button key={x.k} className={`${x.on && !menuDrag ? 'on' : ''} rail-drag ${menuDrag?.k === x.k ? 'lifted' : ''} ${i === 1 ? 'zone-bar' : ''} ${i === 4 ? 'zone-more' : ''}`}
+                  title={t('Drag to change your order. The top 3 are your phone bar.')}
+                  onPointerDown={e => railPress(x, e)} onPointerEnter={() => railEnter(x, i)} onClick={() => railClick(x)}>{x.l}<span className="rail-grip" aria-hidden="true">⋮⋮</span></button>)}
+            </div>
             {nav.tail.length > 0 && <div className="rail-sep" />}
             {nav.tail.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
           </nav>}
+          <div className="rail-acct">
+            <button className={view === 'mine' ? 'on' : ''} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>
+              <span className="rail-av">{((me?.display_name || who(user) || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || '?').toUpperCase()}</span><span className="rail-acct-l"><b>{me?.display_name || who(user)}</b><small>{user}</small></span></button>
+            <button className="rail-out" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} aria-label={t('Sign out')} onClick={() => backend.signOut().then(() => setUser(null))}>⏏</button>
+          </div>
         </aside>
       )}
       <header className="top">
+        <img className="phlogo" src="/logo-dark.svg" alt="Lifted" onClick={() => nav.main[0]?.go()} />
+        {!noMods && (modCount > 1 || isDrv) && <button className="phmod" aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore('mods')}>
+          <span className="phmod-dot" />{inDrv ? t('Driver') : ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>}
         <div className="brand" onClick={() => nav.main[0]?.go()}>
           <img className="logo-img logo-l" src="/logo-light.svg" alt="Lifted Farms" /><img className="logo-img logo-d" src="/logo-dark.svg" alt="Lifted Farms" /> <span className="app-name">{appName}</span><span className="ptitle">{pageTitle}</span> {backend.demo && <span className="demo">DEMO</span>}
         </div>
@@ -957,7 +1071,7 @@ export default function App() {
             </>}
           </div>
         )}
-        {cur === 'dist' && !noMods && <div className="seg">
+        {cur === 'dist' && !noMods && view !== 'inventory' && <div className="seg">
           {(['OHR', 'GVR'] as Site[]).map(s => (
             <button key={s} className={s === site ? 'on' : ''} onClick={() => { setSite(s); if (view === 'freezer') setView('map') }}>{s}</button>
           ))}
@@ -967,10 +1081,27 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
-        <button className={`ghost small ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
-        <button className="ghost small" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
+        <span className="phacct">
+          <button className="phacct-btn" aria-haspopup="menu" aria-expanded={acctMenu} aria-label={t('Account menu')} onClick={() => setAcctMenu(!acctMenu)}>{((me?.display_name || who(user) || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || '?').toUpperCase()}</button>
+          {acctMenu && <>
+            <div className="modscrim" onClick={() => setAcctMenu(false)} />
+            <div className="phacct-menu" role="menu">
+              <div className="phacct-who"><b>{me?.display_name || who(user)}</b><small>{user}</small></div>
+              <button role="menuitem" onClick={() => { setAcctMenu(false); view === 'mine' ? go(lastView.current) : go('mine') }}>{t('My settings')}</button>
+              <button role="menuitem" onClick={() => { setAcctMenu(false); backend.signOut().then(() => setUser(null)) }}>{t('Sign out')}</button>
+            </div>
+          </>}
+        </span>
+        <button className={`ghost small hdr-acct ${view === 'mine' ? 'on-btn' : ''}`} title={t('Your own settings')} onClick={() => (view === 'mine' ? go(lastView.current) : go('mine'))}>⚙<span className="hide-phone"> {t('My settings')}</span></button>
+        <button className="ghost small hdr-acct" title={t('Signed in as {u}. Click to sign out.', { u: user ?? '' })} onClick={() => backend.signOut().then(() => setUser(null))}>{who(user)} ⏏</button>
       </header>
 
+      {!noMods && <nav className="tabrow" aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
+        {inDrv ? <>
+          <button className={drvTab === 'loads' ? 'on' : ''} onClick={() => setDrvTab('loads')}>{t('My loads')}</button>
+          <button className={drvTab === 'vehicles' ? 'on' : ''} onClick={() => setDrvTab('vehicles')}>{t('Trucks and inspections')}</button>
+        </> : [...nav.main, ...nav.tail].map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
+      </nav>}
       {banner && (
         <div className="movebar">
           <div><b>{banner.title}</b><div className="muted">{banner.sub}</div></div>
@@ -1011,6 +1142,7 @@ export default function App() {
         )}
         {view === 'freezer' && freezerId != null && (
           <FreezerView ix={ix} L={L!} plan={plan} freezer={ix.freezer.get(freezerId)!} query={query} placing={!!placing}
+            custFor={custFor}
             selecting={selecting} sel={sel}
             siblings={ix.freezer.get(freezerId)?.kind === 'trailer' ? siteTrailers : siteFreezers}
             onOpen={openFreezer}
@@ -1018,7 +1150,7 @@ export default function App() {
             onSlot={tapSlot}
             onPalletTap={tapPallet}
             onSelect={() => { if (selecting) { setSelecting(false); setSel([]) } else setSelecting(true) }}
-            onOrder={id => heldBy.has(id) || ix.loadOf.has(id)}
+            onOrder={id => heldBy.has(id) || ix.loadOf.has(id) || (ix.contentsOf.get(id) ?? []).some(k => heldBy.has(k.id) || ix.loadOf.has(k.id))}
             onCompact={compact}
             onStatus={(st) => setConfirm({
               text: `Set ${fName(ix.freezer.get(freezerId)!)} to "${st}"?`, ok: 'Update',
@@ -1059,6 +1191,7 @@ export default function App() {
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />
           if (salesTab === 'invoices') return <InvoicesView backend={backend} customers={snap.customers ?? []} flash={flash} isAdmin={salesAdmin} sender={me?.display_name} />
           if (salesTab === 'settings') return salesSettings
+          if (salesTab === 'customers') return customersHome(isAdminOf('sales') ? 'sales-cust' : 'sales-cust-ro', !isAdminOf('sales'))
           return <ReservesView key={`sales-${ordersKey}`} backend={backend} flash={flash} isAdmin={salesAdmin} mode={salesTab} onCounts={refreshCounts} fulfil={new Map((forders ?? []).map(f => [f.id, f]))} onFulfil={refreshF} customers={snap.customers ?? []}
             onNewOrder={() => setNewOrder(true)} onDoc={(k, id) => setDoc({ kind: k, id })}
             onInvoice={async id => { try { const inv = await backend.makeInvoice(id); setDoc({ kind: 'invoice', id: inv.id }) } catch (e) { flash(String((e as Error).message ?? e), true) } }} strains={snap.strains ?? []}
@@ -1066,7 +1199,7 @@ export default function App() {
               ? m.set(p.strain.toLowerCase(), (m.get(p.strain.toLowerCase()) ?? 0) + Number(p.current_weight ?? 0)) : m, new Map<string, number>())} />
         })()}
         {view === 'fulfill' && cur === 'dist' && <FulfillView err={fErr} backend={backend} orders={forders} reload={async () => { await reload(); await refreshF() }} flash={flash}
-          pallets={snap.pallets} heldBy={heldBy} onLoad={id => ix.loadOf.has(id)} inRun={id => snap.inRun?.[id]} where={where} siteOf={siteOf} rank={p => (p.slot_id != null ? ix.slot.get(p.slot_id)?.front_rank : null) ?? 99}
+          pallets={snap.pallets} heldBy={heldBy} onLoad={id => ix.loadOf.has(id)} inRun={id => snap.inRun?.[id]} where={where} siteOf={siteOf} loc={locOf} rank={p => (p.slot_id != null ? ix.slot.get(p.slot_id)?.front_rank : null) ?? 99}
           canon={canonOf} loads={snap.loads ?? []} vehicles={snap.vehicles ?? []} isSales={isSales} stops={snap.stops ?? []} customers={snap.customers ?? []} drivers={snap.drivers ?? []} openId={fOpen} setOpenId={setFOpen}
           openLoad={id => { setLoadId(id); setView('load'); scrollTop() }} openPallet={setPalletId} />}
         {view === 'inbound' && <InboundView sb={backend.client()} flash={flash} onChanged={() => { reload() }} />}
@@ -1096,11 +1229,11 @@ export default function App() {
         {view === 'admin' && cur === 'admin' && adminTab === 'dash' && <AdminDashboard backend={backend} open={jump} />}
         {view === 'admin' && cur === 'admin' && adminTab === 'review' && <AdminReview backend={backend} open={jump} />}
         {view === 'admin' && cur === 'admin' && adminTab === 'activity' && <ActivityView ix={ix} module="all" />}
+        {view === 'admin' && cur === 'admin' && adminTab === 'customers' && customersHome('admin-cust')}
         {view === 'admin' && cur === 'admin' && adminTab === 'settings' && <div className="allset">
           <div className="seg setpick">{ALL_SETTINGS.map(([k, l]) => <button key={k} className={adminSet === k ? 'on' : ''} onClick={() => setAdminSet(k)}>{l}</button>)}</div>
           {adminSet === 'admin' && <SettingsView backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Admin settings"
-            lists={['customers']} canTerms={salesAdmin} startOn="users" extra={[{ k: 'users', l: 'Users and access', node: <UsersTab backend={backend} me={me!} customers={snap.customers ?? []} flash={flash} /> },
-              { k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
+            lists={[]} canTerms={salesAdmin} startOn="users" extra={[{ k: 'users', l: 'Users and access', node: <UsersTab backend={backend} me={me!} customers={snap.customers ?? []} flash={flash} /> },
               { k: 'perms', l: 'Permissions', node: <PermissionsPanel sb={backend.client()} flash={flash} /> },
               { k: 'licenses', l: 'Licenses', node: <LicensesPanel backend={backend} flash={flash} /> },
               { k: 'alerts', l: 'Alerts', node: <AlertPeopleAll sb={backend.client()} flash={flash} /> },
@@ -1117,6 +1250,7 @@ export default function App() {
             isAdmin={isAdminOf('comp')} canEdit={isAdminOf('comp')} me={me?.email ?? null} /></Suspense>}
         </div>}
         {view === 'settings' && cur === 'dist' && distSettings}
+        {view === 'customers' && cur === 'dist' && isAdminOf('dist') && customersHome(isAdminOf('sales') ? 'dist-cust' : 'dist-cust-ro', !isAdminOf('sales'))}
       </main>
 
       {active(plan) && L && (
@@ -1142,8 +1276,8 @@ export default function App() {
       <DragGhost />
       {!noMods && <>
         <nav className={`bottom pbar ${canScan && !inDrv ? 'with-scan' : ''}`} aria-label={`${inDrv ? t('Driver') : ML(cur)} screens`}>
-          <button className={`pmod ${restOn ? 'on' : ''}`} aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore(true)}>
-            <span className="pmod-i">{inDrv ? DRV_ICON : MOD_ICON[cur]}{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{inDrv ? t('Driver') : t(MOD_SHORT[cur])} ▴</span></button>
+          <button className={`pmod pmore ${restOn ? 'on' : ''}`} aria-label={t('More in {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore('more')}>
+            <span className="pti"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>{restBadge > 0 && !inDrv && <i className="pdot" />}</span><span className="pl">{t('More')}</span></button>
           {inDrv && <button className={`ptab ${drvTab === 'loads' ? 'on' : ''}`} onClick={() => setDrvTab('loads')}><span className="pti">{DRV_ICON}</span><span className="pl">{t('My loads')}</span></button>}
           {inDrv && <button className={`ptab ${drvTab === 'vehicles' ? 'on' : ''}`} onClick={() => setDrvTab('vehicles')}><span className="pti">{MOD_ICON.dist}</span><span className="pl">{t('Trucks')}</span></button>}
           {!inDrv && bottomFit.map((x, i) => <Fragment key={x.k}>
@@ -1156,14 +1290,15 @@ export default function App() {
           <div className="scrim" onClick={() => setMore(false)}>
             <div className="sheet modsheet" onClick={e => e.stopPropagation()}>
               <div className="sheet-h"><span /><button className="ghost" aria-label={t('Close')} onClick={() => setMore(false)}>✕</button></div>
-              {modCount > 1 && <>
+              {more === 'mods' && (modCount > 1 || isDrv) && <>
                 <div className="msh">{t('Switch module')}</div>
                 <div className="modgrid">{myMods.map(x => <button key={x.m} className={cur === x.m && !inDrv ? 'on' : ''} onClick={() => { setMore(false); goMod(x.m) }}>{MOD_ICON[x.m]}<span>{x.l}</span></button>)}
                   {isDrv && <button className={inDrv ? 'on' : ''} onClick={() => { setMore(false); go('driver') }}>{DRV_ICON}<span>{t('Driver')}</span></button>}</div>
               </>}
-              {!inDrv && <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>}
-              {!inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
-              {inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {more === 'more' && !inDrv && <div className="msh">{t('More in {m}', { m: ML(cur) })}</div>}
+              {more === 'more' && !inDrv && !bottomRest.length && <p className="muted">{t('Everything in {m} is on the bar below.', { m: ML(cur) })}</p>}
+              {more === 'more' && !inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {more === 'more' && inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
             </div>
           </div>
         )}
@@ -1269,7 +1404,7 @@ export default function App() {
           onLoad={editLoadOf(form.p.id) ? `${editLoadOf(form.p.id)!.load.code} with it (stop ${editLoadOf(form.p.id)!.stop.seq}${editLoadOf(form.p.id)!.item.loaded ? ', on the truck' : ''})` : null}
           onSubmit={(whole, n, tag, pending, dest, itemId, note) => {
             const p = form.p
-            if (whole) { submit(() => backend.newPackage(p.id, n, tag, false, null, itemId, note), c => `${c.code} is on …${(c.package_tag ?? '').slice(-6)} now. METRC to-do queued.`); return }
+            if (whole) { submit(() => backend.newPackage(p.id, n, tag, false, null, itemId, note), c => `${c.code} is on ${tagTxt(c.package_tag)} now. METRC to-do queued.`); return }
             const run = (slot: number | null, keep = false) => submit(() => backend.newPackage(p.id, n, tag, pending, slot, itemId, note, keep), c => `${c.code} created (${lbs(n)})${keep ? ' on the load' : ''}`, () => setPalletId(null))
             if (dest === 'load') run(null, true)
             else if (dest === 'same') run(null)
@@ -1546,7 +1681,7 @@ function MapView({ ix, freezers, trailers = [], staging, query, extra, where, on
 }
 
 const STAGING_AGING_DAYS = 2
-const STAGED_BADGE: Record<string, string> = { received: 'RECEIVED', harvest: 'HARVEST', processor: 'PROCESSOR', split: 'SPLIT' }
+const STAGED_BADGE: Record<string, string> = { received: 'RECEIVED', harvest: 'HARVEST', processor: 'PROCESSED', split: 'SPLIT' }
 function stagedAgo(p: Pallet): string {
   if (!p.staged_at) return 'in Staging'
   const d = Math.floor((Date.now() - Date.parse(p.staged_at)) / 86400000)
@@ -1560,9 +1695,11 @@ const STAGE_GROUPS: { key: StageGroup; title: string; note: string }[] = [
 ]
 function readFolded(): StageGroup[] { try { return JSON.parse(localStorage.getItem('stagingFolded') ?? '[]') } catch { return [] } }
 
-function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, siblings, onOpen, onBack, onSlot, onPalletTap, onStatus, onSelect, onCompact, onOrder }: {
+function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, siblings, onOpen, onBack, onSlot, onPalletTap, onStatus, onSelect, onCompact, onOrder, custFor }: {
   ix: Index; L: Layout; plan: Plan; freezer: Freezer; query: string; placing: boolean; selecting: boolean; sel: number[]; siblings: Freezer[]
   onOrder?: (id: number) => boolean
+  /** Msg 325: the customer a pallet is held or loaded for */
+  custFor?: (id: number) => string | undefined
   onOpen: (id: number) => void; onBack: () => void; onSlot: (s: Slot) => void
   onPalletTap: (p: Pallet, role: 'stay' | 'incoming' | 'leaving', s: Slot) => void; onStatus: (s: FreezerStatus) => void
   onSelect: () => void; onCompact: () => void
@@ -1598,9 +1735,10 @@ function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, sib
         style={stacked && p.kind !== 'mixed' ? sw.style : undefined}
         {...(role !== 'leaving' && !placing ? draggable({ id: p.id, label: `${p.code} · ${p.kind === 'mixed' ? 'Mixed' : p.strain ?? ''}` }) : {})}
         onClick={e => { e.stopPropagation(); onPalletTap(p, role, s) }}>
-        <b>{selecting && <span className={`tick ${picked ? 'on' : ''}`}>{picked ? '✓' : ''}</span>}{p.code}{p.needs_review && <span className="flag" title={p.needs_review}>!</span>}{(p.tag_pending || on.some(c => c.tag_pending)) && <span className="flag tag" title="METRC tag pending">T</span>}{ix.loadOf.has(p.id) && <span className="flag load" title={`Planned on ${ix.loadOf.get(p.id)!.load.code}`}>L</span>}{p.pushed === false && <span className="flag np" title="Not pushed to METRC yet (Harvest log)">NP</span>}{staging && p.staged_reason && <span className={`sbadge sb-${p.staged_reason}`} title={stagedAgo(p)}>{STAGED_BADGE[p.staged_reason]}</span>}</b>
+        <b>{selecting && <span className={`tick ${picked ? 'on' : ''}`}>{picked ? '✓' : ''}</span>}{p.code}{p.needs_review && <span className="flag" title={p.needs_review}>!</span>}{(p.tag_pending || on.some(c => c.tag_pending)) && <span className="flag tag" title="METRC tag pending">T</span>}{ix.loadOf.has(p.id) && <span className="flag load" title={`Planned on ${ix.loadOf.get(p.id)!.load.code}`}>L</span>}{p.pushed === false && <span className="flag np" title="Not pushed to METRC yet (Harvest log)">NP</span>}{staging && p.staged_reason && !onOrder?.(p.id) && <span className={`sbadge sb-${p.staged_reason}`} title={stagedAgo(p)}>{STAGED_BADGE[p.staged_reason]}</span>}</b>
         <span className="strain">{note ? <i className="pnote">{note}</i> : p.kind === 'mixed' ? `Mixed · ${on.length} pkg${on.length === 1 ? '' : 's'}: ${[...new Set(on.map(c => c.strain))].join(', ')}` : <>{p.product && p.product !== 'fresh_frozen' && <em className="prodtag">{PRODUCT_SHORT[p.product]}</em>}{(p.product ?? 'fresh_frozen') === 'fresh_frozen' && gradeOf(ix, p).grade === 'BHO' && <em className="prodtag bho">BHO</em>}{p.strain ?? p.label ?? 'No strain'}</>}</span>
         <span className="w">{p.kind !== 'mixed' && p.current_weight == null ? 'no weight' : lbs(weightOf(ix, p))}</span>
+        {role === 'stay' && custFor?.(p.id) && <span className="pcust" title="Held or loaded for this customer">→ {custFor(p.id)}</span>}
         {trailer && role === 'stay' && !placing && !stacked && <span className="spangrip" title="Drag to another spot on this side to make it take more space; drag back here to undo"
           {...draggable({ id: p.id, label: `${p.code}: take spots to…`, span: true })} onClick={e => e.stopPropagation()}>⇕</span>}
       </span>
@@ -1727,7 +1865,7 @@ function eventModule(e: InvEvent): 'distribution' | 'sales' | 'admin' | 'nursery
   return 'distribution'
 }
 const CULT_TBL: Record<string, string> = { cult_harvests: 'Harvest', cult_plantings: 'Planting', cult_tests: 'Test', cult_flower_picks: 'Dry flower pick', cult_demand: 'Plan strain',
-  cult_plan: 'Plan row', cult_nursery_orders: 'Nursery delivery', cult_receipts: 'Plants received', app_settings: 'Production setting' }
+  cult_plan: 'Plan row', cult_nursery_orders: 'Nursery delivery', cult_receipts: 'Plants received', app_settings: 'Cultivation setting' }
 interface Line { id: string; at: string; who: string | null; text: ReactNode; note?: string | null; mod: 'distribution' | 'sales' | 'admin' | 'cultivation' | 'nursery' | 'processing' | 'accounting' | 'compliance' }
 
 /** Activity: each module shows its own; Admin shows everything with a filter */
@@ -1757,7 +1895,7 @@ function ActivityView({ ix, module }: { ix: Index; module: 'distribution' | 'sal
   const lines: Line[] = [...(events ?? []).map(e => ({ id: `e${e.id}`, at: e.at, who: e.user_email, text: describe(ix, e, names), note: e.note, mod: eventModule(e) } as Line)), ...cult]
     .filter(l => module === 'all' ? only === 'all' || l.mod === only : l.mod === module)
     .sort((a, b) => b.at.localeCompare(a.at))
-  const CH: [string, string][] = [['all', 'Everything'], ['distribution', 'Distribution'], ['sales', 'Sales'], ['cultivation', 'Production'], ['nursery', 'Nursery'], ['processing', 'Processing'], ['accounting', 'Accounting'], ['compliance', 'Compliance'], ['admin', 'Admin']]
+  const CH: [string, string][] = [['all', 'Everything'], ['distribution', 'Distribution'], ['sales', 'Sales'], ['cultivation', 'Cultivation'], ['nursery', 'Nursery'], ['processing', 'Processing'], ['accounting', 'Accounting'], ['compliance', 'Compliance'], ['admin', 'Admin']]
   return (
     <div className="list">
       <h2>Activity</h2>
@@ -1814,7 +1952,7 @@ function PalletSheet({ ix, p, others, busy, where, flash, onArchived, onClose, o
   const statusText: Record<string, string> = { merged: 'Merged (closed out)', shipped: 'Delivered (left inventory)', depleted: isMixed ? 'Broken apart' : 'Depleted', archived: 'Not in a freezer (old record)', in_transit: where(p) }
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet side psheet" onClick={e => e.stopPropagation()}>
         <div className="sheet-h">
           <div>
             <h2>{p.code}</h2>

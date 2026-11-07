@@ -34,7 +34,7 @@ export const SCAN_ICON = <svg width="26" height="26" viewBox="0 0 24 24" fill="n
 
 const BY_KEY: Record<string, ReactNode> = {
   dash: dash, dashboard: dash, map, inventory: box, fulfill: check, transit: truck, review: inbox, activity: pulse, settings: gear, setup: gear,
-  menu: list, orders: clip, invoices: money, requests: inbox, customer: users, strain: leaf,
+  menu: list, orders: clip, invoices: money, requests: inbox, customer: users, customers: users, strain: leaf,
   harvest: leaf, schedule: cal, week: cal, testing: check, plantings: map, avail: chart, yields: chart, plan: cal, logs: list,
   batches: sprout, mothers: sprout, breeding: sprout,
   crew: users, incoming: sun, runs: cycle,

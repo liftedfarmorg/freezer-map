@@ -166,7 +166,7 @@ export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0, tab: 
       <QueueBox qu={qu} />
       <PushBanner sb={sb} />
       <details className="card small"><summary>{t('My notifications')}</summary>
-        <NotifyBox nf={nf} only={['t_load_assigned', 't_load_left', 't_delivery']} notes={false} onSave={async x => {
+        <NotifyBox nf={nf} only={['t_load_assigned', 't_load_left']} notes={false} onSave={async x => {
           const next = { ...nf, ...x }; setNf(next)
           const { error } = await sb.rpc('set_my_notify', { p_notify: x }); setNmsg(error ? error.message : t('Saved'))
         }} />{nmsg && <span className="muted small">{nmsg}</span>}</details>

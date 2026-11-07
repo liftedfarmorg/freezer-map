@@ -13,7 +13,7 @@ import { DateIn, F, Pick, SaveBar, Sheet, TextIn, errText } from '../cult/ui'
 
 const ST_CLS: Record<Material['ccof_status'], string> = { approved: 'cp-ok', pending: 'cp-warn', not_allowed: 'cp-bad', unknown: 'cp-mute' }
 const LISTINGS = ['OMRI', 'CDFA OIM', 'WSDA', 'CCOF approved', 'Not listed']
-const MOD = (m: string) => (m === 'nursery' ? 'Nursery' : 'Production')
+const MOD = (m: string) => (m === 'nursery' ? 'Nursery' : 'Cultivation')
 
 export function Ccof({ c }: { c: Ctx }) {
   const view = (['materials', 'list', 'log', 'certs', 'records'] as const).find(v => v === c.sub) ?? 'materials'
@@ -30,7 +30,7 @@ export function Ccof({ c }: { c: Ctx }) {
   </div>
 }
 
-// ---------- approved materials (the Production and Nursery product lists) ----------
+// ---------- approved materials (the Cultivation and Nursery product lists) ----------
 function Materials({ c }: { c: Ctx }) {
   const [rows, setRows] = useState<Material[] | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
@@ -49,10 +49,10 @@ function Materials({ c }: { c: Ctx }) {
   const n = (s: string) => all.filter(m => m.ccof_status === s).length
   const orphan = [...new Map(issues.filter(i => i.product_id == null).map(i => [`${i.module}|${i.product.toLowerCase()}`, i])).values()]
   return <>
-    <p className="muted">The Production and Nursery product lists, with CCOF approval. Feed and Spray logs warn when someone uses a product that isn't approved here, and those show in Review.</p>
+    <p className="muted">The Cultivation and Nursery product lists, with CCOF approval. Feed and Spray logs warn when someone uses a product that isn't approved here, and those show in Review.</p>
     <div className="row wrap toolbar">
       <input className="search" placeholder="Search products" value={q} onChange={e => setQ(e.target.value)} />
-      <Select value={mod ?? ''} onChange={e => setMod(e.target.value || null)} aria-label="List"><option value="">Production + Nursery</option><option value="cultivation">Production</option><option value="nursery">Nursery{nurseryCert ? '' : ' (not certified)'}</option></Select>
+      <Select value={mod ?? ''} onChange={e => setMod(e.target.value || null)} aria-label="List"><option value="">Cultivation + Nursery</option><option value="cultivation">Cultivation</option><option value="nursery">Nursery{nurseryCert ? '' : ' (not certified)'}</option></Select>
     </div>
     <div className="chips"><button className={!st ? 'on' : ''} onClick={() => setSt(null)}>All<span className="n">{all.length}</span></button>
       {(Object.keys(STATUS_LABEL) as Material['ccof_status'][]).map(s => <button key={s} className={st === s ? 'on' : ''} onClick={() => setSt(st === s ? null : s)}>{STATUS_LABEL[s]}<span className="n">{n(s)}</span></button>)}
@@ -144,11 +144,11 @@ function AppLogView({ c }: { c: Ctx }) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name}.pdf`; a.click() } catch (e) { c.flash(errText(e), true) }
   }
   return <>
-    <p className="muted">Built from the Feed and Spray logs in Production and Nursery, in the Farm Data layout. Nothing to enter here. Highlighted lines use a product that isn't approved in Approved materials.</p>
+    <p className="muted">Built from the Feed and Spray logs in Cultivation and Nursery, in the Farm Data layout. Nothing to enter here. Highlighted lines use a product that isn't approved in Approved materials.</p>
     <div className="row wrap toolbar">
       <F label="From"><DateIn value={from} onChange={setFrom} /></F><F label="To"><DateIn value={to} onChange={setTo} /></F>
       <F label="Site"><Pick value={site} blank="All sites" options={SITES.map(s => ({ v: s, l: s }))} onChange={setSite} /></F>
-      <F label="Logs"><Pick value={mod} blank="Production + Nursery" options={[{ v: 'cultivation', l: 'Production' }, { v: 'nursery', l: 'Nursery' }]} onChange={setMod} /></F>
+      <F label="Logs"><Pick value={mod} blank="Cultivation + Nursery" options={[{ v: 'cultivation', l: 'Cultivation' }, { v: 'nursery', l: 'Nursery' }]} onChange={setMod} /></F>
       <F label="Kind"><Pick value={kind} options={[{ v: 'both', l: 'Feed + Spray' }, { v: 'feed', l: 'Feed only' }, { v: 'spray', l: 'Spray only' }]} onChange={v => setKind(v ?? 'both')} /></F>
     </div>
     <div className="row"><button className="primary" disabled={!logs.length} onClick={pdf}>Download PDF</button>

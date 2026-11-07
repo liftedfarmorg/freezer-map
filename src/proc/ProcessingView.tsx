@@ -1,3 +1,4 @@
+import { MTag } from '../mtag'
 import { Select } from '../combo'
 import { TagInput } from '../taginput'
 import { CompFleet } from '../fleet/Fleet'
@@ -145,7 +146,7 @@ export default function ProcessingView({ backend, flash, tab, go, isAdmin, canEd
       {tab === 'dashboard' && <Dashboard c={c} go={go} />}
       {tab === 'inbound' && <Inbound c={c} />}
       {tab === 'incoming' && <Drying c={c} />}
-      {tab === 'runs' && <Runs c={c} onStart={k => setStartKind({ kind: k })} />}
+      {tab === 'runs' && <Runs c={c} sel={run?.id ?? null} onStart={k => setStartKind({ kind: k })} />}
       {tab === 'crew' && sb && <CrewTab sb={sb} runs={d.runs.filter(r => !simple(r.kind)) as RunLite[]} flash={flash} canEdit={canEdit} isAdmin={isAdmin} onOpenRun={(id, date) => { const r = d.runs.find(x => x.id === id); if (r) c.openRun(r, date) }} />}
       {tab === 'orders' && <Orders c={c} />}
       {tab === 'inventory' && <Inventory c={c} />}
@@ -163,7 +164,7 @@ export default function ProcessingView({ backend, flash, tab, go, isAdmin, canEd
 
 // ---------- shared bits ----------
 function Prod({ p }: { p: Product | undefined }) { return <span className={`pill prod pr-${p}`}>{PL(p)}</span> }
-function Tag({ p }: { p: Pallet }) { return p.package_tag ? <span className="mono small">…{p.package_tag.slice(-6)}</span> : p.tag_pending ? <span className="warn-t small">tag pending</span> : null }
+function Tag({ p }: { p: Pallet }) { return p.package_tag ? <MTag t={p.package_tag} className="small" /> : p.tag_pending ? <span className="warn-t small">tag pending</span> : null }
 
 /** on hand by product (live packages only) */
 function onHand(d: PData) {
@@ -448,7 +449,7 @@ function PutAwaySheet({ c, p, sb, onClose }: { c: Ctx; p: Pallet; sb: ReturnType
 }
 
 // ---------- Runs ----------
-function Runs({ c, onStart }: { c: Ctx; onStart: (k: Run['kind']) => void }) {
+function Runs({ c, onStart, sel }: { c: Ctx; onStart: (k: Run['kind']) => void; sel?: number | null }) {
   const [f, setF] = useState<'open' | 'done' | 'all'>('open')
   const rows = c.d.runs.filter(r => f === 'all' ? r.status !== 'cancelled' : r.status === f)
   return (
@@ -457,11 +458,11 @@ function Runs({ c, onStart }: { c: Ctx; onStart: (k: Run['kind']) => void }) {
         {c.canEdit && <div className="row"><button className="primary" onClick={() => onStart('buck')}>+ Bucking</button><button className="primary" onClick={() => onStart('sort')}>+ Sorting</button><button className="primary" onClick={() => onStart('trim')}>+ Trimming</button><button className="primary" onClick={() => onStart('machine')}>+ Machine trim</button></div>}</div>
       <div className="seg">{([['open', `Being worked (${c.d.runs.filter(r => r.status === 'open').length})`], ['done', 'Done'], ['all', 'All']] as const).map(([k, l]) =>
         <button key={k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>{l}</button>)}</div>
-      {!rows.length ? <p className="muted">{f === 'open' ? 'Nothing being worked. Start a bucking or trimming run when the crew starts on a lot.' : 'No runs yet.'}</p> : <div className="cwrap"><table className="ctable">
-        <thead><tr><th>Run</th><th>Strain</th><th className="num">In</th><th className="num">Out</th><th className="num hide-s">Mold</th><th className="num">Moisture / diff.</th><th>Dates</th></tr></thead>
-        <tbody>{rows.map(r => <tr key={r.id} className="tap" onClick={() => c.openRun(r)}>
-          <td><b>{r.code}</b> <span className="muted">{KIND[r.kind]}</span></td><td>{r.strain} <span className="muted">{r.crop_year ?? ''}</span></td>
-          <td className="num">{n0(r.input_lbs)}</td><td className="num">{r.status === 'done' ? n0(r.output_lbs) : ''}</td><td className="num hide-s">{r.status === 'done' ? n0(r.mold_lbs) : ''}</td>
+      {!rows.length ? <p className="muted">{f === 'open' ? 'Nothing being worked. Start a bucking or trimming run when the crew starts on a lot.' : 'No runs yet.'}</p> : <div className="cwrap"><table className="ctable slimmable">
+        <thead><tr><th className="slim">Run</th><th className="slim">Strain</th><th className="num slim">In</th><th className="num">Out</th><th className="num hide-s">Mold</th><th className="num">Moisture / diff.</th><th>Dates</th></tr></thead>
+        <tbody>{rows.map(r => <tr key={r.id} className={`tap ${sel === r.id ? 'sel' : ''}`} onClick={() => c.openRun(r)}>
+          <td className="slim"><b>{r.code}</b> <span className="muted">{KIND[r.kind]}</span></td><td className="slim">{r.strain} <span className="muted">{r.crop_year ?? ''}</span></td>
+          <td className="num slim">{n0(r.input_lbs)}</td><td className="num">{r.status === 'done' ? n0(r.output_lbs) : ''}</td><td className="num hide-s">{r.status === 'done' ? n0(r.mold_lbs) : ''}</td>
           <td className="num">{r.status === 'done' ? <>{n0(r.loss_lbs)} <span className="muted">{pct(r.loss_lbs ?? 0, r.input_lbs ?? 0)}</span></> : ''}</td>
           <td className="nowrap small">{fmtD(r.started_on)}{r.finished_on ? ` – ${fmtD(r.finished_on)}` : r.status === 'open' ? ' · working' : ''}</td></tr>)}</tbody>
       </table></div>}
@@ -494,7 +495,7 @@ function StartRun({ c, kind, req, pre, onClose, onDone }: { c: Ctx; kind: Run['k
   const SUB: Record<Run['kind'], string> = { buck: 'Wet or unbucked packages go in whole (not weighed on the stem; wet ones count as dried in house)',
     sort: 'Bucked flower in; bucked standards and smalls out. No piece rate.', trim: 'Bucked, bucked standards or smalls (or machine trimmed standards to finish by hand), all or part of each',
     machine: 'Smalls or bucked in; standards and trim out. No piece rate. Marked machine trimmed inside the app only (never in METRC or for customers).' }
-  return <Sheet wide title={TITLE[kind]} sub={SUB[kind]} onClose={onClose}>
+  return <Sheet wide side title={TITLE[kind]} sub={SUB[kind]} onClose={onClose}>
     {!cands.length ? <p className="muted">No {TAKES[kind]} packages free to work on.</p> : <>
       <F label="Strain"><Pick value={strain} blank="Pick a strain…" options={strains.map(s => ({ v: s, l: `${s} (${n0(sum(cands.filter(p => p.strain === s).map(w)))} lbs)` }))} onChange={v => { setStrain(v); setPick({}); setRequest(null) }} /></F>
       {strain && <div className="cwrap"><table className="ctable">
@@ -561,11 +562,11 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
     setBusy(true)
     try { await c.api.cancelRun(run.id); c.flash(`${run.code} cancelled`); await c.reload(); onClose() } catch (e) { c.flash(errText(e), true) } finally { setBusy(false) }
   }
-  if (logDate && c.sb) return <Sheet wide title={`${run.code} · ${KIND[run.kind]} · crew`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''}`} onClose={onClose}>
+  if (logDate && c.sb) return <Sheet wide side title={`${run.code} · ${KIND[run.kind]} · crew`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''}`} onClose={onClose}>
     <button className="ghost small backrun" onClick={() => setLogDate(null)}>← Back to the run</button>
     <RunDayLog sb={c.sb} run={run as RunLite} date0={logDate} flash={c.flash} canEdit={c.canEdit} onSaved={loadCrew} />
   </Sheet>
-  return <Sheet wide title={`${run.code} · ${KIND[run.kind]}`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''} · started ${fmtD(run.started_on)}${run.finished_on ? ` · done ${fmtD(run.finished_on)}` : ''}${run.status === 'cancelled' ? ' · cancelled' : ''}`} onClose={onClose}>
+  return <Sheet wide side title={`${run.code} · ${KIND[run.kind]}`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''} · started ${fmtD(run.started_on)}${run.finished_on ? ` · done ${fmtD(run.finished_on)}` : ''}${run.status === 'cancelled' ? ' · cancelled' : ''}`} onClose={onClose}>
     {req && <div className="infobox">For trim request: {n0(req.lbs)} lbs {REQ_PRODUCT[req.product]}{req.due_on ? ` by ${fmtD(req.due_on)}` : ''}{req.customer_id ? ` · ${d.customers.find(x => x.id === req.customer_id)?.name}` : ''}</div>}
     <h3 className="csec">In <span className="muted">{n0(inp)} lbs{run.kind === 'buck' ? ' wet, on paper' : ''}</span></h3>
     <div className="dlist">{ins.map(({ i, p }) => <button key={i.id} className="drow linkrow" onClick={() => p && c.openPkg(p)}>
@@ -694,7 +695,7 @@ function PackageSheet({ c, p, onClose }: { c: Ctx; p: Pallet; onClose: () => voi
   const here = live(p), free = here && !r && !h, can = c.canEdit
   const info = c.inv?.info(p.id)
   const go = (f: () => void) => { onClose(); f() }
-  return <Sheet title={p.code} sub={<><StrainLink name={p.strain} /> <Prod p={p.product} /></>} onClose={onClose}>
+  return <Sheet side title={p.code} sub={<><StrainLink name={p.strain} /> <Prod p={p.product} /></>} onClose={onClose}>
     {r && <div className="infobox">Being {r.kind === 'buck' ? 'bucked' : r.kind === 'sort' ? 'sorted' : r.kind === 'machine' ? 'machine trimmed' : 'trimmed'} in <a onClick={() => c.openRun(r)}>{r.code}</a>. Open the run to finish it.</div>}
     {h && <div className="infobox held">Committed to {h}. Distribution ships it from Fulfillment.</div>}
     {can && <div className="actions">

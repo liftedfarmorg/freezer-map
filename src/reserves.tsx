@@ -74,6 +74,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [result, setResult] = useState<ImportResult | null>(null)
   const [sampleOf, setSampleOf] = useState<Order | null>(null)
   const [holdRev, setHoldRev] = useState(0)
+  const [ost, setOst] = useState<string>('all')   // Orders table: status filter (restyle)
   const load = () => Promise.all([backend.listBalances(), backend.listOrders().catch(() => [] as Order[]),
       backend.listRequests().catch(() => [] as ReserveRequest[]), backend.menuNumbers().catch(() => [] as MenuNumbers[])])
     .then(([b, o, r, m]) => {
@@ -272,23 +273,35 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 
       {mode === 'orders' && (
         <>
-          {shownOrders.length === 0 && <p className="muted">No orders yet. Export sales orders from Roshi and import the file here.</p>}
-          {shownOrders.map(o => (
-            <div key={o.id} className="rescard">
-              <button className="li setrow" onClick={() => setOpen(open === -o.id ? null : -o.id)}>
-                <div className="grow"><b>{o.so_number ?? `Order #${o.id}`}</b> <span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span>{o.is_sample && <span className="pill sample">Sample</span>}
-                  {o.status === 'pending' && fulfil?.get(o.id) && <span className={`pill fs-${fulfil.get(o.id)!.state}`}>{STATE_LABEL[fulfil.get(o.id)!.state]}{fulfil.get(o.id)!.stop ? ` · ${fulfil.get(o.id)!.stop!.load}` : ''}</span>}
-                  <div className="muted">{cname(o.customer_id)} · {fmtDate(o.order_date)}{o.source === 'portal' ? ' · from portal' : ''}{o.roshi_status && o.roshi_status !== 'Fulfilled' ? ` · Roshi: ${o.roshi_status}` : ''}</div></div>
-                <b className="num">{n0(orderLbs(o))} lbs</b>
-              </button>
-              {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
-              {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
-                <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
-                {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
-              {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
-              {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
-            </div>
-          ))}
+          {orders.length === 0 && <p className="muted">No orders yet. Export sales orders from Roshi and import the file here.</p>}
+          {orders.length > 0 && <div className="seg ostat" role="group" aria-label="Status">{['all', 'submitted', 'pending', 'shipped', 'draft', 'cancelled'].filter(k => k === 'all' || shownOrders.some(o => o.status === k)).map(k =>
+            <button key={k} className={ost === k ? 'on' : ''} onClick={() => setOst(k)}>{k === 'all' ? 'All' : STATUS_LABEL[k]} <span className="segn">{k === 'all' ? shownOrders.length : shownOrders.filter(o => o.status === k).length}</span></button>)}</div>}
+          {orders.length > 0 && <div className="cwrap"><table className="ctable otable slimmable">
+            <thead><tr><th className="slim">Order</th><th className="slim">Customer</th><th className="hide-s">Date</th><th className="slim">Status</th><th className="hide-s">Fulfillment</th><th className="num">Lbs</th></tr></thead>
+            <tbody>{shownOrders.filter(o => ost === 'all' || o.status === ost).map(o => [
+              <tr key={o.id} className={`tap ${open === -o.id ? 'open sel' : ''}`} onClick={() => setOpen(open === -o.id ? null : -o.id)}>
+                <td className="nw slim"><b>{o.so_number ?? `Order #${o.id}`}</b>{o.is_sample && <> <span className="pill sample">Sample</span></>}</td>
+                <td className="slim">{cname(o.customer_id)}<div className="muted small">{o.source === 'portal' ? 'from portal' : ''}{o.roshi_status && o.roshi_status !== 'Fulfilled' ? `${o.source === 'portal' ? ' · ' : ''}Roshi: ${o.roshi_status}` : ''}</div></td>
+                <td className="hide-s nw">{fmtDate(o.order_date)}</td>
+                <td className="slim"><span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span></td>
+                <td className="hide-s">{o.status === 'pending' && fulfil?.get(o.id) && <span className={`pill fs-${fulfil.get(o.id)!.state}`}>{STATE_LABEL[fulfil.get(o.id)!.state]}{fulfil.get(o.id)!.stop ? ` · ${fulfil.get(o.id)!.stop!.load}` : ''}</span>}</td>
+                <td className="num"><b>{n0(orderLbs(o))}</b></td>
+              </tr>,
+              // Msg 304: the order opens in the big side card (full-height sheet on a phone) instead of under its row
+              open === -o.id ? <tr key={`x-${o.id}`} className="xrow-side"><td colSpan={6} className="slim" style={{ padding: 0, border: 0 }}><div className="scrim" onClick={() => setOpen(null)}><div className="sheet form wide side osheet" onClick={e => e.stopPropagation()}>
+                    <div className="sheet-h"><div><h2>{o.so_number ?? `Order #${o.id}`}{o.is_sample && <> <span className="pill sample">Sample</span></>}</h2>
+                      <div className="muted">{cname(o.customer_id)} · {fmtDate(o.order_date)} · <span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span> · {n0(orderLbs(o))} lbs</div></div>
+                      <button className="ghost" onClick={() => setOpen(null)}>✕</button></div>
+                    <div className="rescard odetail">
+                    {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
+                    {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
+                      <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
+                      {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
+                    {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
+                    {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} isAdmin={isAdmin} />}
+              </div></div></div></td></tr> : null,
+            ])}</tbody>
+          </table></div>}
           <p className="muted">Import the Roshi sales order export (the same one the menu engine uses) any time. New orders are added and existing ones are updated. Only 2026 fresh frozen lines, plus open 2025 ones, are used.</p>
         </>
       )}
@@ -392,11 +405,12 @@ export function MyOrders({ backend, onChange }: { backend: Backend; onChange?: (
 }
 
 // staff: confirm / ship / cancel an order, change lbs or price on a line, add a line
-function OrderEditor({ backend, o, strains, flash, onChanged }: {
-  backend: Backend; o: Order; strains: Strain[]; flash: (t: string, bad?: boolean) => void; onChanged: () => void
+function OrderEditor({ backend, o, strains, flash, onChanged, isAdmin }: {
+  backend: Backend; o: Order; strains: Strain[]; flash: (t: string, bad?: boolean) => void; onChanged: () => void; isAdmin?: boolean
 }) {
   // Roshi SO # field removed (Aziz 11/4); an SO # already on the order is kept as is
   const so = o.so_number ?? ''
+  const [askCancel, setAskCancel] = useState(false)
   const [wantOn, setWantOn] = useState(o.wanted_date ?? '')
   useEffect(() => { setWantOn(o.wanted_date ?? '') }, [o.wanted_date])
   const [shipOn, setShipOn] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })
@@ -445,7 +459,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
     setBusy(true)
     try { await f(); flash(ok); setEdits({}); setAdd({ strain: '', lbs: '' }); onChanged() } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
-  const open_ = o.status === 'submitted' || o.status === 'pending'
+  const open_ = o.status === 'submitted' || o.status === 'pending' || o.status === 'draft'
   const total = o.order_lines.reduce((a, l) => a + Number(l.lbs) * Number(l.price_per_lb ?? 0), 0)
   return (
     <div className="ordered">
@@ -491,15 +505,24 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
       {open_ && (
         <div className="row reqact">
           {o.status === 'submitted' && <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Order confirmed')}>Confirm</button>}
+          {o.status === 'draft' && (isAdmin
+            ? <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Draft confirmed')}>Confirm order</button>
+            : <span className="muted small">Draft: a Sales Admin confirms it. It holds nothing until then.</span>)}
           <label className="row muted small" style={{ gap: 6 }}>Requested Delivery Date
             <input type="date" value={wantOn} disabled={busy} style={{ maxWidth: 150 }} aria-label="Requested Delivery Date"
               onChange={e => setWantOn(e.target.value)}
               onBlur={() => { const v = wantOn || null; if (v === (o.wanted_date ?? null) || (v && v < '2020-01-01')) { setWantOn(o.wanted_date ?? ''); return } run(async () => { const { error } = await backend.client()!.rpc('set_order_wanted', { p_order: o.id, p_date: v }); if (error) throw new Error(/set_order_wanted|schema cache/i.test(error.message) ? `${error.message} (run 209_order_wanted_date.sql in Supabase)` : error.message) }, v ? `Requested delivery ${fmtDate(v)}` : 'Requested delivery cleared') }} /></label>
-          <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
-            <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>
-          <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'cancelled', so, ''), 'Order cancelled')}>Cancel order</button>
+          {o.status !== 'draft' && <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
+            <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>}
         </div>
       )}
+      {open_ && <div className="row ocancel"><button className="ghost danger" disabled={busy} onClick={() => setAskCancel(true)}>Cancel order…</button></div>}
+      {askCancel && <div className="scrim confirm-scrim" onClick={() => setAskCancel(false)}><div className="sheet form confirm" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <h2>Cancel {o.so_number ?? `order #${o.id}`}?</h2>
+        <p className="muted">The order is marked Cancelled. If it's on a load that hasn't left, it comes off the load and its pallets go back to Needs a spot. This can't be undone from here.</p>
+        <div className="row between fbar"><button className="ghost" onClick={() => setAskCancel(false)}>Keep the order</button>
+          <button className="primary danger" disabled={busy} onClick={() => { setAskCancel(false); run(() => backend.setOrderStatus(o.id, 'cancelled', so, ''), 'Order cancelled') }}>Cancel order</button></div>
+      </div></div>}
     </div>
   )
 }

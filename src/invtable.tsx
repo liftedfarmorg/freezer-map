@@ -34,7 +34,7 @@ const store = (k: string) => { try { return JSON.parse(localStorage.getItem(k) ?
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private window */ } }
 const n0 = (x: number) => Math.round(x).toLocaleString()
 
-export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaultGroup, defaultSort, chips, text, lbs, onOpen, expand, totals, actions, noun = 'package', toolbar, rowClass }: {
+export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaultGroup, defaultSort, chips, text, lbs, onOpen, expand, totals, actions, noun = 'package', toolbar, rowClass, site, cards }: {
   id: string; title: ReactNode; note?: ReactNode
   rows: R[]; rowId: (r: R) => number
   cols: Col<R>[]; groups: GroupBy<R>[]; defaultGroup: string
@@ -51,6 +51,10 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
   actions?: SelAction[]; noun?: string
   toolbar?: ReactNode
   rowClass?: (r: R) => string
+  /** site switch (restyle 257): the sites to offer and each row's site; "All" shows every site. The last pick is remembered. */
+  site?: { opts: string[]; get: (r: R) => string | null | undefined }
+  /** summary cards over the table, from the rows shown */
+  cards?: (rows: R[]) => ReactNode
 }) {
   const key = `fm.inv.${id}`
   const saved = store(key) as { g?: string; hide?: string[]; show?: string[]; sort?: [string, 1 | -1] } | null
@@ -63,6 +67,10 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [openRow, setOpenRow] = useState<number | null>(null)
   const [colMenu, setColMenu] = useState(false)
+  const [expMenu, setExpMenu] = useState(false)
+  const siteKey = `fm.inv.${id}.site`
+  const [st, setSt] = useState<string>(() => { const v = store(siteKey); return typeof v === 'string' && (v === 'All' || site?.opts.includes(v)) ? v : 'All' })
+  const pickSite = (v: string) => { setSt(v); save(siteKey, v) }
   const sel = useSel()
   const persist = (p: Partial<{ g: string; hide: string[]; show: string[]; sort: [string, 1 | -1] | null }>) =>
     save(key, { g, hide: [...hide], show: [...show], sort, ...p })
@@ -75,9 +83,9 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
 
   // filter
   const ql = q.trim().toLowerCase()
-  const shown = useMemo(() => rows.filter(r => (!ql || text(r).toLowerCase().includes(ql))
+  const shown = useMemo(() => rows.filter(r => (!site || st === 'All' || site.get(r) === st) && (!ql || text(r).toLowerCase().includes(ql))
     && (chips ?? []).every(c => !pick[c.k]?.size || pick[c.k].has(c.get(r) ?? '')))
-  , [rows, ql, pick, chips])
+  , [rows, ql, pick, chips, st])
   // sort
   const valOf = (c: Col<R>, r: R) => { const v = c.val ? c.val(r) : c.get(r); return typeof v === 'number' ? v : v == null ? '' : String(v) }
   const sorted = useMemo(() => {
@@ -98,13 +106,39 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
   }, [sorted, g])
 
   const totLbs = shown.reduce((a, r) => a + lbs(r), 0)
+  const stamp = () => `${id}-inventory${site && st !== 'All' ? `-${st}` : ''}-${new Date().toISOString().slice(0, 10)}`
+  const exportRows = () => {
+    const head = [...(grp ? [grp.l] : []), ...visible.map(c => c.l)]
+    const body: (string | number)[][] = []
+    for (const [k, rs] of grouped) for (const r of rs) body.push([...(grp ? [k] : []), ...visible.map(c => valOf(c, r))])
+    return { head, body }
+  }
   const exportCsv = () => {
     const esc = (v: unknown) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-    const lines = [[...(grp ? [grp.l] : []), ...visible.map(c => c.l)].map(esc).join(',')]
-    for (const [k, rs] of grouped) for (const r of rs) lines.push([...(grp ? [k] : []), ...visible.map(c => valOf(c, r))].map(esc).join(','))
+    const { head, body } = exportRows()
+    const lines = [head, ...body].map(l => l.map(esc).join(','))
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }))
-    a.download = `${id}-inventory-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+    a.download = `${stamp()}.csv`; a.click()
+  }
+  const exportXlsx = async () => {
+    const { default: writeXlsxFile } = await import('write-excel-file/browser')
+    const { head, body } = exportRows()
+    await writeXlsxFile([head.map(v => ({ value: v, fontWeight: 'bold' as const, backgroundColor: '#E6F3EE' })),
+      ...body.map(l => l.map(v => ({ value: v === '' ? null : v, type: typeof v === 'number' ? Number : String })))] as never,
+      { stickyRowsCount: 1, columns: head.map(h => ({ width: /tag/i.test(h) ? 28 : Math.max(10, h.length + 4) })) } as never).toFile(`${stamp()}.xlsx`)
+  }
+  const exportPdf = async () => {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+    const { head, body } = exportRows()
+    const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'landscape' })
+    const M = 28
+    pdf.setFont('helvetica', 'bold').setFontSize(14).setTextColor(35, 31, 32).text(`${typeof title === 'string' ? title : 'Inventory'}${site && st !== 'All' ? ` · ${st}` : ''}`, M, M + 8)
+    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(95, 107, 100).text(`${shown.length} ${noun}${shown.length === 1 ? '' : 's'} · ${n0(totLbs)} lbs · printed ${new Date().toLocaleString()}`, M, M + 22)
+    autoTable(pdf, { startY: M + 32, margin: { left: M, right: M }, head: [head], body: body.map(l => l.map(v => typeof v === 'number' ? v.toLocaleString() : v)),
+      styles: { fontSize: 7, cellPadding: 2.5, overflow: 'linebreak' }, headStyles: { fillColor: [35, 31, 32], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [247, 249, 246] } })
+    pdf.save(`${stamp()}.pdf`)
   }
   const chipOpts = (c: Chip<R>) => { const vs = [...new Set(rows.map(r => c.get(r) ?? '').filter(Boolean))]
     return c.order ? vs.sort((a, b) => (c.order!.indexOf(a) + 1 || 99) - (c.order!.indexOf(b) + 1 || 99)) : vs.sort() }
@@ -115,7 +149,13 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
     <div className="list inv">
       <div className="row between wrap toolbar"><h2>{title}</h2>
         <div className="row wrap">{toolbar}{actions?.length ? <SelButton sel={sel} /> : null}
-          <button className="ghost small" onClick={exportCsv}>Export to Excel</button></div></div>
+          <span className="colpick"><button className="ghost small" aria-haspopup="menu" aria-expanded={expMenu} onClick={() => setExpMenu(v => !v)}>Export ▾</button>
+            {expMenu && <div className="colmenu expmenu" role="menu" onMouseLeave={() => setExpMenu(false)}>
+              <button role="menuitem" onClick={() => { setExpMenu(false); exportXlsx() }}>Excel (.xlsx)</button>
+              <button role="menuitem" onClick={() => { setExpMenu(false); exportCsv() }}>CSV</button>
+              <button role="menuitem" onClick={() => { setExpMenu(false); exportPdf() }}>PDF</button></div>}</span></div></div>
+      {site && <div className="seg invsite" role="group" aria-label="Site">{[...site.opts, 'All'].map(v => <button key={v} className={st === v ? 'on' : ''} onClick={() => pickSite(v)}>{v}</button>)}</div>}
+      {cards && <div className="invcards">{cards(shown)}</div>}
       {note && <p className="muted">{note}</p>}
       <div className="row wrap toolbar invbar">
         <input className="search" type="search" placeholder="Search strain, pallet, tag, lot" value={q} onChange={e => setQ(e.target.value)} />

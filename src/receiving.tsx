@@ -1,12 +1,13 @@
+import { tagTxt } from './mtag'
 import { useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { metrcRun } from './metrcCall'
 import { rpc } from './ship'
 import type { AppAlert } from './types'
 
-// 090: Production > Receiving and Nursery > Receiving. Each module takes in its own deliveries.
-//  - From 1PN (made in the app): Production counts each line. Match = received (planting receipt, METRC receive to-do).
-//    Off = held, and every Nursery Admin gets an alert to fix the manifest in METRC; Nursery presses "Manifest fixed"; Production recounts.
+// 090: Cultivation > Receiving and Nursery > Receiving. Each module takes in its own deliveries.
+//  - From 1PN (made in the app): Cultivation counts each line. Match = received (planting receipt, METRC receive to-do).
+//    Off = held, and every Nursery Admin gets an alert to fix the manifest in METRC; Nursery presses "Manifest fixed"; Cultivation recounts.
 //  - From outside (METRC deliveries to our licenses): count each package; match = Receive in METRC; off = alert + email to them.
 //  - Dead or damaged on arrival: received in full, then logged as a loss.
 
@@ -55,7 +56,7 @@ export function ReceivingView({ sb, module, flash, nurseryLicenses = [] }: { sb:
         <button className="ghost small" disabled={!!busy} onClick={() => { load(); loadMetrc() }}>{busy ?? 'Refresh'}</button></div></div>
     <p className="muted">{module === 'cultivation'
       ? 'Clones and plants coming to OHR and GVR. Count what came off the truck against the manifest. If it matches, receive it. If not, the nursery is told to fix the manifest first. Dead or damaged plants: receive the full count, then they\'re logged as a loss.'
-      : 'Deliveries to 1PN, and nursery deliveries Production counted short or over: fix the manifest in METRC, then press Manifest fixed.'}</p>
+      : 'Deliveries to 1PN, and nursery deliveries Cultivation counted short or over: fix the manifest in METRC, then press Manifest fixed.'}</p>
 
     {alerts.length > 0 && <section className="dcard alerts">
       {alerts.map(a => <div key={a.id} className="alertrow">
@@ -76,7 +77,7 @@ export function ReceivingView({ sb, module, flash, nurseryLicenses = [] }: { sb:
             await load()
           } catch (e) { flash((e as Error).message, true) } finally { setBusy(null) }
         }} />
-      : <FixCard key={c.ref} c={c} busy={!!busy} onFixed={(note, counts) => run(() => rpc(sb, 'delivery_fixed', { p_ref: c.ref, p_note: note || null, p_counts: counts }, '090_receiving'), 'Production has been told to recount')} />)}
+      : <FixCard key={c.ref} c={c} busy={!!busy} onFixed={(note, counts) => run(() => rpc(sb, 'delivery_fixed', { p_ref: c.ref, p_note: note || null, p_counts: counts }, '090_receiving'), 'Cultivation has been told to recount')} />)}
 
     <h3>From outside {outside.length > 0 && <span className="muted">{outside.length}</span>}</h3>
     {inc && !outside.length && !busy && <p className="muted">Nothing incoming from outside.</p>}
@@ -111,7 +112,7 @@ function CountCard({ c, busy, onCount }: { c: Check; busy: boolean; onCount: (co
     {c.status === 'counts_off' && c.counted && <div className="small warn-t">{c.counted.filter(x => x.counted !== x.plants).map(x => `${x.name}: manifest ${x.plants}, counted ${x.counted}`).join(' · ')}</div>}
     {open && <>
       {c.lines.map(l => <div key={l.id} className="row between countrow">
-        <span><b>{l.batch}</b> <span className="muted">{l.strain}{l.tag ? ` · ${l.tag.slice(-8)}` : ''}</span></span>
+        <span><b>{l.batch}</b> <span className="muted">{l.strain}{l.tag ? ` · ${tagTxt(l.tag, 8)}` : ''}</span></span>
         <span className="row"><span className="muted small">manifest {l.plants}</span>
           <input type="number" min="0" inputMode="numeric" placeholder="counted" value={n[l.id] ?? ''} onChange={e => setN(x => ({ ...x, [l.id]: e.target.value }))} style={{ width: 90 }} /></span>
       </div>)}
@@ -135,13 +136,13 @@ function FixCard({ c, busy, onFixed }: { c: Check; busy: boolean; onFixed: (note
       <div><b>{c.strain}</b> <span className="muted">to {c.site}{c.so ? ` · ${c.so}` : ''}{c.manifest ? ` · manifest ${c.manifest}` : ''}</span></div>
       <span className={`pill ${c.status === 'counts_off' ? 'm-bad' : 'm-warn'}`}>{STATUS[c.status]}</span>
     </div>
-    {c.status === 'in_transit' && <div className="muted small">Waiting for Production to count it.</div>}
-    {c.status === 'recount' && <div className="muted small">Production is recounting.</div>}
+    {c.status === 'in_transit' && <div className="muted small">Waiting for Cultivation to count it.</div>}
+    {c.status === 'recount' && <div className="muted small">Cultivation is recounting.</div>}
     {c.status === 'counts_off' && c.counted && <>
-      {c.counted.map(x => <div key={x.id} className={`small ${x.counted !== x.plants ? 'warn-t' : ''}`}>{x.name} ({x.strain}): manifest {x.plants}, Production counted {x.counted}</div>)}
-      {c.note && <div className="small">Production: {c.note}</div>}
-      <label className="check"><input type="checkbox" checked={useCounted} onChange={e => setUseCounted(e.target.checked)} /> I changed the manifest to Production's counts (the app's delivery changes to match)</label>
-      <div className="field"><label>Note for Production</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. manifest updated, 2 short" /></div>
+      {c.counted.map(x => <div key={x.id} className={`small ${x.counted !== x.plants ? 'warn-t' : ''}`}>{x.name} ({x.strain}): manifest {x.plants}, Cultivation counted {x.counted}</div>)}
+      {c.note && <div className="small">Cultivation: {c.note}</div>}
+      <label className="check"><input type="checkbox" checked={useCounted} onChange={e => setUseCounted(e.target.checked)} /> I changed the manifest to Cultivation's counts (the app's delivery changes to match)</label>
+      <div className="field"><label>Note for Cultivation</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. manifest updated, 2 short" /></div>
       <div className="row end"><button className="primary" disabled={busy} onClick={() => onFixed(note, useCounted ? c.counted!.map(x => ({ id: x.id, plants: x.counted })) : null)}>Manifest fixed</button></div>
     </>}
   </div>
@@ -160,7 +161,7 @@ function OutsideCard({ d, live, busy, module, onReceive, onOff }: { d: Delivery;
     <div><b>{d.manifest}</b> <span className="muted">from</span> <b>{d.from}</b> <span className="muted small">{d.from_license}</span>
       <div className="muted small">to {d.site} {d.license} · left {when(d.departed)}{d.driver ? ` · ${d.driver}` : ''}{d.vehicle ? ` · ${d.vehicle}` : ''}</div></div>
     {items.map(i => <div key={i.tag} className="row between countrow">
-      <span><b>{i.item}</b> <span className="muted mono small">{i.tag.slice(-8)}</span></span>
+      <span><b>{i.item}</b> <span className="muted mono small">{tagTxt(i.tag, 8)}</span></span>
       <span className="row"><span className="muted small">manifest {i.qty} {i.uom}</span>
         <input type="number" min="0" placeholder="counted" value={n[i.tag] ?? ''} onChange={e => setN(x => ({ ...x, [i.tag]: e.target.value }))} style={{ width: 90 }} /></span>
     </div>)}

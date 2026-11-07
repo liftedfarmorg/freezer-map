@@ -1,3 +1,4 @@
+import { MTag, tagTxt } from './mtag'
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Dialog, lbs } from './forms'
@@ -95,7 +96,7 @@ export function ArchivedView({ sb, flash, onChanged, pickSpot, openPallet, initi
   }
 
   const canR = !!ov?.can_restore, canD = !!ov?.can_delete
-  return <div className="list">
+  return <div className="list archived">
     <div className="row between wrap toolbar"><h2>Archived</h2>
       <button className="ghost small" disabled={!!busy} onClick={load}>{busy ?? 'Refresh'}</button></div>
     <p className="muted">Pallets that are out of inventory as archived: leftovers from the Freezer Map sheet import, ones removed as a mistake, ones closed by Reconcile.
@@ -127,7 +128,7 @@ export function ArchivedView({ sb, flash, onChanged, pickSpot, openPallet, initi
         const diff = r.metrc_state && r.metrc_lbs != null && r.lbs != null && Math.abs(r.metrc_lbs - r.lbs) >= 1
         return <tr key={r.id}>
           {canR && <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>}
-          <td className="nw"><a onClick={() => openPallet(r.id)}><b>{r.code}</b></a>{r.tag && <div className="mono small muted">…{r.tag.slice(-6)}</div>}</td>
+          <td className="nw"><a onClick={() => openPallet(r.id)}><b>{r.code}</b></a>{r.tag && <div className="small muted"><MTag t={r.tag} /></div>}</td>
           <td>{r.strain ?? r.label ?? ''}</td>
           <td className="small nw">{r.harvest_date ?? ''}</td>
           <td>{r.site ?? '?'}</td>
@@ -173,7 +174,7 @@ export function RestoreSheet({ r, onClose, onMap, onSubmit }: {
   const weight = n > 0 && n !== r.lbs ? n : null
   const go = async () => { if (dest === 'map') { onMap(weight, note); return } setBusy(true); try { await onSubmit({ site, staging: dest === 'staging' }, weight, note) } finally { setBusy(false) } }
   return <Dialog title={`Bring back ${r.code}`} onClose={onClose}>
-    <p className="muted">{r.strain ?? r.label ?? ''}{r.harvest_date ? ` · harvested ${r.harvest_date}` : ''}{r.tag ? ` · tag …${r.tag.slice(-6)}` : ''}</p>
+    <p className="muted">{r.strain ?? r.label ?? ''}{r.harvest_date ? ` · harvested ${r.harvest_date}` : ''}{r.tag ? ` · tag ${tagTxt(r.tag)}` : ''}</p>
     {r.metrc_state ? <p className="small">METRC: active at {r.metrc_license}, {lbs(r.metrc_lbs)}{r.metrc_item ? ` · ${r.metrc_item}` : ''}</p>
       : r.tag ? <div className="warnbox">METRC doesn't have this package active. Bring it back only if it's really in a freezer.</div> : null}
     <div className="field"><label>Where is it?</label>

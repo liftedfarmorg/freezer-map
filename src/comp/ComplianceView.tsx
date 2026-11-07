@@ -81,7 +81,7 @@ function Dashboard({ c }: { c: Ctx }) {
       <Tile value={ov.errors_open} label="METRC errors" sub={`${ov.playbook} fixes in the playbook`} tone={ov.errors_open ? 'warn' : undefined} onClick={() => c.go('metrc', 'errors')} />
       <Tile value={`${ov.materials_approved}/${ov.materials}`} label="Materials approved" sub={ov.not_on_list ? `${ov.not_on_list} not on the CCOF list` : ov.materials_unreviewed ? `${ov.materials_unreviewed} not reviewed yet` : 'all on the CCOF list'} tone={ov.materials_unreviewed ? 'warn' : 'ok'} onClick={() => c.go('ccof', 'materials')} />
       <Tile value={ov.material_issues} label="Log lines not approved" sub="this year, certified sites" tone={ov.material_issues ? 'warn' : 'ok'} onClick={() => c.go('review')} />
-      <Tile value={ov.tests_no_file} label="Test results, no file" sub="Production › Testing" tone={ov.tests_no_file ? 'warn' : 'ok'} onClick={() => c.go('review')} />
+      <Tile value={ov.tests_no_file} label="Test results, no file" sub="Cultivation › Testing" tone={ov.tests_no_file ? 'warn' : 'ok'} onClick={() => c.go('review')} />
       <Tile value={ov.customers_missing} label="Customer licenses" sub="missing or expired" tone={ov.customers_missing ? 'warn' : 'ok'} onClick={() => c.go('library', 'customers')} />
       <Tile value={ov.docs} label="Documents" sub={ov.backup_waiting ? `${ov.backup_waiting} waiting for SharePoint` : 'all copied to SharePoint'} onClick={() => c.go('library')} />
       <Tile value={!ov.sp_site ? 'Off' : b ? fmtD(b.started_at) : 'Never'} label="SharePoint backup" sub={!ov.sp_site ? 'not set up yet' : b?.error ?? (b ? `${b.copied} copied, ${b.failed} failed` : 'runs nightly')} tone={backupTone} onClick={c.isAdmin ? () => c.go('settings') : undefined} />
@@ -142,10 +142,10 @@ function Review({ c }: { c: Ctx }) {
       <div className="dlist">{late.map(d => <div key={d.kind + d.ref} className="drow"><span className="grow">{d.title}</span><span className={`pill ${dueTone(d)}`}>{dueText(d)}</span></div>)}</div></Fold>}
     {prods.length > 0 && <Fold id="comp.prods" open title="Products used in logs without CCOF approval" count={prods.length} right={<button className="linkbtn" onClick={() => c.go('ccof', 'materials')}>Materials ›</button>}>
       <p className="muted">From this year's Feed and Spray logs. Approve the product (with its listing) or find out why it was used.</p>
-      <div className="dlist">{prods.map(p => <div key={p.module + p.product} className="drow"><span className="grow"><b>{p.product}</b> <span className="muted">{p.module === 'nursery' ? 'Nursery' : 'Production'} · {p.issue}</span></span>
+      <div className="dlist">{prods.map(p => <div key={p.module + p.product} className="drow"><span className="grow"><b>{p.product}</b> <span className="muted">{p.module === 'nursery' ? 'Nursery' : 'Cultivation'} · {p.issue}</span></span>
         <span className="muted small">{p.n} line{p.n === 1 ? '' : 's'} · last {fmtD(p.last)}</span></div>)}</div></Fold>}
     {tests.length > 0 && <Fold id="comp.tests" open title="Test results with no file" count={tests.length}>
-      <p className="muted">Results are back but nobody attached the PDF. Production › Testing › open the test › drop the PDF.</p>
+      <p className="muted">Results are back but nobody attached the PDF. Cultivation › Testing › open the test › drop the PDF.</p>
       <div className="dlist">{tests.map(t => <div key={t.id} className="drow"><span className="grow">{t.site} {t.ref} <span className="muted">{t.kind === 'area' ? 'area composite' : 'strain test'}{t.lab ? ` · ${t.lab}` : ''}</span></span>
         <span className="muted small">back {fmtD(t.results_on)}{t.result ? ` · ${t.result}` : ''}</span></div>)}</div></Fold>}
     {errs.length > 0 && <Fold id="comp.errs" open title="Open METRC errors" count={errs.length} right={<button className="linkbtn" onClick={() => c.go('metrc', 'errors')}>Errors ›</button>}>

@@ -1,14 +1,17 @@
 import { Select } from './combo'
 import { ScanButton } from './scan'
 import { sameTag, useScanHandler } from './scanroute'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { metrcRun, openMetrcManifest } from './metrcCall'
 import type { AppTransfer, StopCheckRow } from './metrcCall'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Backend } from './api'
 import { lbs } from './forms'
-import type { Customer, FOrder, Load, LoadBlocker, LoadDriver, LoadItem, LoadStop, Pallet, StopInput, StopManifest, StopShipping, Vehicle } from './types'
+import type { Customer, FLine, FOrder, Load, LoadBlocker, LoadDriver, LoadItem, LoadStop, Pallet, StopInput, StopManifest, StopShipping, Vehicle } from './types'
 import { PickupForm, PickupPanel, ShipLine, money, rpc } from './ship'
-import { STATE_LABEL, orderGot, orderLbs } from './fulfill'
+import { STATE_LABEL, orderGot, orderLbs, heldInFreezers } from './fulfill'
+import { PlanMyPick, type RRow } from './pickplanui'
+import type { Loc } from './pickplan'
 import { StopAlerts, StopOutcomeSheet, outcomeText } from './driver'
 import type { DLoad, DStop } from './driver'
 import { kickNotify } from './push'
@@ -36,6 +39,9 @@ export interface LoadCtx {
   canShip?: boolean                            // Sales: can change a stop's shipping
   canRecord?: boolean                          // 215: Distribution User/Admin: record or fix stop outcomes, carrier driver links
   newMixedOnStop?: (stopId: number, onTruck: boolean) => void   // build a mixed pallet right on a stop
+  loc?: (p: Pallet) => Loc                      // PICK-2: freezer, spot, what's in front (pull route)
+  freeFor?: (l: FLine) => Pallet[]              // PICK-2: free pallets for an order line (same rule as + Assign pallets)
+  backend?: Backend; flash?: (t: string, bad?: boolean) => void; reloadAll?: () => Promise<void>   // PICK-2
   api: {
     createLoad(v: number, d: string, s: StopInput[], driver: string, notes: string): Promise<Load>
     updateLoad(id: number, v: number, d: string, driver: string, notes: string): Promise<void>
@@ -64,7 +70,7 @@ export function siteLicense(lics: Lic[], site: string) {
   return c[0]?.license_no ?? null
 }
 
-export const STOP_COLORS = ['#2563eb', '#d97706', '#16a34a', '#db2777', '#7c3aed', '#0891b2', '#dc2626', '#65a30d']
+export const STOP_COLORS = ['#2b7a5e', '#566f74', '#a8732a', '#7a5876', '#4f6b3a', '#8a5a44', '#3e6f8a', '#3a3436']   // brand family (Msg 288): teal, slate, amber, plum, olive, clay, steel, ink
 export const stopColor = (seq: number) => STOP_COLORS[(seq - 1) % STOP_COLORS.length]
 const STATUS: Record<string, string> = { planning: 'Planning', loading: 'Loading', departing: 'Departing', in_transit: 'In transit', delivered: 'Delivered', cancelled: 'Cancelled' }
 const isPickup = (l?: Load) => l?.kind === 'pickup'
@@ -94,6 +100,14 @@ function label(ctx: LoadCtx, p: Pallet) {
 
 // ---------- list ----------
 
+/** the route a load runs: the farm (or pickup) through its numbered stops; delivered ones turn green (Msg 286) */
+function RouteLine({ ctx, l, st }: { ctx: LoadCtx; l: Load; st: LoadStop[] }) {
+  return <div className="tc-route">
+    <span className="tc-stop origin"><i>●</i>{isPickup(l) ? 'Pickup' : 'Farm'}</span>
+    {st.map(s => <Fragment key={s.id}><span className={`tc-link ${s.status}`} /><span className={`tc-stop ${s.status}`}><i style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.status === 'delivered' ? '✓' : s.status === 'not_delivered' ? '✕' : s.seq}</i>{ctx.customers.find(c => c.id === s.customer_id)?.name}</span></Fragment>)}
+  </div>
+}
+
 export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id: number) => void; onNew: () => void }) {
   const [pickup, setPickup] = useState(false)
   const open = ctx.loads.filter(l => l.status !== 'delivered' && l.status !== 'cancelled')
@@ -104,17 +118,18 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
     const it = ctx.items.filter(i => i.load_id === l.id)
     const w = it.reduce((a, i) => { const p = ctx.pallet(i.pallet_id); return a + (p ? ctx.weight(p) : 0) }, 0)
     return (
-      <button key={l.id} className="li loadcard" onClick={() => onOpen(l.id)}>
-        <div className="row between"><b>{l.code}</b><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></div>
-        <div>{isPickup(l) ? 'Customer pickup' : v?.name ?? 'Vehicle?'} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''}</div>
-        <div className="stopline">
-          {st.map(s => <span key={s.id} className={`stopchip ${s.status}`} style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.seq}. {ctx.customers.find(c => c.id === s.customer_id)?.name}</span>)}
-        </div>
+      <button key={l.id} className={`li loadcard tcard st-${l.status}`} onClick={() => onOpen(l.id)}>
+        <div className="tc-top"><b className="tc-code">{l.code}</b><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></div>
+        <div className="tc-meta"><span><b>{isPickup(l) ? 'Customer pickup' : v?.name ?? 'Vehicle?'}</b></span><span>{fmtDate(l.load_date)}</span>{l.driver && <span>{l.driver}</span>}</div>
+        <RouteLine ctx={ctx} l={l} st={st} />
         {(() => {
           const os = (ctx.orders ?? []).filter(o => o.stop && st.some(s => s.id === o.stop!.id))
-          return os.length > 0 && <div className="muted small">Orders: {os.map(o => `${soOf(o)} ${o.customer}`).join(' · ')}</div>
+          return os.length > 0 && <div className="tc-orders">{os.map(o => <span key={o.id} className="pill">{soOf(o)} · {o.customer}</span>)}</div>
         })()}
-        <div className="muted">{isPickup(l) ? `${it.length} pallet${it.length === 1 ? '' : 's'}` : `${it.length}/${v?.spaces ?? '?'} positions used`} · {it.filter(i => i.loaded).length} loaded · {lbs(w)}</div>
+        <div className="tc-fill">
+          {!isPickup(l) && <span className="tc-bar"><i style={{ width: `${Math.min(100, v?.spaces ? Math.round(it.length / v.spaces * 100) : 0)}%` }} /></span>}
+          <span className="muted">{isPickup(l) ? `${it.length} pallet${it.length === 1 ? '' : 's'}` : `${it.length}/${v?.spaces ?? '?'} positions`} · {it.filter(i => i.loaded).length} loaded · {lbs(w)}</span>
+        </div>
       </button>
     )
   }
@@ -127,8 +142,9 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
         if (await ctx.run(async () => { id = (await rpc<Load>(ctx.api.client(), 'create_pickup', { p_customer: cust, p_date: date, p_notes: notes || null })).id }, 'Pickup made')) { setPickup(false); onOpen(id) }
       }} />}
       {open.length === 0 && <p className="muted">No active loads. Tap New load to plan one.</p>}
-      {open.map(card)}
-      {done.length > 0 && <><h3>Last 14 days</h3>{done.map(card)}</>}
+      {open.length > 0 && <h3 className="tc-h">Active <span className="muted">{open.length}</span></h3>}
+      <div className="tc-list">{open.map(card)}</div>
+      {done.length > 0 && <><h3 className="tc-h">Last 14 days <span className="muted">{done.length}</span></h3><div className="tc-list">{done.map(card)}</div></>}
     </div>
   )
 }
@@ -258,6 +274,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const [manifestFor, setManifestFor] = useState<{ stop: number; value: string } | null>(null)
   const [departAsk, setDepartAsk] = useState(false)
   const [carrier, setCarrier] = useState<string | null>(null)
+  const [pulling, setPulling] = useState(false)   // PICK-2: whole-load pull route
   // 215: the driver portal's view of this load (packages, outcomes), the outcome sheet, the carrier driver's link
   const [dl, setDl] = useState<DLoad | null>(null)
   const [dlOff, setDlOff] = useState(false)   // 215 not run yet: the old Mark delivered button
@@ -379,6 +396,28 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const metrcBlock = stops.filter(s => s.status === 'pending' && items.some(i => i.stop_id === s.id) && (modes[internalStop(s) ? 'transfer' : 'manifest'] ?? 'off') !== 'off')
     .filter(s => { const cs = checks.filter(x => x.stop_id === s.id); return !cs.length || cs.some(x => !x.ok || !fresh(x.checked_at)) }).map(s => s.seq)
 
+  // PICK-2: one pull route for every stop on the load (orders still needing pallets get planned; assigned / planned pallets still in a freezer come along)
+  const loadOrders = (ctx.orders ?? []).filter(o => o.stop?.load_id === l.id && o.state !== 'shipped' && o.state !== 'cancelled')
+  if (pulling && ctx.loc && ctx.freeFor && ctx.backend && ctx.flash && ctx.reloadAll) {
+    const loc = ctx.loc
+    const held: RRow[] = heldInFreezers(loadOrders, ctx.pallet, loc)
+    const seen = new Set(held.map(r => r.pallet.id))
+    for (const i of items) {
+      const p = ctx.pallet(i.pallet_id)
+      if (!p || i.loaded || seen.has(p.id) || p.status !== 'in_freezer') continue
+      const L = loc(p)
+      if (L.fz == null || L.staging) continue
+      held.push({ lineId: -i.stop_id, pallet: p, lbs: ctx.weight(p), whole: true, held: true })
+    }
+    const seqOfLine = (lineId: number) => lineId < 0 ? stopOf(-lineId)?.seq : stops.find(s => loadOrders.some(o => o.stop?.id === s.id && o.lines.some(x => x.id === lineId)))?.seq
+    const desc = [...stops].sort((a, b) => b.seq - a.seq).map(s => `Stop ${s.seq}`).join(', ')
+    return <PlanMyPick orders={loadOrders} cands={ctx.freeFor} loc={loc} pallet={ctx.pallet} contents={ctx.contents} backend={ctx.backend}
+      reload={ctx.reloadAll} flash={ctx.flash}
+      back={() => setPulling(false)} title={`Pull route · ${l.code}`} sub={stops.length > 1 ? `Stage pulled pallets last stop first: ${desc}` : undefined}
+      backLabel={l.code} walkKey={`pmp-walk:l${l.id}`} held={held}
+      tagOf={id => { const q = seqOfLine(id); return q ? { label: `Stop ${q}`, color: stopColor(q) } : undefined }} />
+  }
+
   function tapPos(pos: number) {
     const here = items.filter(i => i.position === pos)
     if (placeItem) {
@@ -396,15 +435,21 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
 
   return (
     <div className="loadview">
-      <div className="fz-head">
-        <button className="ghost" onClick={onBack}>‹ Transit</button>
-        <div className="fz-title">
-          <h2>{l.code} <span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></h2>
-          <div className="muted">{isPickup(l) ? 'Customer pickup' : v?.name} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''} · {isPickup(l) ? `${items.length} pallet${items.length === 1 ? '' : 's'}` : `${items.length}/${spaces} positions`} · {lbs(totalW)}</div>
-          {l.notes && <div className="muted">{l.notes}</div>}
+      <div className="lv-head">
+        <button className="linkbtn lv-back" onClick={onBack}>‹ Transit</button>
+        <div className="lv-title">
+          <h2>{l.code}</h2><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span>
+          <span className="grow" />
+          {canEdit && !isPickup(l) && <button className="ghost small" onClick={onEdit}>Edit</button>}
         </div>
-        {canEdit && !isPickup(l) && <button className="ghost small" onClick={onEdit}>Edit</button>}
+          <div className="lv-meta">{isPickup(l) ? 'Customer pickup' : v?.name} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''} · {isPickup(l) ? `${items.length} pallet${items.length === 1 ? '' : 's'}` : `${items.length}/${spaces} positions`} · {lbs(totalW)}</div>
+        <RouteLine ctx={ctx} l={l} st={stops} />
+        {!isPickup(l) && spaces > 0 && <span className="tc-bar"><i style={{ width: `${Math.min(100, Math.round(new Set(items.map(i => i.position)).size / spaces * 100))}%` }} /></span>}
+        {l.notes && <div className="muted">{l.notes}</div>}
       </div>
+      {canEdit && ctx.loc && ctx.freeFor && (loadOrders.length > 0 || items.some(i => !i.loaded)) && <div className="pmp-bar">
+        <div className="grow"><b>Pull route</b><div className="small">Every stop in one walk, as few freezers as it can.</div></div>
+        <button className="primary" onClick={() => setPulling(true)}>Plan the pull ›</button></div>}
 
       {l.status === 'departing' && <div className="warnbox">
         <b>Departing.</b> {l.depart_error ?? 'Making the METRC manifests. Nothing has left yet.'}
@@ -696,7 +741,7 @@ function StopSearch({ ctx, customers, taken, onPick }: { ctx: LoadCtx; customers
         }} />
       <button type="button" className="combo-arrow" tabIndex={-1} aria-label="Show stops" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}>▾</button>
       {open && <ul className="stoplist" role="listbox">
-        {shown.length === 0 && <li className="none muted">No match{ql ? ` for "${q.trim()}"` : ''}. Customers are added in Sales › Settings › Customers.</li>}
+        {shown.length === 0 && <li className="none muted">No match{ql ? ` for "${q.trim()}"` : ''}. Customers are added in Sales › Customers.</li>}
         {shown.map((c, i) => {
           const os = ready.get(c.id) ?? []
           return <li key={c.id} role="option" aria-selected={i === hi} className={i === hi ? 'hi' : ''} onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); pick(c) }}>

@@ -6,7 +6,7 @@ import { axisDate, Bars, Card, Cards, DashHead, Empty, Legend, Meter, Spark, Til
 
 const z = (x: number) => (x ? n0(x) : '')
 
-/** Production Dashboard: what needs doing this week, and how the season is going. */
+/** Cultivation Dashboard: what needs doing this week, and how the season is going. */
 export function CultDashboard({ d, c, site, onOpen, go }: { d: CultData; c: Ctx; site: string | null; onOpen: (h: Harvest) => void; go: (t: CultTab) => void }) {
   const now = today()
   const live = d.harvests.filter(h => h.status !== 'cancelled' && (!site || h.site === site))
@@ -78,7 +78,7 @@ export function CultDashboard({ d, c, site, onOpen, go }: { d: CultData; c: Ctx;
   const estToDate = curve ? curve.est[Math.max(0, curve.act.reduce<number>((a, v, i) => (v != null ? i : a), 0))] : 0
   return (
     <div className="dash">
-      <DashHead title="Dashboard" sub={`Production · ${site ?? 'both sites'} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`} />
+      <DashHead title="Dashboard" sub={`Cultivation · ${site ?? 'all sites'} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}`} />
       {thisYear && <Tiles>
         <Tile label="Harvest today" value={`${n0(sum(todayP.map(p => p.og_weight)))} lbs`} sub={[todayP.length && `${todayP.length} pallets packed`, going.length && `${going.length} harvesting now`, todayH.length && `${todayH.length} not started`].filter(Boolean).join(' · ') || 'nothing scheduled today'}
           tone={going.length ? 'info' : undefined} onClick={() => go('harvest')} />

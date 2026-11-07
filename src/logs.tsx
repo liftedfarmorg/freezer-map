@@ -5,8 +5,8 @@ import type { ReactNode } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { MONTHS_ES, MONTHS_LONG_ES, lang, t, tn } from './i18n'
 
-// Spray, feed and labor logs, shared by Production and the Nursery (each sees its own).
-// Production works like Farm Data OHR: rates per acre x acres; the Nursery mixes per gallon of water.
+// Spray, feed and labor logs, shared by Cultivation and the Nursery (each sees its own).
+// Cultivation works like Farm Data OHR: rates per acre x acres; the Nursery mixes per gallon of water.
 // Everything is grouped by year, month and calendar week.
 type Flash = (t: string, bad?: boolean) => void
 export type LogKind = 'spray' | 'feed' | 'labor'
@@ -218,7 +218,7 @@ function LogSheet({ sb, x0, field, sites, areas, strains, products, recipes, bat
   const tag = /^\[import [^\]]+\]/.exec(x0.notes ?? '')?.[0] ?? ''
   const [x, setX] = useState<Partial<OpsLog>>({ ...x0, notes: tag ? (x0.notes ?? '').slice(tag.length).trim() : x0.notes, products: x0.products?.length ? x0.products : x0.kind === 'labor' ? [] : [blank()] })
   const [busy, setBusy] = useState(false)
-  // CCOF checks only where the site is certified (Compliance > Settings > Sites; 056). Unknown: Production yes, Nursery no.
+  // CCOF checks only where the site is certified (Compliance > Settings > Sites; 056). Unknown: Cultivation yes, Nursery no.
   const [certs, setCerts] = useState<Record<string, boolean> | null>(null)
   useEffect(() => { sb.from('comp_certs').select('site,ccof').then(r => { if (!r.error) setCerts(Object.fromEntries(((r.data ?? []) as { site: string; ccof: boolean }[]).map(c => [c.site.toUpperCase(), c.ccof]))) }, () => {}) }, [])
   const certSite = (x.site ?? (x.module === 'nursery' ? '1PN' : '')).toUpperCase()
@@ -412,7 +412,7 @@ function Products({ sb, module, products, logs, canEdit, field, flash, onChanged
       </div>
       {canEdit && <button className="primary" onClick={() => setEd({ active: true, rate_unit: field ? 'fl oz/acre' : 'mL/gal' })}>{t('+ Product')}</button>}
     </div>
-    <p className="muted small-note">{t(field ? 'Production\'s products. Rates are per acre. Used = times on a log; the total is this year.' : 'The Nursery\'s products. Rates are per gallon of water. Used = times on a log; the total is this year.')}</p>
+    <p className="muted small-note">{t(field ? 'Cultivation\'s products. Rates are per acre. Used = times on a log; the total is this year.' : 'The Nursery\'s products. Rates are per gallon of water. Used = times on a log; the total is this year.')}</p>
     {!shown.length ? <p className="muted">{t('No products here.')}</p> : <div className="cwrap"><table className="ctable">
       <thead><tr><th>{t('Product')}</th><th className="hide-s">{t('Maker')}</th><th className="hide-s">{t('Type')}</th><th>{t('N-P-K')}</th><th className="num">{t('Rate')}</th>
         <th className="num hide-s">{t('Price')}</th><th className="num">{t('Used')}</th><th className="hide-s">{t('Last used')}</th><th className="num hide-s">{t('{y} total', { y: yr })}</th></tr></thead>

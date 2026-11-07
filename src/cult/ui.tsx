@@ -5,10 +5,10 @@ import { lang, t } from '../i18n'
 
 export type Flash = (t: string, bad?: boolean) => void
 
-export function Sheet({ title, sub, onClose, children, wide }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Sheet({ title, sub, onClose, children, wide, side }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; side?: boolean }) {
   return (
     <div className="scrim" onClick={onClose}>
-      <div className={`sheet form ${wide ? 'wide' : ''} csheet`} onClick={e => e.stopPropagation()}>
+      <div className={`sheet form ${wide ? 'wide' : ''} ${side ? 'side' : ''} csheet`} onClick={e => e.stopPropagation()}>
         <div className="sheet-h"><div><h2>{title}</h2>{sub && <div className="muted">{sub}</div>}</div><button className="ghost" onClick={onClose}>✕</button></div>
         {children}
       </div>

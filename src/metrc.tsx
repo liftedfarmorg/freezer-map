@@ -1,5 +1,6 @@
 // What each inventory action means in METRC. Shown in the action dialogs so the person doing it
 // knows what lands on the Compliance > METRC to-do list (the server queues it from the event).
+import { tagTxt } from './mtag'
 import type { Pallet, Product } from './types'
 import { PRODUCT_LABEL } from './types'
 
@@ -8,7 +9,7 @@ export type InvAction = 'move' | 'split' | 'merge' | 'addto' | 'load' | 'weight'
 const DRY: Product[] = ['wet', 'unbucked', 'bucked', 'bucked_standards', 'standards', 'smalls', 'trim']
 export const isDry = (p: Pallet) => DRY.includes((p.product ?? 'fresh_frozen') as Product)
 const item = (p: Pallet) => PRODUCT_LABEL[(p.product ?? 'fresh_frozen') as Product] ?? 'Fresh Frozen'
-const tagOf = (p: Pallet) => p.package_tag ? `…${p.package_tag.slice(-6)}` : 'its tag'
+const tagOf = (p: Pallet) => p.package_tag ? tagTxt(p.package_tag) : 'its tag'
 
 /** METRC package adjustment reasons we use (CA). The code goes in the event details. */
 export const WEIGHT_REASONS: { k: string; l: string; hint: string }[] = [

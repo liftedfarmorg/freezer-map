@@ -1,3 +1,4 @@
+import { rangeTxt } from '../mtag'
 import { useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { metrcRun } from '../metrcCall'
@@ -17,7 +18,7 @@ interface Check { ok: boolean; first?: string; last?: string; count?: number; li
 
 const WHAT: Record<RunPurpose, string> = { batch: 'Batch tags', flower: 'Flowering tags' }
 const tail = (l: string) => l.slice(-9)
-const span = (a: string, b: string) => (a === b ? a : `${a} – ${tail(b)}`)
+const span = (a: string, b: string) => (a === b ? a : `${a} – ${tail(b)}`)   // batch tags: the full first tag, the end of the last
 
 export function useHeldRuns(sb: SupabaseClient, plantingId: number | undefined) {
   const [runs, setRuns] = useState<HeldRun[]>([])
@@ -86,7 +87,7 @@ export function TagRunBox({ sb, plantingId, purpose, need, held, locked, onChang
         <b>{WHAT[purpose]}</b>
         <span className="muted">{purpose === 'batch' ? `one per 100 plants: ${n0(need)} needed` : `one per plant: ${n0(need)} needed`}</span>
         {held
-          ? <span className="mono">{span(held.first_label, held.last_label)} <span className="muted">({n0(held.tags)})</span></span>
+          ? <span className="mono">{purpose === 'flower' ? rangeTxt(held.first_label, held.last_label) : span(held.first_label, held.last_label)} <span className="muted">({n0(held.tags)})</span></span>
           : <span className="warn-t">none picked</span>}
         {!locked && !open && <button className="ghost small" onClick={() => { setCount(need); setFirst(''); setChk(null); setOpen(true) }}>{held ? 'Change' : 'Pick run'}</button>}
         {!locked && held && !open && <button className="ghost small" onClick={release}>Release</button>}

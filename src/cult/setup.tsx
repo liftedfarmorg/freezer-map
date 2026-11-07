@@ -14,7 +14,7 @@ const TABLE_LABEL: Record<string, string> = {
   cult_plan: 'Plan row', cult_nursery_orders: 'Nursery delivery', cult_receipts: 'Plants received', app_settings: 'Setting',
 }
 
-/** one line for a Production change log row */
+/** one line for a Cultivation change log row */
 export function describeLog(r: LogRow) {
   const what = TABLE_LABEL[r.tbl] ?? r.tbl
   const name = (r.data?.strain ?? r.was?.strain ?? '') as string
@@ -72,7 +72,7 @@ export function SetupTab({ d, api, sb, flash, onSaved }: { d: CultData; api: Cul
       <Fold id="cset.vehicles" title="Vehicles and equipment"><CompFleet sb={sb} flash={flash} dept="cultivation" /></Fold>
       <Fold id="cset.people" title="People"><ModulePeople sb={sb} module="cultivation" flash={flash} /></Fold>
 
-      <p className="cnote">Every change in Production is listed under Activity.</p>
+      <p className="cnote">Every change in Cultivation is listed under Activity.</p>
 
       {site && <SiteSheet s={site} api={api} flash={flash} onClose={() => setSite(null)} onSaved={async m => { setSite(null); await onSaved(m) }} />}
       {field && <FieldSheet d={d} f={field} api={api} flash={flash} onClose={() => setField(null)} onSaved={async m => { setField(null); await onSaved(m) }} />}

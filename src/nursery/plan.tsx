@@ -41,7 +41,7 @@ export function PlanTab({ d, c, api, flash, onSaved }: { d: NData; c: NCtx; api:
       {t('PLAN_HOWTO_2', { root: S.rootDays, veg: S.g3VegDays, g3root: S.g3RootDays, g2: S.g2Lead, g1: S.g1Lead })}{' '}
       {t('PLAN_HOWTO_3')}
     </details>
-    {!rows.length ? <p className="muted">{t('No clone orders for {year} yet. They come from Production → Plan → Nursery deliveries (nursery 1PN), or add them under Orders.', { year })}</p> : (
+    {!rows.length ? <p className="muted">{t('No clone orders for {year} yet. They come from Cultivation → Plan → Nursery deliveries (nursery 1PN), or add them under Orders.', { year })}</p> : (
       <div className="cwrap"><table className="ctable plantable">
         <thead>
           <tr className="grp"><th colSpan={3} /><th colSpan={3} className="g4">{t('G4 production clones')}</th><th colSpan={4} className="g3">{t('G3 field moms')}</th><th colSpan={4} className="g2">{t('G2 greenhouse moms')}</th><th colSpan={4} className="g1">G1</th></tr>

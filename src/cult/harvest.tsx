@@ -1,3 +1,4 @@
+import { tagTxt } from '../mtag'
 import { StrainLink } from '../strainCard'
 import { TagInput } from '../taginput'
 import { useBack, scrollTop } from '../nav'
@@ -12,7 +13,7 @@ import { can } from '../fold'
 import { nextTag } from './schedule'
 import { HarvestDayCard } from './harvestday'
 
-// Production > Harvest: log a harvest as it happens. Built for a phone in the field or the pack shed.
+// Cultivation > Harvest: log a harvest as it happens. Built for a phone in the field or the pack shed.
 // Fresh frozen: raw bins, then each pallet as it's made (it lands in Staging on the freezer map right away).
 // Dry flower: raw weight only (bucking and trimming belong to Processing later).
 // Combine biomass: each tote's dry weight. Stripper header: log the cut, it dries, then enter the dry weight.
@@ -39,12 +40,15 @@ export function HarvestTab({ d, c, site, api, flash, onSaved, openFirst }: { d: 
   const done = hs.filter(h => h.status === 'done' && h.harvested_on === day)
   // a harvest day card per site with fresh frozen work that day (the picked site only, when one is picked)
   const daySites = site ? (hs.some(h => h.kind === 'ff') ? [site] : []) : [...new Set([...going, ...planned, ...done].filter(h => h.kind === 'ff').map(h => h.site))].sort()
-  const card = (h: Harvest, extra?: string) => <HCard key={h.id} h={h} c={c} name={appHarvestName(h, d.harvests, c)} extra={extra} onOpen={() => { setOpenId(h.id); scrollTop() }} />
+  const card = (h: Harvest, extra?: string) => <HCard key={h.id} h={h} c={c} name={appHarvestName(h, d.harvests, c)} extra={extra} onOpen={() => { setOpenId(h.id); scrollTop() }}
+    start={h.status === 'planned' && !h.stage && h.planned_on != null && h.planned_on <= now} />
   const order = (a: Harvest, b: Harvest) => (a.sched_order ?? 1e9) - (b.sched_order ?? 1e9) || a.site.localeCompare(b.site) || a.strain.localeCompare(b.strain)
   return (
     <div className="hlog">
       <div className="row wrap hday">
+        <button className="ghost small hday-arw" aria-label="Day before" onClick={() => setDay(addDays(day, -1))}>‹</button>
         <DateIn value={day} onChange={v => setDay(v ?? now)} />
+        <button className="ghost small hday-arw" aria-label="Next day" onClick={() => setDay(addDays(day, 1))}>›</button>
         {day !== now && <button className="ghost small" onClick={() => setDay(now)}>Today</button>}
       </div>
       {daySites.map(s => <HarvestDayCard key={`${s}-${day}`} site={s} day={day} api={api} flash={flash} />)}
@@ -90,7 +94,7 @@ function DayGroup({ label, hs, c, card, startOpen }: { label: string; hs: Harves
 }
 
 /** one harvest on the list: what it is, how big, and where it's at */
-function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string; extra?: string; onOpen: () => void }) {
+function HCard({ h, c, name, extra, onOpen, start }: { h: Harvest; c: Ctx; name: string; extra?: string; onOpen: () => void; start?: boolean }) {
   const k = calcHarvest(c, h)
   const pl = h.planting_id ? c.planting.get(h.planting_id) : undefined
   const trial = !!pl?.trial || c.field.get(h.field_id ?? -1)?.kind === 'trials'
@@ -103,7 +107,10 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
   const facts: string[] = []
   if (plants) facts.push(`${n0(plants)} plants`)
   if (h.kind === 'ff') {
-    if (k.estFF) facts.push(`~${n0(k.estFF)} lbs FF${h.est_lbs_per_plant ? ` (${n1(h.est_lbs_per_plant)}/plant)` : ''}`)
+    if (k.estFF) facts.push(`~${n0(k.estFF)} lbs FF`)
+    // 255: lbs/plant is the estimate until the plants harvested are saved, then the real number
+    if (h.plants_harvested && logged > 0) facts.push(`${n1(logged / h.plants_harvested)} lbs/plant`)
+    else if (h.est_lbs_per_plant) facts.push(`${n1(h.est_lbs_per_plant)} lbs/plant est.`)
     if (!going && h.status === 'planned') {
       if (k.deleafPeople) facts.push(`${k.deleafPeople} deleafers`)
       if (k.buckPeople) facts.push(`${k.buckPeople} buckers`)
@@ -118,9 +125,9 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
   }
   if (h.metrc_name && h.metrc_name !== name) facts.push(`METRC ${h.metrc_name}`)
   return (
-    <button className="li setrow hcard" onClick={onOpen}>
+    <div className="li setrow hcard" role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}>
       <div className="grow">
-        <div><b>{h.strain}</b>{trial && <> <span className="kpill k-trial" title="Trial strain">T</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span> <span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span></div>
+        <div><b>{h.strain}</b>{trial && <> <span className="kpill k-trial" title="Trial strain">Trial</span></>}{(h.day_no ?? 1) > 1 && <> <span className="kpill s-planned">Day {h.day_no}</span></>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span> <span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span></div>
         <div className="muted small">{name}</div>
         <div className="hfacts">{facts.map((f, i) => <span key={i}>{f}</span>)}</div>
         {(going || logged > 0) && h.kind === 'ff' ? <div className="hprog">
@@ -130,8 +137,9 @@ function HCard({ h, c, name, extra, onOpen }: { h: Harvest; c: Ctx; name: string
           : <div className="muted small">{extra ?? STEP[h.kind]}{logged > 0 ? ` · ${n0(logged)} lbs logged` : ''}</div>}
         {going && extra && <div className="muted small">{extra}</div>}
       </div>
+      {start && <button className="primary small hstart" onClick={e => { e.stopPropagation(); onOpen() }}>Start</button>}
       <span className="hgo">›</span>
-    </button>
+    </div>
   )
 }
 
@@ -163,7 +171,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   return (
     <div className="hlog">
       <button className="ghost small hback" onClick={back}>‹ Harvest</button>
-      <h2><StrainLink name={h.strain} /> {trial && <span className="kpill k-trial" title="Trial strain">T</span>} {(h.day_no ?? 1) > 1 && <span className="kpill s-planned">Day {h.day_no}</span>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span></h2>
+      <h2><StrainLink name={h.strain} /> {trial && <span className="kpill k-trial" title="Trial strain">Trial</span>} {(h.day_no ?? 1) > 1 && <span className="kpill s-planned">Day {h.day_no}</span>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span></h2>
       {h.planted_strain && h.planted_strain !== h.strain && <p className="muted small">Planted as {h.planted_strain} (renamed at harvest; the planting keeps its name)</p>}
       <div className="row wrap"><span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span>
         <span className="muted">{done ? `Finished · harvested ${fmtD(h.harvested_on, true)}` : h.stage === 'drying' ? `Drying since ${fmtD(h.harvested_on, true)}` : h.stage === 'harvesting' ? `Harvesting · started ${fmtD(h.harvested_on, true)}` : `Scheduled ${fmtD(h.planned_on, true)}`}
@@ -212,7 +220,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
 
       {!done && (h.kind !== 'strip' || h.stage === 'drying') && <Finish h={h} busy={busy} run={run} api={api} back={back} raw={raw} pallets={pallets}
         ready={h.kind === 'ff' ? pallets.length > 0 : h.kind === 'dry' ? raw.length > 0 || h.raw_bins.length > 0 : h.kind === 'combine' ? pallets.length > 0 || totes.length > 0 : dry.length > 0} />}
-      {done && !canFix && <p className="cnote">Finished. Only a Production Admin can change a finished harvest.</p>}
+      {done && !canFix && <p className="cnote">Finished. Only a Cultivation Admin can change a finished harvest.</p>}
       {done && canFix && !editing && <div className="row hfin"><button className="ghost" onClick={() => setEditing(true)}>Edit finished harvest…</button>
         <span className="muted">Fix totals, add a forgotten bin or pallet, or remove one logged by mistake.</span></div>}
       {done && canFix && editing && <FixTotals flash={flash} h={h} api={api} busy={busy} run={run} k={k} onDone={() => setEditing(false)} />}
@@ -221,7 +229,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   )
 }
 
-/** the METRC harvest name: saved once the plants go to METRC; before that, what it will be. Production Admins can change it until then. */
+/** the METRC harvest name: saved once the plants go to METRC; before that, what it will be. Cultivation Admins can change it until then. */
 function BatchName({ h, api, busy, run }: { h: Harvest; api: CultApi; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const [b, setB] = useState<{ name: string; saved: boolean; generated: string | null; in_metrc: boolean; metrc_date?: string | null } | null>(null)
   const [ed, setEd] = useState<string | null>(null)
@@ -307,7 +315,7 @@ function Weights({ title, kind, rows, busy, done, unit, withTag, site, admin, on
             onKeyDown={e => { if (e.key === 'Enter') saveEd(); if (e.key === 'Escape') setEd(null) }} onBlur={saveEd} aria-label={`${unit} ${i + 1} lbs`} /></span>
         : <span key={r.id} title={(r.tag ?? '') + (r.pushed ? ' · in METRC' : '')} className={r.pushed ? 'inmetrc' : ''}>
             {onEdit && open(r) ? <a className="binfix" onClick={() => !busy && setEd({ id: r.id, v: String(r.lbs) })}>{i + 1}: {n1(r.lbs)}</a> : <>{i + 1}: {n1(r.lbs)}</>}
-            {r.tag ? ` · ${r.tag.slice(-6)}` : ''}{open(r) && <a onClick={() => !busy && onRemove(r.id)}>×</a>}</span>)}</div>}
+            {r.tag ? ` · ${tagTxt(r.tag)}` : ''}{open(r) && <a onClick={() => !busy && onRemove(r.id)}>×</a>}</span>)}</div>}
       {onEdit && !done && rows.length > 0 && <p className="muted small">Tap a {unit} to fix its weight.{rows.some(r => r.pushed) ? ' Bins with a check are already in METRC.' : ''}</p>}
     </section>
   )
@@ -390,7 +398,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
           ? <EditPallet key={p.id} p={p} busy={busy} onCancel={() => setEdit(null)} onSave={x => run(() => api.editPallet(p.id, x), `${x.code ?? p.code} fixed`).then(() => setEdit(null))} />
           : <div key={p.id} className="drow">
             {canPush && !done && <input type="checkbox" checked={pick.has(p.id)} onChange={() => tog(p.id)} aria-label={`Pick ${p.code}`} />}
-            <span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? p.package_tag.slice(-8) : <em className="warn-t">tag pending</em>}{p.partial ? ' · partial' : ''}</span></span>
+            <span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? tagTxt(p.package_tag, 8) : <em className="warn-t">tag pending</em>}{p.partial ? ' · partial' : ''}</span></span>
             <b>{n0(Number(p.og_weight))} lbs</b>
             {!done && <><button className="ghost small" disabled={busy} onClick={() => setEdit(p.id)}>Edit</button>
               <button className="ghost small" disabled={busy} title="Logged by mistake" onClick={() => run(() => api.removePallet(p.id), `${p.code} removed`)}>✕</button></>}
@@ -399,14 +407,14 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
           <button className="primary" disabled={busy} onClick={() => push(null)}>Push all {waiting.length} to METRC</button>
           {pick.size > 0 && pick.size < waiting.length && <button className="ghost" disabled={busy} onClick={() => push([...pick])}>Push {pick.size} picked</button>}
         </div>}
-        {!done && !canPush && <p className="cnote">A Production lead pushes these to METRC.</p>}
+        {!done && !canPush && <p className="cnote">A Cultivation lead pushes these to METRC.</p>}
         <p className="cnote">Push puts the plants and the raw bins into the METRC batch, then makes a package for each pallet (on the Compliance METRC to-do list).</p>
       </>}
 
       {pushed.length > 0 && <>
         {waiting.length > 0 && <h4 className="csec">Pushed <span className="muted">{pushed.length} · {n0(sum(pushed.map(p => p.og_weight)))} lbs</span></h4>}
         <div className="dlist">{[...pushed].reverse().map(p => (
-          <div key={p.id} className="drow"><span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? p.package_tag.slice(-8) : 'tag pending'}{p.partial ? ' · partial' : ''}</span></span>
+          <div key={p.id} className="drow"><span className="grow"><b>{p.code}</b> <PalletTime p={p} api={api} run={run} busy={busy} /> <span className="muted">{p.boxes ? `${p.boxes} boxes · ` : ''}{p.package_tag ? tagTxt(p.package_tag, 8) : 'tag pending'}{p.partial ? ' · partial' : ''}</span></span>
             <b>{n0(Number(p.og_weight))} lbs</b>
             {!done && canUnpush && <button className="ghost small" disabled={busy} title="Take it back to Not pushed (only if METRC hasn't been done)" onClick={() => run(() => api.unpush(p.id), `${p.code} un-pushed`)}>Un-push</button>}
             {done && <button className="ghost small" disabled={busy} title="Logged by mistake" onClick={() => run(() => api.removePallet(p.id), `${p.code} removed`)}>✕</button>}
@@ -571,13 +579,13 @@ function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: 
   )
 }
 
-/** Production Admins: fix a finished harvest's totals, or reopen it */
+/** Cultivation Admins: fix a finished harvest's totals, or reopen it */
 function FixTotals({ h, api, busy, run, k, onDone, flash }: { h: Harvest; api: CultApi; flash: Flash; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void>; k: ReturnType<typeof calcHarvest>; onDone: () => void }) {
   const [x, setX] = useState<Partial<Harvest>>(h)
   const set = (v: Partial<Harvest>) => setX(s => ({ ...s, ...v }))
   return (
     <section className="dcard">
-      <div className="dcard-h"><h3>Fix the totals</h3><span className="muted small">Production Admins only · every change is in Activity</span></div>
+      <div className="dcard-h"><h3>Fix the totals</h3><span className="muted small">Cultivation Admins only · every change is in Activity</span></div>
       <div className="grid3">
         <F label="Harvested on"><DateIn value={x.harvested_on} onChange={v => set({ harvested_on: v })} /></F>
         <F label="Plants harvested"><NumIn value={x.plants_harvested} onChange={v => set({ plants_harvested: v })} /></F>

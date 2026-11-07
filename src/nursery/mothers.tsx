@@ -1,3 +1,4 @@
+import { MTag } from '../mtag'
 import { Fragment, useState } from 'react'
 import { TagInput } from '../taginput'
 import type { NurseryApi } from './api'
@@ -47,7 +48,7 @@ export function MothersTab({ d, c, q, api, flash, onSaved, onOpen, onAdd }: {
         {ms.map(m => <tr key={m.id} className={`tap ${m.status !== 'active' ? 'done' : ''}`} onClick={() => sel.on ? sel.toggle(m.id) : onOpen(m)}>
           <SelBox sel={sel} id={m.id} /><td>{where(c, m) || <span className="muted">—</span>}{m.source && m.source !== 'Internal' ? <span className="muted small"> · {m.source}</span> : ''}</td>
           <td className="num">{n0(live(m) || m.qty)}{m.lost ? <span className="muted"> ({t('{n} lost', { n: n0(m.lost) })})</span> : ''}</td>
-          <td className="small">{m.plant_tag ? m.plant_tag.slice(-10) : <span className="warn-t">{t('no tag')}</span>}</td>
+          <td className="small">{m.plant_tag ? <MTag t={m.plant_tag} n={10} /> : <span className="warn-t">{t('no tag')}</span>}</td>
           <td className="nowrap">{fmtD(m.started_on)}</td><td className="num hide-s">{m.cuts_per_plant ?? ''}</td><td className="hide-s">{m.season ?? ''}</td>
           <td>{m.status === 'active' ? t('Active') : `${t(m.status === 'retired' ? 'Retired' : 'Destroyed')} ${fmtD(m.ended_on)}`}</td></tr>)}
       </Fragment>)}</tbody>

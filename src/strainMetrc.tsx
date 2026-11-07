@@ -111,7 +111,7 @@ export function StrainMetrcSheet({ sb, strainId, flash, onClose, isNew }: { sb: 
         {err && <div className="warnbox">{err}</div>}
         {!plan || !f ? <p className="muted">Loading…</p> : <>
           {isNew && <p className="muted">Strain added. Here's what METRC needs for it on every license.</p>}
-          {!plan.can_send && <div className="warnbox">Only Production, Nursery or Compliance Admins (or Admin) can send a strain to METRC. This is what it would need.</div>}
+          {!plan.can_send && <div className="warnbox">Only Cultivation, Nursery or Compliance Admins (or Admin) can send a strain to METRC. This is what it would need.</div>}
 
           <div className="field"><label>Name in METRC</label>
             <input value={f.metrc_name} disabled={!plan.can_send} onChange={e => set('metrc_name', e.target.value)} />
@@ -342,7 +342,7 @@ export function ItemGeneratorSheet({ sb, flash, onClose }: { sb: SupabaseClient;
           <button className="ghost" disabled={!!busy || !pick.size} onClick={look}>{busy === 'look' ? 'Checking…' : 'Preview'}</button>
           <button className="primary" disabled={!!busy || !preview || !total || !canSend} onClick={queue}>{busy === 'send' ? 'Sending…' : `Send ${total} to METRC`}</button>
         </div>
-        {preview && !canSend && <p className="muted small">Only Production, Nursery or Compliance Admins (or Admin) can send to METRC.</p>}
+        {preview && !canSend && <p className="muted small">Only Cultivation, Nursery or Compliance Admins (or Admin) can send to METRC.</p>}
       </div>
     </div>
   )

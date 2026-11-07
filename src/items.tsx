@@ -1,3 +1,4 @@
+import { MTag } from './mtag'
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { rpc } from './ship'
@@ -138,7 +139,7 @@ export function ItemCardSheet({ sb, card, canEdit, canPrice = false, flash, onCl
     {pkgs === null ? <p className="muted">Loading…</p> : !pkgs.length ? <p className="muted">None in inventory.</p>
       : <div className="tablewrap"><table className="ct"><thead><tr><th>Package</th><th>Tag</th><th className="num">Lbs</th><th>METRC has it on</th></tr></thead>
         <tbody>{pkgs.map(p => { const other = p.metrc_item && p.metrc_item.toLowerCase() !== card.metrc_name.toLowerCase()
-          return <tr key={p.pallet_id}><td>{p.code}</td><td className="mono small">{p.tag ? `…${p.tag.slice(-6)}` : ''}</td><td className="num">{n0(p.lbs)}</td>
+          return <tr key={p.pallet_id}><td>{p.code}</td><td className="small"><MTag t={p.tag} /></td><td className="num">{n0(p.lbs)}</td>
             <td className="small">{p.metrc_item ? <span className={other ? 'warn-t' : 'muted'}>{other ? p.metrc_item : 'this item'}{p.metrc_license ? ` · ${p.metrc_license}` : ''}</span> : <span className="muted">not active in METRC</span>}</td></tr> })}</tbody></table></div>}
     <p className="muted small">To move a package to another item: open the package › New package › All of it › pick the item (a repackage, same as METRC).</p>
   </div></div>

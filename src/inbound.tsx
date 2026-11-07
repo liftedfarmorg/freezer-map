@@ -51,7 +51,7 @@ export function InboundView({ sb, flash, onChanged }: { sb: SupabaseClient | nul
     <div className="row between wrap toolbar"><h2>Inbound</h2>
       <div className="row"><span className={`pill ${live ? 'm-bad' : 'm-warn'}`}>{live ? 'METRC Live' : 'Dry run'}</span>
         <button className="ghost small" disabled={!!busy} onClick={load}>{busy ?? 'Refresh'}</button></div></div>
-    <p className="muted">Product packages on their way to OHR and GVR (plants go to Production › Receiving, anything for 1PN to Nursery › Receiving). Receive takes the whole delivery in METRC{live ? '' : ' (a dry-run check until Compliance goes Live)'} and brings its packages into the app (Needs a spot).</p>
+    <p className="muted">Product packages on their way to OHR and GVR (plants go to Cultivation › Receiving, anything for 1PN to Nursery › Receiving). Receive takes the whole delivery in METRC{live ? '' : ' (a dry-run check until Compliance goes Live)'} and brings its packages into the app (Needs a spot).</p>
     {errs.map(d => <p key={d.license} className="neg small">{d.site} {d.license}: {d.error}</p>)}
     {rows && !ok.length && !busy && <p className="muted">Nothing incoming.</p>}
     {ok.map(d => {

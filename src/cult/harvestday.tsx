@@ -7,7 +7,7 @@ import { can } from '../fold'
 import { clock, computeBonus, hm } from './bonuscalc'
 import type { BonusView } from './bonuscalc'
 
-// Production > Harvest: the day's card for a site. Entered once (first variety of the day) and used by every
+// Cultivation > Harvest: the day's card for a site. Entered once (first variety of the day) and used by every
 // harvest at that site that day: room start, first box tagged, labor, La Meta, breaks. Feeds the Live Bonus screen.
 
 const money = (n: number) => `$${n.toFixed(2)}`
