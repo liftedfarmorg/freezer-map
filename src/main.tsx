@@ -10,6 +10,13 @@ import { installPreviewGuard } from './preview'
 installPreviewGuard()
 installTabHeader()
 
+// Msg 319: on iPhones (Chrome and Safari) the browser bars float over the page, and pop-ups pinned to the screen slid under
+// the top bar (Aziz's readout: visual viewport starts 28 px down, visible height = 100svh). Pop-ups use --vvt to start below it.
+{
+  const vv = window.visualViewport
+  const setT = () => document.documentElement.style.setProperty('--vvt', `${Math.max(0, Math.round(vv?.offsetTop ?? 0))}px`)
+  if (vv) { setT(); vv.addEventListener('resize', setT); vv.addEventListener('scroll', setT) }
+}
 // Msg 316: screen-size readout for checking phone toolbars. Open the app with ?vp at the end of the address to see it.
 if (/[?&]vp\b/.test(location.search)) {
   const box = document.createElement('div')

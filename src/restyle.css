@@ -675,3 +675,8 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .no2 > .no-body { order: 2; }
   .no2 > .no-bar .primary, .no2 > .no-bar .ghost { height: 40px; }
 }
+
+/* Msg 319: phones and tablets: every pop-up sits inside the part of the screen the browser bars don't cover */
+@media (max-width: 999px) {
+  .app.shell .scrim { top: var(--vvt, 0px); bottom: auto; height: 100svh; }
+}
