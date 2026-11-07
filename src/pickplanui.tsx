@@ -72,7 +72,7 @@ export function PlanMyPick({ o, cands, loc, backend, reload, flash, back }: {
     const l = lines.find(x => x.id === r.lineId)
     return (l?.cands ?? []).filter(p => !inPlan.has(p.id) && w(p) > 0).map(p => {
       const L = loc(p), same = fzIn.has(L.fz), d = w(p) - r.lbs
-      const bits = [same ? 'Same freezer' : '+1 freezer',
+      const bits = [same ? 'Already going there' : '+1 freezer',
         Math.abs(d) <= tol ? 'whole' : d > 0 ? `split ${n0(d)} back` : `${n0(-d)} short`,
         L.inFront.length ? `${L.inFront.length} in the way` : '']
       return { p, L, same, text: bits.filter(Boolean).join(' · ') }
