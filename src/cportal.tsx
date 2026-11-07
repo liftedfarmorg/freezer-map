@@ -1449,14 +1449,19 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }, [d, orows])
   const [yTab, setYTab] = useState<'report' | 'results' | null>(null)
   const [yOpen, setYOpen] = useState<string | null>(null)
+  const [yProc, setYProc] = useState<'all' | 'SHO' | 'BHO'>('all')   // SHO = hash / hash + rosin runs, BHO = BHO runs
 
   function YieldsScreen() {
     const tab = yTab ?? (yToDo.length ? 'report' : 'results')
     const chipOf = (r: YieldReport | null) => r?.sentAt ? <span className={c('chip c-ok')}>Sent</span> : r?.savedAt ? <span className={c('chip c-wait')}>Draft</span> : <span className={c('chip c-sub')}>To report</span>
     const ql = q.toLowerCase()
     const years = [...new Set(yStrains.map(x => x.y))].sort((a, b) => b - a)
-    const rows = sortRows('yres', yStrains.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)),
-      { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1, g: x => gradeN(x.s) })
+    // the SHO / BHO filter is by how they ran it (hash vs BHO), not the strain's grade: keep only those runs and redo the numbers
+    const byProc = yStrains.map(x => { if (yProc === 'all') return x
+      const runs = x.runs.filter(r => yProc === 'BHO' ? r.p.bho : !r.p.bho)
+      return { ...x, runs, lbs: runs.reduce((a, r) => a + (r.p.ff ?? 0), 0), ...yAgg(runs) } }).filter(x => x.runs.length)
+    const rows = sortRows('yres', byProc.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear)),
+      { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1 })
     const tot = yAgg(rows.flatMap(x => x.runs))
     // each run under its strain: on desktop the same columns as the strain row above, so every % lines up
     const proc = (r: YRun) => r.p.bho ? <span className={c('ptag bho')}>BHO</span> : <span className={c('ptag')}>{r.p.rosin ? 'Hash + rosin' : 'Hash'}</span>
@@ -1499,10 +1504,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </div>
             <div className={c('rmbar act-bar')}>
               <div className={c('filters')} role="group" aria-label="Filter strains">
-                <button aria-pressed={menuYear === 'all' && gradeF === 'all'} onClick={() => { setMenuYear('all'); setGradeF('all') }}>All</button>
+                <button aria-pressed={menuYear === 'all' && yProc === 'all'} onClick={() => { setMenuYear('all'); setYProc('all') }}>All</button>
                 {years.length > 1 && years.map(y => <button key={y} aria-pressed={menuYear === y} onClick={() => setMenuYear(menuYear === y ? 'all' : y)}>{y}</button>)}
-                <button aria-pressed={gradeF === 'SHO'} onClick={() => setGradeF(gradeF === 'SHO' ? 'all' : 'SHO')}>SHO</button>
-                <button aria-pressed={gradeF === 'BHO'} onClick={() => setGradeF(gradeF === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>
+                <button aria-pressed={yProc === 'SHO'} title="Hash and hash + rosin runs" onClick={() => setYProc(yProc === 'SHO' ? 'all' : 'SHO')}>SHO</button>
+                <button aria-pressed={yProc === 'BHO'} title="BHO runs" onClick={() => setYProc(yProc === 'BHO' ? 'all' : 'BHO')}>BHO</button></div>
               <label className={c('search')}>{I.search}<input type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" /></label>
             </div>
             <section className={c('card')}>
@@ -1510,12 +1515,12 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 <div className={c('yres head')}>{sh('yres', 's', 'Strain')}{sh('yres', 'runs', 'Runs')}{sh('yres', 'lbs', 'FF run')}{sh('yres', 'hash', <>Hash yield<br />of FF</>)}{sh('yres', 'roh', <>Rosin yield<br />of hash</>)}{sh('yres', 'rof', <>Rosin yield<br />of FF</>)}{sh('yres', 'bho', <>BHO yield<br />of FF</>)}<span /></div>
                 {rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                   return <Fragment key={key}><button className={c(`yres ${open ? 'on' : ''}`)} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
-                    <span className={c('rmname')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
+                    <span className={c('rmname')}>{x.s} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
                     <b style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b><span className={c('muted')}>{open ? I.up : I.down}</span></button>
                     {open && runList(x)}</Fragment> })}
               </> : rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                 return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('li btnrow')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
-                  <div className={c('grow')}><p className={c('name')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</p>
+                  <div className={c('grow')}><p className={c('name')}>{x.s} {yrTag(x.y)}</p>
                     <p className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs{x.rosinOfHash != null ? ` · Rosin ${pct(x.rosinOfHash)} of hash` : ''}{x.bhoPct != null ? ` · BHO ${pct(x.bhoPct)}` : ''}</p></div>
                   <div className={c('r')}><b className={c('num')} style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><p className={c('meta')}>hash</p></div>{open ? I.up : I.down}</button>
                   {open && runList(x)}</div> })}
@@ -1561,7 +1566,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {yDraft.map((l, i) => { const used = l.parts.reduce((a, p) => a + (p.ff ?? 0), 0), left = Math.round((l.shipped - used) * 100) / 100
             return <section key={l.s + l.y} className={c(`card ycard ${left < 0 ? 'bad' : yDone(l) ? 'done' : ''}`)}>
               <div className={c('ybody')}>
-                <div className={c('ystrain')}><p className={c('name')}>{l.s} {tagPill(l.s)} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
+                <div className={c('ystrain')}><p className={c('name')}>{l.s} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
                   {left < 0 ? <p className={c('err')} style={{ margin: '4px 0 0' }}>{fmt(-left)} lbs more than shipped. Lower the fresh frozen run{l.parts.length > 1 ? 's' : ''} to {fmt(l.shipped)} lbs or less.</p>
                     : l.parts.length > 1 && <p className={c('meta')}>{left === 0 ? 'All lbs accounted for' : `${fmt(left)} lbs not in a part yet`}</p>}</div>
                 <div className={c('yparts')}>
