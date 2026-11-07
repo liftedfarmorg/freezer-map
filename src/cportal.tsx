@@ -1608,7 +1608,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             ? <div className={c('note ylock')}><span>{I.check} <b>Sent to Lifted {shortDate(sentAt)}.</b> This report is locked. Edit it to change a number, then submit your revisions.</span>
                 <button className={c('btn ghost')} onClick={() => setYEdit(true)}>Edit report</button></div>
             : <div className={c('note gold')}><b>Editing a sent report.</b> Your changes go to Lifted when you tap Submit revisions.</div>)}
-          {!locked && <p className={c('meta yhint')}>Pick <b>Hash</b> (tick <b>Rosin</b> if you pressed it) or <b>BHO</b>. Enter amounts in grams, kg or lbs, or pick <b>%</b>: hash and BHO % are of the fresh frozen, rosin % is of the hash. Ran a strain two ways? Use <b>+ Split this strain</b>.</p>}
+          
           <fieldset className={c('yfs')} disabled={locked}>
           {desk && <div className={c('yhead')}><span>Strain</span><span>Process</span><span>Fresh frozen run</span><span>Hash / BHO</span><span>Rosin</span><span /></div>}
           {yDraft.map((l, i) => { const used = l.parts.reduce((a, p) => a + (p.ff ?? 0), 0), left = Math.round((l.shipped - used) * 100) / 100
