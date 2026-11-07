@@ -1489,7 +1489,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     toast('Saved. You can finish later.'); await reload(); go('yields')
   }
   const [ySent, setYSent] = useState<{ label: string; revised: boolean; lines: YieldLine[] } | null>(null)
-  const uTxt = (v: number | null, u: YUnit) => v == null ? '–' : u === '%' ? `${v}%` : `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${u === 'lb' ? (v === 1 ? 'lb' : 'lbs') : u}`
   const procTxt = (p: YPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + Rosin' : 'Hash'
   function YieldSentScreen() {
     const r = ySent
@@ -1497,30 +1496,33 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const done = r.lines.filter(l => l.parts.length), blank = r.lines.filter(l => !l.parts.length)
     const runs = done.flatMap(l => l.parts.map(p => ({ orderId: 0, label: '', date: null, p, note: '', k: yCalc(p), draft: false })))
     const all = yAgg(runs), ffLbs = runs.reduce((a, x) => a + (x.p.ff ?? 0), 0)
-    const outCell = (p: YPart) => { const k = yCalc(p), pc = p.bho ? k.bhoPct : k.hashPct
-      return <>{uTxt(p.outV, p.outU)}{pc != null && p.outU !== '%' && <span className={c('meta')} style={{ display: 'inline' }}> · {pct(pc)}</span>}</> }
+    // hash and BHO together, weighted by the fresh frozen run
+    const outRs = runs.filter(x => (x.k.hashG ?? x.k.bhoG) != null), outFF = outRs.reduce((a, x) => a + x.k.ffG, 0)
+    const outAvg = outFF > 0 ? outRs.reduce((a, x) => a + (x.k.hashG ?? x.k.bhoG ?? 0), 0) / outFF * 100 : null
+    // percentages only: hash or BHO as % of fresh frozen, rosin as % of hash
+    const outCell = (p: YPart) => { const k = yCalc(p); return <>{pct(p.bho ? k.bhoPct : k.hashPct)}</> }
     const rosCell = (p: YPart) => { if (p.bho || !p.rosin || p.rosinV == null) return <span className={c('meta')} style={{ display: 'inline' }}>–</span>
-      const k = yCalc(p); return p.rosinU === '%' ? <>{uTxt(p.rosinV, p.rosinU)} of hash</> : <>{uTxt(p.rosinV, p.rosinU)}{k.rosinOfHash != null && <span className={c('meta')} style={{ display: 'inline' }}> · {pct(k.rosinOfHash)} of hash</span>}</> }
+      const k = yCalc(p); return <>{pct(k.rosinOfHash)}{desk ? '' : ' of hash'}</> }
     return (
       <div className={c('screen ysent')}>
         <header className={c('hdr done-hdr')}><span className={c('check')}>{I.check}</span><h1 style={{ marginTop: 6 }}>{r.revised ? 'Revisions sent' : 'Yields sent'}</h1>
           <p className={c('sub')} style={{ fontSize: 15 }}>{r.label} · {plural(done.length, 'strain')} sent to Lifted. Thank you! You can view or edit this report any time from Yields.</p></header>
         <main className={c('main')}>
           {desk ? <section className={c('card')} style={{ padding: 0, overflow: 'hidden' }}>
-            <div className={c('ysum head')}><span>Strain</span><span>Process</span><span>Fresh frozen</span><span>Hash / BHO</span><span>Rosin</span></div>
+            <div className={c('ysum head')}><span>Strain</span><span>Process</span><span>Fresh frozen</span><span>Hash / BHO yield</span><span>Rosin (% of hash)</span></div>
             {done.map(l => <Fragment key={l.s + l.y}>{l.parts.map((p, pi) => <div key={pi} className={c(`ysum ${pi ? 'cont' : ''}`)}>
                 <span>{pi === 0 && <><b>{l.s}</b> {yrTag(l.y)}{l.parts.length > 1 && <span className={c('meta')}>{plural(l.parts.length, 'run')}</span>}</>}</span>
                 <span>{procTxt(p)}</span><span>{p.ff == null ? '–' : `${fmt(p.ff)} lbs`}</span><span>{outCell(p)}</span><span>{rosCell(p)}</span></div>)}
               {l.note && <div className={c('ysum cont note')}><span /><span className={c('meta')}>Note: {l.note}</span></div>}</Fragment>)}
             <div className={c('ysum total')}><span>Total · {plural(done.length, 'strain')}</span><span /><span>{fmt(ffLbs)} lbs</span>
-              <span>{[all.hashPct != null ? `Hash ${pct(all.hashPct)}` : '', all.bhoPct != null ? `BHO ${pct(all.bhoPct)}` : ''].filter(Boolean).join(' · ') || '–'}</span>
-              <span>{all.rosinOfHash != null ? `${pct(all.rosinOfHash)} of hash` : '–'}</span></div>
+              <span>{pct(outAvg)}</span>
+              <span>{pct(all.rosinOfHash)}</span></div>
           </section>
           : <section className={c('card')}>{done.map(l => <div key={l.s + l.y} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}>
               <p className={c('name')}>{l.s} {yrTag(l.y)}</p>
               {l.parts.map((p, pi) => <p key={pi} className={c('meta')}>{l.parts.length > 1 ? `Run ${pi + 1}: ` : ''}{procTxt(p)} · {p.ff == null ? '–' : `${fmt(p.ff)} lbs`} FF → {outCell(p)}{!p.bho && p.rosin && p.rosinV != null && <> · rosin {rosCell(p)}</>}</p>)}
               {l.note && <p className={c('meta')} style={{ fontStyle: 'italic' }}>“{l.note}”</p>}</div></div>)}
-            <div className={c('li')} style={{ background: '#f7f9f6' }}><b className={c('grow')}>Total</b><b className={c('num')}>{fmt(ffLbs)} lbs FF{all.hashPct != null ? ` · ${pct(all.hashPct)} hash` : ''}</b></div></section>}
+            <div className={c('li')} style={{ background: '#f7f9f6' }}><b className={c('grow')}>Total</b><b className={c('num')}>{fmt(ffLbs)} lbs FF{outAvg != null ? ` · ${pct(outAvg)} yield` : ''}</b></div></section>}
           {blank.length > 0 && <div className={c('note gold')}><b>Not reported yet:</b> {blank.map(l => l.s).join(', ')}. Add them any time from Yields when you've run them.</div>}
           {doneBtns('See my results', () => { setYTab('results'); go('yields') })}
         </main>
