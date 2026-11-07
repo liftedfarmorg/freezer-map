@@ -575,7 +575,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')} style={{ color: 'var(--gold)' }}>Sample Holds for You</p><p className={c('big')}>{plural(hs.length, 'strain')} · {fmt(hs.reduce((a, h) => a + holdLbs(h), 0))} lbs</p></div><span className={c('pillbtn')} style={{ background: '#fff', color: 'var(--gold)' }}>Review</span></div>
             <p className={c('foot')} style={{ color: 'var(--ink)', fontWeight: 500 }}>{shown}</p>
             <p className={c('foot')} style={{ color: 'var(--gold)', marginTop: 2 }}>{soon ? `Next hold ends in ${plural(daysUntil(soon.until), 'day')} (${soon.strain})` : 'Waiting on Lifted to confirm'}</p></button>}
-          {helpButton('phone')}
         </main>
         <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>
       </div>
@@ -659,15 +658,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </section>}
           </div>
         </div>
-        {helpButton('desk')}
       </div>
     )
   }
 
   // ---------- help & feedback: a note to Lifted (not a ticket; Sales sees them in Sales > Customer feedback) ----------
   const [fb, setFb] = useState<{ kind: 'problem' | 'question' | 'idea'; text: string; sent: boolean } | null>(null)
-  const helpButton = (where: 'desk' | 'phone') => <div className={c(`helpbar ${where}`)}>
-    <span>Something not working, or have a question?</span>
+  const helpButton = () => <div className={c('helpbar')}>
+    <span>Something not working, or have a question or idea?</span>
     <button className={c('btn ghost helpbtn')} onClick={() => setFb({ kind: 'problem', text: '', sent: false })}>{I.chat} Help &amp; feedback</button></div>
   async function sendFeedback() {
     if (!fb || !fb.text.trim()) return
@@ -1803,6 +1801,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <p className={c('cust')}>{me.customer_name}</p></header>
           <p className={c('loading')}>{loadErr ? <>Couldn't load your account: {loadErr} <button className={c('linkish')} onClick={reload}>Try again</button></> : 'Loading…'}</p></div>
           : desk && screen === 'home' ? DeskHome() : desk && screen === 'order' ? DeskOrderScreen() : SCREENS[screen]()}
+        {d && helpButton()}
       </div>
       {account()}
       {feedbackSheet()}
