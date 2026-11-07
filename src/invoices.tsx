@@ -289,25 +289,41 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     return [...m.values()].sort((a, b) => a.strain.localeCompare(b.strain) || b.year - a.year)
   }
   const pkey = (product: Product, strain: string, year: number) => `${product}|${strain.trim().toLowerCase()}|${year}`
+  // Msg 315: the price each row fills in = what create_order would charge this customer (their contract price for the product,
+  // else the item card price for that strain, else the market price), from order_line_prices
+  const [lp, setLp] = useState<Map<string, number | null>>(new Map())
+  const optKey = cust == null || !menu || !stock ? '' : `${cust}|${tab}|${optionsFor(tab).length}`
+  useEffect(() => {
+    const sb = backend.client()
+    if (!sb || !optKey) return
+    const want = optionsFor(tab).filter(o => !lp.has(pkey(tab, o.strain, o.year))).map(o => ({ product: tab, strain: o.strain, year: o.year }))
+    if (!want.length) return
+    sb.rpc('order_line_prices', { p_customer: cust, p_lines: want }).then(({ data, error }) => {
+      if (error) return
+      setLp(m => { const n = new Map(m); for (const r of (data ?? []) as { product: Product; strain: string; crop_year: number; price: number | null }[]) n.set(pkey(r.product, r.strain, r.crop_year), r.price == null ? null : Number(r.price)); return n })
+    })
+  }, [optKey])
+  useEffect(() => { setLp(new Map()) }, [cust])
   // the price that fills in: fresh frozen = their contract price, else the market price for that crop year; dry products = on the invoice
-  const autoPrice = (product: Product, year: number): number | null => product !== 'fresh_frozen' ? null : c?.price_per_lb != null ? Number(c.price_per_lb) : market.get(year) ?? null
+  const autoPriceOld = (product: Product, year: number): number | null => product !== 'fresh_frozen' ? null : c?.price_per_lb != null ? Number(c.price_per_lb) : market.get(year) ?? null
+  const autoPrice = (product: Product, year: number, strain?: string): number | null => { const k = strain ? pkey(product, strain, year) : ''; return k && lp.has(k) ? lp.get(k)! : autoPriceOld(product, year) }
   const used = Object.values(picks).filter(p => Number(p.lbs) > 0)
   const availOf = (p: { product: Product; strain: string; year: number }) => { const o = optionsFor(p.product).find(x => x.k === `${p.strain.trim().toLowerCase()}|${p.year}`); return o ? o.open + o.res : 0 }
   const overOf = (p: Pick) => Number(p.lbs) > 0 && Number(p.lbs) > availOf(p) ? availOf(p) : null
   const anyOver = used.some(p => overOf(p) != null)
-  const priceOf = (p: Pick) => p.price !== undefined && p.price !== '' ? Number(p.price) : autoPrice(p.product, p.year)
+  const priceOf = (p: Pick) => p.price !== undefined && p.price !== '' ? Number(p.price) : autoPrice(p.product, p.year, p.strain)
   const lbsT = used.reduce((a, p) => a + Number(p.lbs), 0)
   const dolT = used.reduce((a, p) => a + (priceOf(p) ?? 0) * Number(p.lbs), 0)
   const shipT = shipping !== '' ? Number(shipping) : est?.charge != null && !est.problem ? Number(est.charge) : 0
   const ok = cust != null && used.length > 0 && !anyOver
   const setPick = (k: string, base: Omit<Pick, 'lbs'>, ch: Partial<Pick>) => setPicks(ps => ({ ...ps, [k]: Object.assign({ lbs: '' }, base, ps[k], ch) as Pick }))
-  async function save() {
+  async function save(confirm = true) {
     setBusy(true)
     try {
       // price goes in only when someone changed it from the autofill; blank = their contract / market price, worked out as before
-      const ls: NewOrderLine[] = used.map(p => { const auto = autoPrice(p.product, p.year), typed = p.price !== undefined && p.price !== '' ? Number(p.price) : null
+      const ls: NewOrderLine[] = used.map(p => { const auto = autoPrice(p.product, p.year, p.strain), typed = p.price !== undefined && p.price !== '' ? Number(p.price) : null
         return { strain: p.strain.trim(), lbs: Number(p.lbs), price: typed != null && typed !== auto ? typed : null, product: p.product, crop_year: p.year } })
-      const o = await backend.createOrder(cust!, ls, po, wanted || null, notes, termsCode || null)
+      const o = await backend.createOrder(cust!, ls, po, wanted || null, notes, termsCode || null, confirm)
       if (used.some(l => l.sample)) {
         try {
           // lines come back in the order they were sent
@@ -320,7 +336,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
         const { error } = await backend.client()?.rpc('set_order_shipping', { p_order: o.id, p_amount: Number(shipping), p_quoted: quoted }) ?? { error: null }
         if (error) flash(`Order made, but shipping wasn't saved: ${error.message}`, true)
       }
-      flash(`${o.so_number} created`); onDone(o.id)
+      flash(confirm ? `${o.so_number} created` : 'Draft saved. It holds nothing until a Sales Admin confirms it.'); onDone(o.id)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
   const ql = cq.trim().toLowerCase()
@@ -342,8 +358,9 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     <div className="no-tot"><div><span className="muted">Total lbs</span><b>{n0f(lbsT)}</b></div><div><span className="muted">Product</span><span>{usd(dolT)}</span></div>
       <div><span className="muted">Shipping{shipping === '' ? ' (estimate)' : ''}</span><span>{cust == null ? '—' : usd(shipT)}</span></div>
       <div className="g"><span>Total</span><span>{usd(dolT + (cust == null ? 0 : shipT))}</span></div>
-      <p className="muted small">{c && <>Terms: {termsCode ? terms.find(t => t.code === termsCode)?.label ?? termsCode : terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}. </>}{used.some(p => priceOf(p) == null) && <>Lines with no $/lb get their price when the invoice is made. </>}The order is confirmed and gets its SO number right away, then shows in Distribution → Fulfillment.</p>
-      <button className="primary big" disabled={busy || !ok} onClick={save}>{busy ? 'Saving…' : 'Create order'}</button></div>
+      <p className="muted small">{c && <>Terms: {termsCode ? terms.find(t => t.code === termsCode)?.label ?? termsCode : terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}. </>}{used.some(p => priceOf(p) == null) && <>Lines with no $/lb get their price when the invoice is made. </>}Create order confirms it now (SO number, then Distribution → Fulfillment). Save as draft holds nothing until a Sales Admin confirms it.</p>
+      <button className="primary big" disabled={busy || !ok} onClick={() => save()}>{busy ? 'Saving…' : 'Create order'}</button>
+      <button className="ghost no-draft" disabled={busy || !ok} onClick={() => save(false)}>Save as draft</button></div>
   </>
   return (
     <div className="scrim" onClick={onClose}>
@@ -373,7 +390,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
               <input className="search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
               {loading ? <p className="muted">Loading what's available…</p> : !opts.length ? <p className="muted">Nothing available{q ? ` for "${q}"` : ''}.</p> :
                 <div className="no-twrap"><table className="ctable no-table"><thead><tr><th>Strain</th><th className="num">Open</th>{tab === 'fresh_frozen' && <th className="num">Their reserve</th>}<th className="num">$/lb</th><th className="num">Lbs</th>{tab === 'fresh_frozen' && <th />}</tr></thead>
-                  <tbody>{opts.map(o => { const k = pkey(tab, o.strain, o.year), p = picks[k], base = { product: tab, strain: o.strain, year: o.year }, auto = autoPrice(tab, o.year)
+                  <tbody>{opts.map(o => { const k = pkey(tab, o.strain, o.year), p = picks[k], base = { product: tab, strain: o.strain, year: o.year }, auto = autoPrice(tab, o.year, o.strain)
                     const over = p && overOf(p) != null
                     return <tr key={k} className={p && Number(p.lbs) > 0 ? (over ? 'bad' : 'on') : ''}>
                       <td className="c-n"><b>{o.strain}</b> {o.year !== CUR_YEAR && <span className="muted small">{o.year} crop</span>}</td>
@@ -415,7 +432,8 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
           </aside>
         </div>
         <div className="no-bar"><button className="linkbtn grow" onClick={() => setSumOpen(true)}><b>{usd(dolT + (cust == null ? 0 : shipT))}</b><span className="muted small"> · {n0f(lbsT)} lbs · {used.length} line{used.length === 1 ? '' : 's'} ▴</span></button>
-          <button className="primary" disabled={busy || !ok} onClick={save}>Create order</button></div>
+          <button className="ghost" disabled={busy || !ok} onClick={() => save(false)}>Draft</button>
+          <button className="primary" disabled={busy || !ok} onClick={() => save()}>Create order</button></div>
         {sumOpen && <div className="scrim no-sumscrim" onClick={() => setSumOpen(false)}><div className="sheet no-sumsheet" onClick={e => e.stopPropagation()}>
           <div className="sheet-h"><h2>The order</h2><button className="ghost" onClick={() => setSumOpen(false)}>✕</button></div>{summary}</div></div>}
       </div>

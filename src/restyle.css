@@ -667,14 +667,11 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .app.shell .top .phlogo { display: block; position: absolute; left: 50%; top: 14px; transform: translateX(-50%); height: 28px; width: auto; cursor: pointer; pointer-events: auto; }
 }
 @media (max-width: 359px) { .app.shell .top .phlogo { display: none; } }
-
-/* Msg 314: iPhone Safari's bottom toolbar floats over the page and was covering the new order's total bar and the app's
-   bottom tabs. On iPhones only, size to the "toolbar showing" screen height (svh) so both sit just above it. */
-@supports (-webkit-touch-callout: none) {
-  @media (max-width: 999px) {
-    .app.shell .scrim:has(> .sheet.no2) { bottom: auto; height: 100svh; }
-  }
-  @media (max-width: 767px) {
-    .app.shell .bottom { bottom: calc(100lvh - 100svh); }
-  }
+/* Msg 316: iPhone Safari's floating bottom toolbar was covering the total bar, so on phones and tablets the total and
+   Create order sit right under the title instead of at the bottom edge. */
+@media (max-width: 999px) {
+  .no2 > .sheet-h { order: 0; }
+  .no2 > .no-bar { order: 1; box-shadow: 0 6px 18px rgb(0 0 0 / .06); border-top: 0; border-bottom: 1px solid var(--line); padding: 8px 16px; }
+  .no2 > .no-body { order: 2; }
+  .no2 > .no-bar .primary, .no2 > .no-bar .ghost { height: 40px; }
 }

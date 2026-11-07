@@ -298,7 +298,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                       <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
                       {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
                     {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
-                    {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
+                    {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} isAdmin={isAdmin} />}
               </div></div></div></td></tr> : null,
             ])}</tbody>
           </table></div>}
@@ -405,8 +405,8 @@ export function MyOrders({ backend, onChange }: { backend: Backend; onChange?: (
 }
 
 // staff: confirm / ship / cancel an order, change lbs or price on a line, add a line
-function OrderEditor({ backend, o, strains, flash, onChanged }: {
-  backend: Backend; o: Order; strains: Strain[]; flash: (t: string, bad?: boolean) => void; onChanged: () => void
+function OrderEditor({ backend, o, strains, flash, onChanged, isAdmin }: {
+  backend: Backend; o: Order; strains: Strain[]; flash: (t: string, bad?: boolean) => void; onChanged: () => void; isAdmin?: boolean
 }) {
   // Roshi SO # field removed (Aziz 11/4); an SO # already on the order is kept as is
   const so = o.so_number ?? ''
@@ -459,7 +459,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
     setBusy(true)
     try { await f(); flash(ok); setEdits({}); setAdd({ strain: '', lbs: '' }); onChanged() } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
-  const open_ = o.status === 'submitted' || o.status === 'pending'
+  const open_ = o.status === 'submitted' || o.status === 'pending' || o.status === 'draft'
   const total = o.order_lines.reduce((a, l) => a + Number(l.lbs) * Number(l.price_per_lb ?? 0), 0)
   return (
     <div className="ordered">
@@ -505,12 +505,15 @@ function OrderEditor({ backend, o, strains, flash, onChanged }: {
       {open_ && (
         <div className="row reqact">
           {o.status === 'submitted' && <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Order confirmed')}>Confirm</button>}
+          {o.status === 'draft' && (isAdmin
+            ? <button className="primary small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'pending', so, ''), 'Draft confirmed')}>Confirm order</button>
+            : <span className="muted small">Draft: a Sales Admin confirms it. It holds nothing until then.</span>)}
           <label className="row muted small" style={{ gap: 6 }}>Requested Delivery Date
             <input type="date" value={wantOn} disabled={busy} style={{ maxWidth: 150 }} aria-label="Requested Delivery Date"
               onChange={e => setWantOn(e.target.value)}
               onBlur={() => { const v = wantOn || null; if (v === (o.wanted_date ?? null) || (v && v < '2020-01-01')) { setWantOn(o.wanted_date ?? ''); return } run(async () => { const { error } = await backend.client()!.rpc('set_order_wanted', { p_order: o.id, p_date: v }); if (error) throw new Error(/set_order_wanted|schema cache/i.test(error.message) ? `${error.message} (run 209_order_wanted_date.sql in Supabase)` : error.message) }, v ? `Requested delivery ${fmtDate(v)}` : 'Requested delivery cleared') }} /></label>
-          <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
-            <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>
+          {o.status !== 'draft' && <span className="row"><input type="date" value={shipOn} onChange={e => setShipOn(e.target.value)} aria-label="Shipped on" title="The day it actually shipped" style={{ maxWidth: 150 }} />
+            <button className="ghost small" disabled={busy} onClick={() => run(() => backend.setOrderStatus(o.id, 'shipped', so, '', shipOn || null), 'Marked shipped')}>Mark shipped</button></span>}
         </div>
       )}
       {open_ && <div className="row ocancel"><button className="ghost danger" disabled={busy} onClick={() => setAskCancel(true)}>Cancel order…</button></div>}

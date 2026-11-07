@@ -166,7 +166,7 @@ export interface Backend {
   sharedDoc(token: string): Promise<SalesDoc | null>
   paymentTerms(): Promise<PaymentTerm[]>
   setPaymentTerm(t: { code: string; label: string; schedule: { pct: number; days: number }[]; cod: boolean; active: boolean }): Promise<void>
-  createOrder(customerId: number, lines: NewOrderLine[], po: string, wanted: string | null, notes: string, terms: string | null): Promise<{ id: number; so_number: string }>
+  createOrder(customerId: number, lines: NewOrderLine[], po: string, wanted: string | null, notes: string, terms: string | null, confirm?: boolean): Promise<{ id: number; so_number: string }>
   setOrderTerms(orderId: number, terms: string | null): Promise<void>
   makeInvoice(orderId: number): Promise<Invoice>
   listInvoices(scope?: 'sales' | 'nursery'): Promise<Invoice[]>
@@ -356,8 +356,8 @@ class SupaBackend implements Backend {
   async setPaymentTerm(t: { code: string; label: string; schedule: { pct: number; days: number }[]; cod: boolean; active: boolean }) {
     const { error } = await this.sb.rpc('set_payment_term', { p_code: t.code, p_label: t.label, p_schedule: t.schedule, p_cod: t.cod, p_active: t.active }); fail(error)
   }
-  async createOrder(customerId: number, lines: NewOrderLine[], po: string, wanted: string | null, notes: string, terms: string | null) {
-    const { data, error } = await this.sb.rpc('create_order', { p_customer: customerId, p_lines: lines, p_po: po || null, p_wanted: wanted, p_notes: notes || null, p_terms: terms, p_confirm: true })
+  async createOrder(customerId: number, lines: NewOrderLine[], po: string, wanted: string | null, notes: string, terms: string | null, confirm = true) {
+    const { data, error } = await this.sb.rpc('create_order', { p_customer: customerId, p_lines: lines, p_po: po || null, p_wanted: wanted, p_notes: notes || null, p_terms: terms, p_confirm: confirm })
     if (error && /create_order/.test(error.message)) throw new Error('Run 027_sales_docs.sql in Supabase first')
     fail(error); return data as { id: number; so_number: string }
   }

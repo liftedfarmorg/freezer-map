@@ -1,6 +1,7 @@
 // Look-only preview (restyle-preview branch): database functions that only read (declared STABLE/IMMUTABLE in supabase/*.sql).
 // Postgres refuses writes inside STABLE functions, so these are safe to call on the preview. Everything else is blocked there.
 export const PREVIEW_READS = new Set<string>([
+  'order_line_prices',
   '_alert_people', '_assert_pushed', '_available_to', '_bc_start', '_can_bill', '_company', '_customer_doc', '_doc',
   '_driver_load_json', '_is_my_load', '_kept_picks', '_lic', '_loc_full', '_loc_letters', '_loc_used', '_local_now_time',
   '_local_today', '_lv_rank', '_menu_numbers', '_menu_rows', '_metrc_period', '_metrc_usage_limit', '_notify_type', '_order_delivered_on',
