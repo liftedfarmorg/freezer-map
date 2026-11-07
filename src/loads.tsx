@@ -725,7 +725,14 @@ function PositionSheet({ ctx, load, pos, items: raw, stops, onClose, onMove, onS
             <div key={i.id} className="mixline">
               <div className="row between">
                 <div>{items.length > 1 && <span className="tlayer">{k === 0 ? 'top' : k === items.length - 1 ? 'bottom' : 'middle'}</span>} <a onClick={() => { onClose(); ctx.openPallet(p.id) }}><b>{p.code}</b></a> {label(ctx, p)} <span className="muted">· {lbs(ctx.weight(p))}</span></div>
-                <span className={`pill ${i.loaded ? 's-in_transit' : 's-planning'}`}>{i.loaded ? 'On truck' : 'Planned'}</span>
+                {(() => {
+                  // after the load left: the stop's outcome, not the truck plan
+                  const st = stops.find(x => x.id === i.stop_id)
+                  if (st?.status === 'delivered') return <span className="pill s-delivered">Delivered</span>
+                  if (load.status === 'delivered' && (p.status === 'in_freezer' || p.status === 'unslotted'))
+                    return <span className="pill s-back">↩ Back{p.slot_id != null ? ` · ${ctx.freezerSpot(p.slot_id)}` : ' (needs a spot)'}</span>
+                  return <span className={`pill ${i.loaded ? 's-in_transit' : 's-planning'}`}>{i.loaded ? 'On truck' : 'Planned'}</span>
+                })()}
               </div>
               {!i.loaded && <div className="muted">Pull from {p.slot_id != null ? ctx.freezerSpot(p.slot_id) : ctx.where(p)}</div>}
               {canEdit && (
