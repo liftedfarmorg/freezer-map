@@ -392,3 +392,19 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .pmp-act { margin-top: 10px; }
 @media (max-width: 600px) { .pmp-mode { margin-left: 0; } .pmp-lbs { min-width: 0; } }
 @media print { .pmp .linkbtn, .pmp .pmp-act, .pmp .seg, .pmp-mode { display: none !important; } }
+
+/* Driver screen (Msg 292): roomier on computer and phone */
+.app.shell .drv .list { max-width: 860px; padding: 4px 0 16px; display: grid; gap: 12px; }
+.drv .list > details.card { padding: 0; border-radius: 16px; overflow: hidden; }
+.drv .list > details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 16px; font-size: 15px; font-weight: 600; }
+.drv .list > details.card > summary::-webkit-details-marker { display: none; }
+.drv .list > details.card > summary::after { content: '▾'; color: var(--muted); font-size: 13px; }
+.drv .list > details.card[open] > summary { border-bottom: 1px solid var(--line); }
+.drv .notifybox { display: grid; gap: 8px; padding: 14px 16px 16px; }
+.drv .notifybox .check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 15px; line-height: 1.35; }
+.drv .notifybox .check input { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.drv .notifybox .check .muted { display: block; font-size: 13px; }
+.drv .notifybox > .muted.small { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
+.drv .list > .card { border-radius: 16px; padding: 18px 20px; }
+.drv .drv-tabs { max-width: 860px; margin: 0 auto 4px; }
+@media (max-width: 767px) { .app.shell .drv .list { padding: 0 0 12px; } .drv .list > .card { padding: 14px 16px; } }
