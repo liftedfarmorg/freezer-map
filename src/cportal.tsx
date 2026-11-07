@@ -107,7 +107,7 @@ export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string
   status?: 'waiting' | 'approved' | 'partly' | 'declined' | 'cancelled'; decidedAt?: string | null; decidedBy?: string | null
   lines: ActLine[]; note?: string | null; reply?: string | null; fromHold?: boolean }
 /** yields (mockup): what the customer got from each strain on a shipped order. Fresh frozen -> hash -> rosin, or fresh frozen -> BHO */
-export type YUnit = 'g' | 'kg' | 'lb' | '%'
+export type YUnit = 'g' | 'kg' | 'lb' | '%' | '%ff'   // '%' = % of fresh frozen for hash/BHO, % of hash for rosin; '%ff' = rosin as % of fresh frozen
 /** one way a strain was run: washed to hash (and maybe pressed to rosin), or run to BHO. A strain can be split into several parts */
 export interface YPart { bho: boolean; rosin: boolean; ff: number | null; outV: number | null; outU: YUnit; rosinV: number | null; rosinU: YUnit }
 export interface YieldLine { s: string; y: number; shipped: number; parts: YPart[]; note: string }
@@ -1423,8 +1423,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   // ---------- yields (mockup) ----------
   // A strain on an order can be split into parts: some fresh frozen washed to hash (and maybe pressed to rosin), some run to BHO.
-  const G_PER: Record<YUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0 }
-  const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '%']]
+  const G_PER: Record<YUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0, '%ff': 0 }
+  const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '% of FF']]
+  const ROSIN_UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '% of hash'], ['%ff', '% of FF']]
   const newPart = (ff: number | null): YPart => ({ bho: false, rosin: true, ff, outV: null, outU: 'g', rosinV: null, rosinU: 'g' })
   // shipped orders made in the app, newest first, with their report (if any)
   const yOrders = useMemo(() => (d?.yields ? orows.filter(o => o.status === 'shipped' && o.order && o.order.order_lines.length) : [])
@@ -1450,7 +1451,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const ffG = (p.ff ?? 0) * G_PER.lb
     const outG = p.outV == null ? null : p.outU === '%' ? ffG * p.outV / 100 : p.outV * G_PER[p.outU]
     const hashG = p.bho ? null : outG, bhoG = p.bho ? outG : null
-    const rosinG = p.bho || !p.rosin || p.rosinV == null ? null : p.rosinU === '%' ? (hashG == null ? null : hashG * p.rosinV / 100) : p.rosinV * G_PER[p.rosinU]
+    const rosinG = p.bho || !p.rosin || p.rosinV == null ? null : p.rosinU === '%' ? (hashG == null ? null : hashG * p.rosinV / 100) : p.rosinU === '%ff' ? ffG * p.rosinV / 100 : p.rosinV * G_PER[p.rosinU]
     const of = (g: number | null, base: number | null) => g != null && base ? g / base * 100 : null
     return { ffG, hashG, bhoG, rosinG, hashPct: of(hashG, ffG), bhoPct: of(bhoG, ffG), rosinOfHash: of(rosinG, hashG), rosinOfFF: of(rosinG, ffG) }
   }
@@ -1642,7 +1643,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <input type="text" inputMode="decimal" placeholder="0.00" value={shown(key, v)} aria-label={`${l.s} ${what} amount`}
           onChange={e => { const n = typed(key, e.target.value); setP(i, pi, which === 'out' ? { outV: n } : { rosinV: n }) }} />
         <select value={u} aria-label={`${l.s} ${what} unit`} onChange={e => setP(i, pi, which === 'out' ? { outU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
-          {UNITS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
+          {(which === 'rosin' ? ROSIN_UNITS : UNITS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
     }
     const filled = yDraft.filter(yDone).length
     const overOf = (l: YieldLine) => Math.round((l.parts.reduce((a, p) => a + (p.ff ?? 0), 0) - l.shipped) * 100) / 100
