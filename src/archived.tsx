@@ -96,7 +96,7 @@ export function ArchivedView({ sb, flash, onChanged, pickSpot, openPallet, initi
   }
 
   const canR = !!ov?.can_restore, canD = !!ov?.can_delete
-  return <div className="list">
+  return <div className="list archived">
     <div className="row between wrap toolbar"><h2>Archived</h2>
       <button className="ghost small" disabled={!!busy} onClick={load}>{busy ?? 'Refresh'}</button></div>
     <p className="muted">Pallets that are out of inventory as archived: leftovers from the Freezer Map sheet import, ones removed as a mistake, ones closed by Reconcile.

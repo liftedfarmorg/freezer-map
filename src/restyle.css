@@ -347,3 +347,16 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .app.shell .pill.s-cancelled { background: var(--empty); color: var(--muted); }
 .loadview .tpos.full { background: color-mix(in srgb, var(--sc) 8%, var(--panel)); border-color: color-mix(in srgb, var(--sc) 45%, var(--line)); }
 .loadview .titem { border-left-width: 2px; }
+
+/* Archived (Msg 289): full width, one line per row, actions side by side */
+.list.archived { max-width: none; }
+.list.archived .tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--r-shadow); }
+.list.archived table.arch { width: 100%; border-collapse: collapse; font-size: 14px; }
+.list.archived table.arch th { padding: 10px 12px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; }
+.list.archived table.arch th.num, .list.archived table.arch td.num { text-align: right; }
+.list.archived table.arch td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.list.archived table.arch td:nth-child(3) { min-width: 180px; }
+.list.archived table.arch td:nth-child(7), .list.archived table.arch td:nth-child(8) { white-space: nowrap; }
+.list.archived table.arch td:last-child .row { flex-wrap: nowrap; gap: 6px; }
+.list.archived table.arch tr:hover td { background: color-mix(in srgb, var(--brand) 4%, var(--panel)); }
+.list.archived .search { flex: 1 1 260px; max-width: 420px; }
