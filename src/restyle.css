@@ -660,3 +660,10 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .no2 > .no-body { flex: 1 1 auto; min-height: 0; display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px; }
   .no2 > .no-bar { position: static; flex: none; margin: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 18px rgb(0 0 0 / .06); }
 }
+
+/* Msg 312: the Lifted logo in the middle of the phone top bar (same logo as the computer sidebar) */
+.phlogo { display: none; }
+@media (max-width: 767px) {
+  .app.shell .top .phlogo { display: block; position: absolute; left: 50%; top: 14px; transform: translateX(-50%); height: 28px; width: auto; cursor: pointer; pointer-events: auto; }
+}
+@media (max-width: 359px) { .app.shell .top .phlogo { display: none; } }

@@ -995,6 +995,7 @@ export default function App() {
         </aside>
       )}
       <header className="top">
+        <img className="phlogo" src="/logo-dark.svg" alt="Lifted" onClick={() => nav.main[0]?.go()} />
         {!noMods && (modCount > 1 || isDrv) && <button className="phmod" aria-label={t('Switch module, now {m}', { m: inDrv ? t('Driver') : ML(cur) })} onClick={() => setMore('mods')}>
           <span className="phmod-dot" />{inDrv ? t('Driver') : ML(cur)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>}
         <div className="brand" onClick={() => nav.main[0]?.go()}>
