@@ -650,3 +650,13 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .scrim.no-sumscrim { z-index: 40; }
   .sheet.no-sumsheet { width: 100%; max-height: 80vh; display: flex; flex-direction: column; }
 }
+
+/* Msg 309: phone/tablet new order: the total bar no longer rides on a sticky element inside a scrolling sheet (it jittered while
+   scrolling). The sheet is full height, only the middle scrolls, and the bar is a plain footer under it. */
+@media (max-width: 999px) {
+  .app.shell .scrim:has(> .sheet.no2) { align-items: stretch; justify-content: stretch; padding: 0; }
+  .app.shell .scrim > .sheet.form.no2 { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; overflow: hidden; padding: 0; display: flex; flex-direction: column; }
+  .no2 > .sheet-h { flex: none; padding: 14px 16px; margin: 0; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .no2 > .no-body { flex: 1 1 auto; min-height: 0; display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px; }
+  .no2 > .no-bar { position: static; flex: none; margin: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 18px rgb(0 0 0 / .06); }
+}
