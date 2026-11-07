@@ -276,10 +276,10 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
           {orders.length === 0 && <p className="muted">No orders yet. Export sales orders from Roshi and import the file here.</p>}
           {orders.length > 0 && <div className="seg ostat" role="group" aria-label="Status">{['all', 'submitted', 'pending', 'shipped', 'draft', 'cancelled'].filter(k => k === 'all' || shownOrders.some(o => o.status === k)).map(k =>
             <button key={k} className={ost === k ? 'on' : ''} onClick={() => setOst(k)}>{k === 'all' ? 'All' : STATUS_LABEL[k]} <span className="segn">{k === 'all' ? shownOrders.length : shownOrders.filter(o => o.status === k).length}</span></button>)}</div>}
-          {orders.length > 0 && <div className="cwrap"><table className="ctable otable slimmable">
+          {orders.length > 0 && <div className="cwrap"><table className="ctable otable">
             <thead><tr><th className="slim">Order</th><th className="slim">Customer</th><th className="hide-s">Date</th><th className="slim">Status</th><th className="hide-s">Fulfillment</th><th className="num">Lbs</th></tr></thead>
             <tbody>{shownOrders.filter(o => ost === 'all' || o.status === ost).map(o => [
-              <tr key={o.id} className={`tap ${open === -o.id ? 'open sel' : ''}`} onClick={() => setOpen(open === -o.id ? null : -o.id)}>
+              <tr key={o.id} className={`tap ${open === -o.id ? 'open' : ''}`} onClick={() => setOpen(open === -o.id ? null : -o.id)}>
                 <td className="nw slim"><b>{o.so_number ?? `Order #${o.id}`}</b>{o.is_sample && <> <span className="pill sample">Sample</span></>}</td>
                 <td className="slim">{cname(o.customer_id)}<div className="muted small">{o.source === 'portal' ? 'from portal' : ''}{o.roshi_status && o.roshi_status !== 'Fulfilled' ? `${o.source === 'portal' ? ' · ' : ''}Roshi: ${o.roshi_status}` : ''}</div></td>
                 <td className="hide-s nw">{fmtDate(o.order_date)}</td>
@@ -287,19 +287,14 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 <td className="hide-s">{o.status === 'pending' && fulfil?.get(o.id) && <span className={`pill fs-${fulfil.get(o.id)!.state}`}>{STATE_LABEL[fulfil.get(o.id)!.state]}{fulfil.get(o.id)!.stop ? ` · ${fulfil.get(o.id)!.stop!.load}` : ''}</span>}</td>
                 <td className="num"><b>{n0(orderLbs(o))}</b></td>
               </tr>,
-              // Msg 304: the order opens in the big side card (full-height sheet on a phone) instead of under its row
-              open === -o.id ? <tr key={`x-${o.id}`} className="xrow-side"><td colSpan={6} className="slim" style={{ padding: 0, border: 0 }}><div className="scrim" onClick={() => setOpen(null)}><div className="sheet form wide side osheet" onClick={e => e.stopPropagation()}>
-                    <div className="sheet-h"><div><h2>{o.so_number ?? `Order #${o.id}`}{o.is_sample && <> <span className="pill sample">Sample</span></>}</h2>
-                      <div className="muted">{cname(o.customer_id)} · {fmtDate(o.order_date)} · <span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span> · {n0(orderLbs(o))} lbs</div></div>
-                      <button className="ghost" onClick={() => setOpen(null)}>✕</button></div>
-                    <div className="rescard odetail">
+              open === -o.id ? <tr key={`x-${o.id}`} className="xrow"><td colSpan={6}><div className="rescard odetail">
                     {open === -o.id && fulfil?.get(o.id)?.state === 'needs_ok' && <FillOk f={fulfil.get(o.id)!} backend={backend} flash={flash} onDone={async () => { await load(); await onFulfil?.() }} />}
                     {open === -o.id && (o.status === 'pending' || o.status === 'shipped') && onDoc && <div className="row wrap orderdocs">
                       <button className="ghost small" onClick={() => onDoc('so', o.id)}>Sales order PDF</button>
                       {onInvoice && o.status === 'shipped' && <button className="ghost small" onClick={() => onInvoice(o.id)}>Invoice</button>}</div>}
                     {open === -o.id && o.status !== 'cancelled' && <div className="row wrap orderdocs"><button className="ghost small" onClick={() => setSampleOf(o)}>{o.is_sample ? `Samples: ${o.order_lines.filter(l => l.is_sample).map(l => `${l.strain}${Number(l.hold_lbs ?? 0) > 0 ? ` (holding ${n0(Number(l.hold_lbs))})` : ''}`).join(', ')} · change` : 'Mark sample lines…'}</button></div>}
                     {open === -o.id && <OrderEditor backend={backend} o={o} strains={strains} flash={flash} onChanged={load} />}
-              </div></div></div></td></tr> : null,
+              </div></td></tr> : null,
             ])}</tbody>
           </table></div>}
           <p className="muted">Import the Roshi sales order export (the same one the menu engine uses) any time. New orders are added and existing ones are updated. Only 2026 fresh frozen lines, plus open 2025 ones, are used.</p>
