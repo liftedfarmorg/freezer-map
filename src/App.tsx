@@ -1135,6 +1135,7 @@ export default function App() {
         )}
         {view === 'freezer' && freezerId != null && (
           <FreezerView ix={ix} L={L!} plan={plan} freezer={ix.freezer.get(freezerId)!} query={query} placing={!!placing}
+            custFor={id => heldBy.get(id)?.customer ?? (ix.loadOf.has(id) ? (snap.customers ?? []).find(c => c.id === ix.loadOf.get(id)!.stop.customer_id)?.name : undefined)}
             selecting={selecting} sel={sel}
             siblings={ix.freezer.get(freezerId)?.kind === 'trailer' ? siteTrailers : siteFreezers}
             onOpen={openFreezer}
@@ -1673,7 +1674,7 @@ function MapView({ ix, freezers, trailers = [], staging, query, extra, where, on
 }
 
 const STAGING_AGING_DAYS = 2
-const STAGED_BADGE: Record<string, string> = { received: 'RECEIVED', harvest: 'HARVEST', processor: 'PROCESSOR', split: 'SPLIT' }
+const STAGED_BADGE: Record<string, string> = { received: 'RECEIVED', harvest: 'HARVEST', processor: 'PROCESSED', split: 'SPLIT' }
 function stagedAgo(p: Pallet): string {
   if (!p.staged_at) return 'in Staging'
   const d = Math.floor((Date.now() - Date.parse(p.staged_at)) / 86400000)
@@ -1687,9 +1688,11 @@ const STAGE_GROUPS: { key: StageGroup; title: string; note: string }[] = [
 ]
 function readFolded(): StageGroup[] { try { return JSON.parse(localStorage.getItem('stagingFolded') ?? '[]') } catch { return [] } }
 
-function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, siblings, onOpen, onBack, onSlot, onPalletTap, onStatus, onSelect, onCompact, onOrder }: {
+function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, siblings, onOpen, onBack, onSlot, onPalletTap, onStatus, onSelect, onCompact, onOrder, custFor }: {
   ix: Index; L: Layout; plan: Plan; freezer: Freezer; query: string; placing: boolean; selecting: boolean; sel: number[]; siblings: Freezer[]
   onOrder?: (id: number) => boolean
+  /** Msg 325: the customer a pallet is held or loaded for */
+  custFor?: (id: number) => string | undefined
   onOpen: (id: number) => void; onBack: () => void; onSlot: (s: Slot) => void
   onPalletTap: (p: Pallet, role: 'stay' | 'incoming' | 'leaving', s: Slot) => void; onStatus: (s: FreezerStatus) => void
   onSelect: () => void; onCompact: () => void
@@ -1725,9 +1728,10 @@ function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, sib
         style={stacked && p.kind !== 'mixed' ? sw.style : undefined}
         {...(role !== 'leaving' && !placing ? draggable({ id: p.id, label: `${p.code} · ${p.kind === 'mixed' ? 'Mixed' : p.strain ?? ''}` }) : {})}
         onClick={e => { e.stopPropagation(); onPalletTap(p, role, s) }}>
-        <b>{selecting && <span className={`tick ${picked ? 'on' : ''}`}>{picked ? '✓' : ''}</span>}{p.code}{p.needs_review && <span className="flag" title={p.needs_review}>!</span>}{(p.tag_pending || on.some(c => c.tag_pending)) && <span className="flag tag" title="METRC tag pending">T</span>}{ix.loadOf.has(p.id) && <span className="flag load" title={`Planned on ${ix.loadOf.get(p.id)!.load.code}`}>L</span>}{p.pushed === false && <span className="flag np" title="Not pushed to METRC yet (Harvest log)">NP</span>}{staging && p.staged_reason && <span className={`sbadge sb-${p.staged_reason}`} title={stagedAgo(p)}>{STAGED_BADGE[p.staged_reason]}</span>}</b>
+        <b>{selecting && <span className={`tick ${picked ? 'on' : ''}`}>{picked ? '✓' : ''}</span>}{p.code}{p.needs_review && <span className="flag" title={p.needs_review}>!</span>}{(p.tag_pending || on.some(c => c.tag_pending)) && <span className="flag tag" title="METRC tag pending">T</span>}{ix.loadOf.has(p.id) && <span className="flag load" title={`Planned on ${ix.loadOf.get(p.id)!.load.code}`}>L</span>}{p.pushed === false && <span className="flag np" title="Not pushed to METRC yet (Harvest log)">NP</span>}{staging && p.staged_reason && !onOrder?.(p.id) && <span className={`sbadge sb-${p.staged_reason}`} title={stagedAgo(p)}>{STAGED_BADGE[p.staged_reason]}</span>}</b>
         <span className="strain">{note ? <i className="pnote">{note}</i> : p.kind === 'mixed' ? `Mixed · ${on.length} pkg${on.length === 1 ? '' : 's'}: ${[...new Set(on.map(c => c.strain))].join(', ')}` : <>{p.product && p.product !== 'fresh_frozen' && <em className="prodtag">{PRODUCT_SHORT[p.product]}</em>}{(p.product ?? 'fresh_frozen') === 'fresh_frozen' && gradeOf(ix, p).grade === 'BHO' && <em className="prodtag bho">BHO</em>}{p.strain ?? p.label ?? 'No strain'}</>}</span>
         <span className="w">{p.kind !== 'mixed' && p.current_weight == null ? 'no weight' : lbs(weightOf(ix, p))}</span>
+        {role === 'stay' && custFor?.(p.id) && <span className="pcust" title="Held or loaded for this customer">→ {custFor(p.id)}</span>}
         {trailer && role === 'stay' && !placing && !stacked && <span className="spangrip" title="Drag to another spot on this side to make it take more space; drag back here to undo"
           {...draggable({ id: p.id, label: `${p.code}: take spots to…`, span: true })} onClick={e => e.stopPropagation()}>⇕</span>}
       </span>
