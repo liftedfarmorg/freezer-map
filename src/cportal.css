@@ -676,5 +676,25 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-fbtext:focus { outline: 0; border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-tint); }
 /* the help ribbon sits at the bottom of every screen, clear of the bottom button bar */
 .cp .cp-col > .cp-helpbar { margin: 4px 16px calc(112px + env(safe-area-inset-bottom, 0px)); }
-.cp-desk .cp-col > .cp-helpbar { margin: 8px 40px 104px; }
 .cp:not(.cp-desk):not(.cp-typing) .cp-col:has(> .cp-helpbar) > .cp-screen { padding-bottom: 16px; }
+/* the ribbon sits right under the content, not pinned to the bottom of the window */
+.cp .cp-col:has(> .cp-helpbar) > .cp-screen { flex: 0 0 auto; }
+.cp-desk .cp-col > .cp-helpbar { align-self: flex-start; box-sizing: border-box; margin: 0 0 32px; }
+.cp-desk .cp-col:has(> .cp-helpbar) > .cp-screen { padding-bottom: 16px; }
+/* Reserves & Menu fills the window; leave room for the ribbon under it */
+.cp-desk .cp-col:has(> .cp-helpbar) > .cp-screen.cp-rm { height: calc(100vh - 118px); padding-bottom: 16px; }
+@media (max-height: 640px) { .cp-desk .cp-col:has(> .cp-helpbar) > .cp-screen.cp-rm { height: auto; } }
+/* yields sent: summary of the report */
+.cp .cp-ysum { display: grid; grid-template-columns: minmax(0, 1.4fr) 130px 120px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); font-size: 14px; align-items: baseline; }
+.cp .cp-ysum.cp-head { border-top: 0; background: #f7f9f6; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 10px; padding-bottom: 10px; }
+.cp .cp-ysum.cp-cont { border-top: 0; padding-top: 0; }
+.cp .cp-ysum.cp-note > :nth-child(2) { grid-column: 2 / -1; }
+.cp .cp-ysum.cp-total { background: #f7f9f6; font-weight: 700; }
+.cp .cp-ysum > span:first-child .cp-meta { display: block; }
+/* order / request / yields sent: buttons sit right under the summary */
+.cp .cp-donebtns { display: flex; gap: 10px; margin-top: 4px; }
+.cp .cp-donebtns .cp-btn { flex: 1; }
+.cp-desk .cp-donebtns { justify-content: space-between; }
+.cp-desk .cp-donebtns .cp-btn { flex: 0 0 auto; min-width: 220px; }
+.cp .cp-ysum.cp-total > :nth-child(4) { white-space: nowrap; }
+.cp .cp-donebtns .cp-btn { white-space: nowrap; padding-left: 12px; padding-right: 12px; }

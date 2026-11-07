@@ -1,7 +1,7 @@
 // Customer portal (redesign, 150): mobile-first home with tiles, Contract Reserves, Open Menu, Place an order,
 // Orders & Statement, My Contract and Sample Holds for You. Layout and behaviour follow the approved prototype
 // (see the project doc customer-portal-redesign-spec.md). Styles live in cportal.css, scoped under .cp.
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import './cportal.css'
 import { downloadStatement } from './statement'
@@ -98,7 +98,7 @@ const STEPS: [number, string][] = [[10, '10 lbs'], [50, '50 lbs'], [100, '100 lb
 const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ margin: '2px 0 0' }}>{msg}</p>
 
 /* ---------- data ---------- */
-type Screen = 'yields' | 'yield' | 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
+type Screen = 'yields' | 'yield' | 'ysent' | 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 /** reserve history (mockup): one entry per request (with Lifted's decision) or per change Lifted made */
 export interface ActLine { s: string; y: number; from: number; to: number; ok?: number | null
   /** reserve after Lifted's decision on this line (null while waiting); when present it wins over the entry's status */
@@ -664,7 +664,27 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   // ---------- help & feedback: a note to Lifted (not a ticket; Sales sees them in Sales > Customer feedback) ----------
   const [fb, setFb] = useState<{ kind: 'problem' | 'question' | 'idea'; text: string; sent: boolean } | null>(null)
-  const helpButton = () => <div className={c('helpbar')}>
+  // on desktop the ribbon lines up with the edges of whatever is on the screen above it (tables, cards), not the window
+  const hbRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const bar = hbRef.current; const scr = bar?.previousElementSibling as HTMLElement | null
+    if (!bar || !scr) return
+    const fit = () => {
+      if (!desk) { bar.style.marginLeft = ''; bar.style.width = ''; return }
+      let l = Infinity, r = -Infinity
+      for (const el of Array.from(scr.children) as HTMLElement[]) {
+        const b = el.getBoundingClientRect(); if (b.width < 1 || b.height < 1) continue
+        l = Math.min(l, b.left); r = Math.max(r, b.right)
+      }
+      if (!isFinite(l)) { bar.style.marginLeft = ''; bar.style.width = ''; return }
+      const col = bar.parentElement!; const cb = col.getBoundingClientRect(); const pad = parseFloat(getComputedStyle(col).paddingLeft) || 0
+      bar.style.marginLeft = `${Math.round(l - cb.left - pad)}px`; bar.style.width = `${Math.round(r - l)}px`
+    }
+    fit()
+    const ro = new ResizeObserver(fit); ro.observe(scr); ro.observe(bar.parentElement!); for (const el of Array.from(scr.children)) ro.observe(el)
+    return () => ro.disconnect()
+  })
+  const helpButton = () => <div ref={hbRef} className={c('helpbar')}>
     <span>Something not working, or have a question or idea?</span>
     <button className={c('btn ghost helpbtn')} onClick={() => setFb({ kind: 'problem', text: '', sent: false })}>{I.chat} Help &amp; feedback</button></div>
   async function sendFeedback() {
@@ -798,7 +818,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   function sidebar() {
     const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['yields', 'Yields', !!d?.yields], ['holds', 'Sample Holds', liveHolds.length > 0], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length]]
-    const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields' }
+    const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields', ysent: 'yields' }
     const on = group[screen] ?? screen
     return (
       <aside className={c('side')}>
@@ -1055,6 +1075,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     )
   }
 
+  // done screens (order sent, request sent, yields sent): buttons right under the summary, Back to Home on the left
+  const doneBtns = (label: string, onClick: () => void) => <div className={c('donebtns')}>
+    <button className={c('btn ghost')} onClick={() => go('home')}>Back to Home</button><button className={c('btn')} onClick={onClick}>{label}</button></div>
   function SentScreen() {
     const r = lastReq
     return (
@@ -1066,9 +1089,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : <section className={c('card')}>{r.map(ch => <div key={ch.s + ch.y} className={c('li')}><div className={c('grow')}><p className={c('name')}>{ch.s} {yrTag(ch.y)}</p>
             <p className={c('meta')} style={ch.isNew ? { color: 'var(--teal-ink)' } : undefined}>{ch.isNew ? 'New strain' : `${fmt(ch.from)} → ${fmt(ch.to)} lbs`}</p></div>
             <b className={c('num')}>{ch.isNew ? `${fmt(ch.to)} lbs` : `${ch.to > ch.from ? '+' : '−'}${fmt(Math.abs(ch.to - ch.from))} lbs`}</b></div>)}</section>}
+          {doneBtns('View my reserves', () => go('reserves'))}
           <div className={c('note gold')}>Until Lifted approves, these show as <b>waiting</b> on your Contract Reserves, and the lbs stay open on the menu for everyone.</div>
         </main>
-        <div className={c('dock stack')}><button className={c('btn')} onClick={() => go('reserves')}>View my reserves</button><button className={c('btn ghost')} onClick={() => go('home')}>Back to Home</button></div>
       </div>
     )
   }
@@ -1399,7 +1422,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <header className={c('hdr done-hdr')}><span className={c('check')}>{I.check}</span><h1 style={{ marginTop: 6 }}>{o.modified ? 'Order updated' : 'Order sent'}</h1>
           <p className={c('sub')} style={{ fontSize: 15 }}>{o.label}{desk ? '' : ` · ${fmt(o.lbs)} lbs`}. {o.modified ? 'Lifted will confirm the changes.' : "Lifted will confirm it and let you know when it's ready."}</p></header>
         <main className={c('main')}>
-          {desk ? <>{orderTable(o.detail, o)}
+          {desk ? <>{orderTable(o.detail, o)}{doneBtns('View my orders', () => { setFilter('all'); go('orders') })}
             {(o.po || o.wanted || o.note) && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {o.po && <span><span className={c('meta')} style={{ display: 'inline' }}>PO</span> {o.po}</span>}
               {o.wanted && <span><span className={c('meta')} style={{ display: 'inline' }}>Requested delivery</span> {niceDate(o.wanted)}</span>}
@@ -1409,9 +1432,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <p className={c('meta')}>{[x.fromRes ? `${fmt(x.fromRes)} reserve` : '', x.fromHold ? `${fmt(x.fromHold)} held` : '', x.fromOpen ? `${fmt(x.fromOpen)} open menu` : ''].filter(Boolean).join(' · ')}{x.hold ? ` · holding ${fmt(x.hold)} lbs for you after it ships` : ''}</p></div>
             <b className={c('num')}>{fmt(x.q)} lbs</b></div>)}
             <div className={c('li')} style={{ background: '#f7f9f6' }}><b className={c('grow')}>Total</b><b className={c('num')}>{fmt(o.lbs)} lbs{o.amount != null ? ` · ${money(o.amount)}` : ''}</b></div></section>}
+          {!desk && doneBtns('View my orders', () => { setFilter('all'); go('orders') })}
           {!desk && contract && o.res > 0 && <div className={c('note teal')}>After this order your <b>contract reserves</b> drop to <b>{fmt(totals.left)} lbs left</b>.{o.lbs - o.res > 0 ? ` The ${fmt(o.lbs - o.res)} open-menu lbs don't count against your reserve.` : ''}</div>}
         </main>
-        <div className={c('dock stack')}><button className={c('btn')} onClick={() => { setFilter('all'); go('orders') }}>View my orders</button><button className={c('btn ghost')} onClick={() => go('home')}>Back to Home</button></div>
       </div>
     )
   }
@@ -1458,7 +1481,51 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const fn = (backend as unknown as { saveYields?: (id: number, lines: YieldLine[], send: boolean) => Promise<void> }).saveYields
     const ok = await run(async () => { if (fn) await fn.call(backend, yOrder, yDraft, send); return true })
     if (ok === undefined) return
-    toast(send ? (d?.yields?.find(r => r.orderId === yOrder)?.sentAt ? 'Revisions sent to Lifted.' : 'Yields sent to Lifted. Thank you!') : 'Saved. You can finish later.'); await reload(); go('yields')
+    if (send) {   // confirmation page: a summary of what they just sent
+      const x = yOrders.find(z => z.o.order!.id === yOrder)
+      setYSent({ label: x?.o.label ?? 'this order', revised: !!x?.rep?.sentAt, lines: yDraft.map(l => ({ ...l, parts: l.parts.filter(pDone) })) })
+      await reload(); go('ysent'); return
+    }
+    toast('Saved. You can finish later.'); await reload(); go('yields')
+  }
+  const [ySent, setYSent] = useState<{ label: string; revised: boolean; lines: YieldLine[] } | null>(null)
+  const uTxt = (v: number | null, u: YUnit) => v == null ? '–' : u === '%' ? `${v}%` : `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${u === 'lb' ? (v === 1 ? 'lb' : 'lbs') : u}`
+  const procTxt = (p: YPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + Rosin' : 'Hash'
+  function YieldSentScreen() {
+    const r = ySent
+    if (!r) return <div className={c('screen')}><p className={c('loading')}>Done.</p></div>
+    const done = r.lines.filter(l => l.parts.length), blank = r.lines.filter(l => !l.parts.length)
+    const runs = done.flatMap(l => l.parts.map(p => ({ orderId: 0, label: '', date: null, p, note: '', k: yCalc(p), draft: false })))
+    const all = yAgg(runs), ffLbs = runs.reduce((a, x) => a + (x.p.ff ?? 0), 0)
+    const outCell = (p: YPart) => { const k = yCalc(p), pc = p.bho ? k.bhoPct : k.hashPct
+      return <>{uTxt(p.outV, p.outU)}{pc != null && p.outU !== '%' && <span className={c('meta')} style={{ display: 'inline' }}> · {pct(pc)}</span>}</> }
+    const rosCell = (p: YPart) => { if (p.bho || !p.rosin || p.rosinV == null) return <span className={c('meta')} style={{ display: 'inline' }}>–</span>
+      const k = yCalc(p); return p.rosinU === '%' ? <>{uTxt(p.rosinV, p.rosinU)} of hash</> : <>{uTxt(p.rosinV, p.rosinU)}{k.rosinOfHash != null && <span className={c('meta')} style={{ display: 'inline' }}> · {pct(k.rosinOfHash)} of hash</span>}</> }
+    return (
+      <div className={c('screen ysent')}>
+        <header className={c('hdr done-hdr')}><span className={c('check')}>{I.check}</span><h1 style={{ marginTop: 6 }}>{r.revised ? 'Revisions sent' : 'Yields sent'}</h1>
+          <p className={c('sub')} style={{ fontSize: 15 }}>{r.label} · {plural(done.length, 'strain')} sent to Lifted. Thank you! You can view or edit this report any time from Yields.</p></header>
+        <main className={c('main')}>
+          {desk ? <section className={c('card')} style={{ padding: 0, overflow: 'hidden' }}>
+            <div className={c('ysum head')}><span>Strain</span><span>Process</span><span>Fresh frozen</span><span>Hash / BHO</span><span>Rosin</span></div>
+            {done.map(l => <Fragment key={l.s + l.y}>{l.parts.map((p, pi) => <div key={pi} className={c(`ysum ${pi ? 'cont' : ''}`)}>
+                <span>{pi === 0 && <><b>{l.s}</b> {yrTag(l.y)}{l.parts.length > 1 && <span className={c('meta')}>{plural(l.parts.length, 'run')}</span>}</>}</span>
+                <span>{procTxt(p)}</span><span>{p.ff == null ? '–' : `${fmt(p.ff)} lbs`}</span><span>{outCell(p)}</span><span>{rosCell(p)}</span></div>)}
+              {l.note && <div className={c('ysum cont note')}><span /><span className={c('meta')}>Note: {l.note}</span></div>}</Fragment>)}
+            <div className={c('ysum total')}><span>Total · {plural(done.length, 'strain')}</span><span /><span>{fmt(ffLbs)} lbs</span>
+              <span>{[all.hashPct != null ? `Hash ${pct(all.hashPct)}` : '', all.bhoPct != null ? `BHO ${pct(all.bhoPct)}` : ''].filter(Boolean).join(' · ') || '–'}</span>
+              <span>{all.rosinOfHash != null ? `${pct(all.rosinOfHash)} of hash` : '–'}</span></div>
+          </section>
+          : <section className={c('card')}>{done.map(l => <div key={l.s + l.y} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}>
+              <p className={c('name')}>{l.s} {yrTag(l.y)}</p>
+              {l.parts.map((p, pi) => <p key={pi} className={c('meta')}>{l.parts.length > 1 ? `Run ${pi + 1}: ` : ''}{procTxt(p)} · {p.ff == null ? '–' : `${fmt(p.ff)} lbs`} FF → {outCell(p)}{!p.bho && p.rosin && p.rosinV != null && <> · rosin {rosCell(p)}</>}</p>)}
+              {l.note && <p className={c('meta')} style={{ fontStyle: 'italic' }}>“{l.note}”</p>}</div></div>)}
+            <div className={c('li')} style={{ background: '#f7f9f6' }}><b className={c('grow')}>Total</b><b className={c('num')}>{fmt(ffLbs)} lbs FF{all.hashPct != null ? ` · ${pct(all.hashPct)} hash` : ''}</b></div></section>}
+          {blank.length > 0 && <div className={c('note gold')}><b>Not reported yet:</b> {blank.map(l => l.s).join(', ')}. Add them any time from Yields when you've run them.</div>}
+          {doneBtns('See my results', () => { setYTab('results'); go('yields') })}
+        </main>
+      </div>
+    )
   }
 
   // one row per strain + crop year: every part they've reported, totals and lbs-weighted yields
@@ -1792,7 +1859,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
 
   const SCREENS: Record<Screen, () => React.ReactElement> = {
     activity: ActivityScreen, resmenu: ResMenuScreen, home: Home, contract: ContractScreen, reserves: ReservesScreen, edit: EditScreen, reqReview: ReqReviewScreen, sent: SentScreen, menu: MenuScreen,
-    order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen, yields: YieldsScreen, yield: YieldScreen,
+    order: OrderScreen, review: ReviewScreen, ordered: OrderedScreen, orders: OrdersScreen, holds: HoldsScreen, yields: YieldsScreen, yield: YieldScreen, ysent: YieldSentScreen,
   }
   return (
     <div className={['cp', typing ? 'cp-typing' : '', desk ? 'cp-desk' : ''].filter(Boolean).join(' ')}>

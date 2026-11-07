@@ -11,7 +11,7 @@ const KIND: Record<FB['kind'], [string, string]> = { problem: ["Something's not 
 // portal screen keys -> what the customer sees
 const SCREEN: Record<string, string> = { home: 'Home', resmenu: 'Reserves & Menu', reserves: 'Contract Reserves', edit: 'Edit reserves', menu: 'Open Menu', order: 'New order',
   review: 'Review order', ordered: 'Order sent', orders: 'Orders & Statement', contract: 'My Contract', holds: 'Sample Holds', activity: 'Reserve History', yields: 'Yields', yield: 'Report yields',
-  reqReview: 'Review reserve request', sent: 'Reserve request sent' }
+  reqReview: 'Review reserve request', sent: 'Reserve request sent', ysent: 'Yields sent' }
 const SEEN_KEY = 'fb-seen-at'
 const when = (s: string) => new Date(s).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 
