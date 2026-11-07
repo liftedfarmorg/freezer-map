@@ -942,11 +942,6 @@ export default function App() {
     setMe(m => m && ({ ...m, access: { ...m.access, prefs } }))
     backend.setMyPrefs({ menu_order: prefs.menu_order }).catch(e => flash(`Menu order not saved: ${(e as Error).message}`, true))
   }
-  const resetMenuOrder = () => {
-    const mo = { ...(me?.access?.prefs?.menu_order ?? {}) }; delete mo[cur]
-    setMe(m => m && ({ ...m, access: { ...m.access, prefs: { ...m.access.prefs, menu_order: mo } } }))
-    backend.setMyPrefs({ menu_order: mo }).then(() => flash('Menu back to the standard order')).catch(e => flash((e as Error).message, true))
-  }
   const railPress = (x: NavItem, e: React.PointerEvent) => {
     if (e.button !== 0) return
     const keys = nav.main.slice(1).map(n => n.k)
@@ -1035,7 +1030,6 @@ export default function App() {
               : <button key={x.k} className={`${x.on && !menuDrag ? 'on' : ''} rail-drag ${menuDrag?.k === x.k ? 'lifted' : ''} ${i === 1 ? 'zone-bar' : ''} ${i === 4 ? 'zone-more' : ''}`}
                   title={t('Drag to change your order. The top 3 are your phone bar.')}
                   onPointerDown={e => railPress(x, e)} onPointerEnter={() => railEnter(x, i)} onClick={() => railClick(x)}>{x.l}<span className="rail-grip" aria-hidden="true">⋮⋮</span></button>)}
-              {me?.access?.prefs?.menu_order?.[cur] && !menuDrag && <button className="rail-reset" onClick={resetMenuOrder}>{t('Reset menu order')}</button>}
             </div>
             {nav.tail.length > 0 && <div className="rail-sep" />}
             {nav.tail.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
