@@ -736,7 +736,7 @@ function StopSearch({ ctx, customers, taken, onPick }: { ctx: LoadCtx; customers
         }} />
       <button type="button" className="combo-arrow" tabIndex={-1} aria-label="Show stops" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}>▾</button>
       {open && <ul className="stoplist" role="listbox">
-        {shown.length === 0 && <li className="none muted">No match{ql ? ` for "${q.trim()}"` : ''}. Customers are added in Sales › Settings › Customers.</li>}
+        {shown.length === 0 && <li className="none muted">No match{ql ? ` for "${q.trim()}"` : ''}. Customers are added in Sales › Customers.</li>}
         {shown.map((c, i) => {
           const os = ready.get(c.id) ?? []
           return <li key={c.id} role="option" aria-selected={i === hi} className={i === hi ? 'hi' : ''} onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); pick(c) }}>

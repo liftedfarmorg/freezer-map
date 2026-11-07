@@ -532,3 +532,30 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .app.shell:has(.scrim > .sheet.form.side) table.slimmable :is(th, td):not(.slim) { display: none; }
   .app.shell:has(.scrim > .sheet.form.side) table.slimmable { min-width: 0; width: 100%; }
 }
+
+/* Msg 300: quiet scrollbar in the dark sidebar (thin, only a faint thumb, no arrows or white track) */
+.app.shell .rail, .app.shell .rail * { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / .16) transparent; }
+.app.shell .rail ::-webkit-scrollbar, .app.shell .rail::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+.app.shell .rail ::-webkit-scrollbar-thumb, .app.shell .rail::-webkit-scrollbar-thumb { background: rgb(255 255 255 / .16); border-radius: 6px; }
+.app.shell .rail ::-webkit-scrollbar-button, .app.shell .rail::-webkit-scrollbar-button { display: none; height: 0; }
+.app.shell .rail ::-webkit-scrollbar-track, .app.shell .rail::-webkit-scrollbar-track { background: transparent; }
+
+/* Msg 300: Customers home page header (title + section tabs) */
+.setpick-h.home h2 { font-size: 26px; }
+.setpick-h.home .seg { margin-left: auto; }
+
+/* Msg 300: Customers on a phone: one tidy row per customer (name, balance, ordering), filters scroll sideways */
+@media (max-width: 699px) {
+  .app.shell table.t-customers :is(th, td):not(.slim) { display: none; }
+  .app.shell table.t-customers { min-width: 0; width: 100%; }
+  .app.shell table.t-customers td { white-space: normal; padding: 12px 10px; }
+  .app.shell table.t-customers td.pin { position: static; box-shadow: none; }
+  .app.shell table.t-customers td:first-child b { font-size: 15.5px; }
+  .app.shell .list.settings .seg.setf { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+  .app.shell .list.settings .seg.setf::-webkit-scrollbar { display: none; }
+  .app.shell .list.settings .seg.setf > button { flex: none; }
+  .app.shell .list.settings .row.toolbar { flex-wrap: wrap; gap: 8px; }
+  .app.shell .list.settings .row.toolbar .search { flex: 1 1 100%; }
+  .setpick-h.home { align-items: flex-start; }
+  .setpick-h.home .seg { margin-left: 0; width: 100%; }
+}

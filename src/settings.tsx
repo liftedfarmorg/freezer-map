@@ -184,7 +184,7 @@ function downloadTemplate(list: ListName, rows: ListRow[]) {
 
 /** A module's Settings: the shared lists it uses (vehicles, customers, strains) plus any extra sections of its own.
  *  The Strains list is the same one in every module that shows it. */
-export function SettingsView({ backend, inventoryStrains, onChanged, flash, lists, title, extra, canTerms, focus = 'dist', startOn }: {
+export function SettingsView({ backend, inventoryStrains, onChanged, flash, lists, title, extra, canTerms, focus = 'dist', startOn, home }: {
   backend: Backend; inventoryStrains: Map<string, number>
   onChanged: () => void; flash: (t: string, bad?: boolean) => void
   lists: ListName[]; title: string; extra?: { k: string; l: string; node: ReactNode }[]; canTerms?: boolean
@@ -192,6 +192,8 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   focus?: StrainFocus
   /** open on one of the extra sections instead of the first list */
   startOn?: string
+  /** its own sidebar page (Customers): title on top, sections as tabs instead of the Settings › picker */
+  home?: boolean
 }) {
   const [data, setData] = useState<Settings | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -321,6 +323,10 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
         const groups = SECTION_GROUPS.map(([g, keys]) => ({ g, items: secs.filter(x => keys.includes(x.k.replace(/^list:/, ''))) })).filter(x => x.items.length)
         const rest = secs.filter(x => !SECTION_GROUPS.some(([, keys]) => keys.includes(x.k.replace(/^list:/, ''))))
         if (rest.length) groups.push({ g: 'More', items: rest })
+        if (home) return <div className="setpick-h home">
+          <h2>{title}</h2>
+          {secs.length > 1 && <div className="seg">{secs.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}{x.n != null && <span className="muted"> {x.n}</span>}</button>)}</div>}
+        </div>
         return <div className="setpick-h">
           <h2><span className="muted">{title.replace(/ settings$/, '')} settings ›</span></h2>
           {secs.length > 1 ? <span className="setpick-w">
@@ -470,7 +476,7 @@ function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, sel }:
   })
   if (!rows.length) return <p className="muted">None.</p>
   return (
-    <div className="cwrap settable-w"><table className="ctable settable slimmable">
+    <div className="cwrap settable-w"><table className={`ctable settable slimmable t-${list}`}>
       <thead><tr>{cols.map((x, i) => <th key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''} ${i === 0 || x.slim ? 'slim' : ''}`} aria-sort={sort.k === x.k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
         <button onClick={() => setSort(s => ({ k: x.k, dir: s.k === x.k ? (-s.dir as 1 | -1) : 1 }))}>{x.l}{sort.k === x.k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>)}</tr></thead>
       <tbody>{sorted.map(r => <tr key={r.id} className={`tap ${r.active ? '' : 'retired'} ${sel != null && r.id === sel ? 'sel' : ''}`} tabIndex={0} onClick={() => onOpen(r)} onKeyDown={e => { if (e.key === 'Enter') onOpen(r) }}>
