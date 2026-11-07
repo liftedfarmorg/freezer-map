@@ -506,3 +506,17 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 }
 .catlist h3 { margin: 0 0 4px; }
 .catlist .ctable.settable { width: 100%; }
+/* PICK-5: long orders, mixed pallets, shipped line, load chooser */
+.fold-filled { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 10px; font: inherit; color: var(--ink); text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 48px; margin: 6px 0; cursor: pointer; }
+.shipline-top { margin: 6px 0 10px; }
+.lchoose .lc-add { white-space: nowrap; }
+@media (max-width: 640px) {
+  .lchoose .drow.lc-new { flex-wrap: wrap; row-gap: 8px; }
+  .lchoose .drow.lc-new > .grow { flex: 1 1 100%; }
+  .lchoose .drow.lc-new select, .lchoose .drow.lc-new .combo, .lchoose .drow.lc-new > :nth-child(2):not(input):not(button) { flex: 1 1 100%; min-width: 0; width: 100%; }
+  .lchoose .drow.lc-new .combo { display: flex; }
+  .lchoose .drow.lc-new .combo input { width: 100%; min-height: 44px; }
+  .lchoose .drow.lc-new input[type=date] { flex: 1 1 140px; min-width: 0; min-height: 44px; }
+  .lchoose .drow.lc-new button { flex: 0 0 auto; min-height: 44px; }
+}
