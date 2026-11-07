@@ -179,8 +179,9 @@ export async function sendCombine(job, ctx) {
     if (!s.package_tag) {
       const par = s.parent_id ? await pallet(s.parent_id) : null
       if (!par?.package_tag) throw new Error(`${s.code} has no METRC tag in the app`)
-      const sp = await db(`comp_metrc_actions?select=id,push_state,status&kind=eq.split&pallet_id=eq.${s.id}&order=id.desc&limit=1`) ?? []
-      if (sp[0]?.push_state === 'sent' || sp[0]?.push_state === 'sending') throw new Error(`${s.code} was already split off ${par.code} in METRC but has no tag in the app. Set ${s.code}'s tag, then send.`)
+      const sp = await db(`comp_metrc_actions?select=id,push_state,status,push_request&kind=eq.split&pallet_id=eq.${s.id}&order=id.desc&limit=1`) ?? []
+      // really split in METRC = sent WITH a request; a skip ("not needed") or a closed to-do is sent with no request
+      if ((sp[0]?.push_state === 'sent' && sp[0]?.push_request) || sp[0]?.push_state === 'sending') throw new Error(`${s.code} was already split off ${par.code} in METRC but has no tag in the app. Set ${s.code}'s tag, then send.`)
       const p = await packageByTag(job.license, par.package_tag)
       if (!p) throw new Error(`${up(par.package_tag)} (${par.code}, where ${s.code} came from) isn't an active package on ${job.license} in METRC`)
       lbsOnly(p, par.package_tag)
