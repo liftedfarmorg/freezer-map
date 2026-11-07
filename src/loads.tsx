@@ -64,7 +64,7 @@ export function siteLicense(lics: Lic[], site: string) {
   return c[0]?.license_no ?? null
 }
 
-export const STOP_COLORS = ['#2563eb', '#d97706', '#16a34a', '#db2777', '#7c3aed', '#0891b2', '#dc2626', '#65a30d']
+export const STOP_COLORS = ['#2b7a5e', '#566f74', '#a8732a', '#7a5876', '#4f6b3a', '#8a5a44', '#3e6f8a', '#3a3436']   // brand family (Msg 288): teal, slate, amber, plum, olive, clay, steel, ink
 export const stopColor = (seq: number) => STOP_COLORS[(seq - 1) % STOP_COLORS.length]
 const STATUS: Record<string, string> = { planning: 'Planning', loading: 'Loading', departing: 'Departing', in_transit: 'In transit', delivered: 'Delivered', cancelled: 'Cancelled' }
 const isPickup = (l?: Load) => l?.kind === 'pickup'
