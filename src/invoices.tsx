@@ -251,7 +251,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   }, [cust])
   // the customer's balance and last order (for the chips and Repeat last order)
   const [cbal, setCbal] = useState<number | null>(null)
-  const [lastO, setLastO] = useState<{ date: string | null; lines: { strain: string; lbs: number; crop_year: number | null; product: Product | null }[] } | null>(null)
+  const [lastO, setLastO] = useState<{ date: string | null } | null>(null)
   useEffect(() => {
     setCbal(null); setLastO(null)
     const sb = backend.client()
@@ -260,10 +260,10 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
       const b = (qb.data ?? [])[0] as { balance: number | null } | undefined
       setCbal(b && b.balance != null ? Number(b.balance) : ((inv.data ?? []) as { total: number }[]).reduce((a, x) => a + Number(x.total), 0))
     }).catch(() => {})
-    sb.from('orders').select('order_date,order_lines(strain,lbs,crop_year,product)').eq('customer_id', cust).not('status', 'in', '(draft,cancelled)')
+    sb.from('orders').select('order_date').eq('customer_id', cust).not('status', 'in', '(draft,cancelled)')
       .order('order_date', { ascending: false }).order('id', { ascending: false }).limit(1)
-      .then(({ data }) => { const o = (data ?? [])[0] as { order_date: string | null; order_lines: { strain: string; lbs: number; crop_year: number | null; product: Product | null }[] } | undefined
-        setLastO(o ? { date: o.order_date, lines: o.order_lines ?? [] } : { date: null, lines: [] }) }, () => {})
+      .then(({ data }) => { const o = (data ?? [])[0] as { order_date: string | null } | undefined
+        setLastO({ date: o?.order_date ?? null }) }, () => {})
   }, [cust])
   // Strain pick list (Aziz 11/4, same as the order editor): fresh frozen / standards / smalls = the open menu (+ this customer's
   // reserves on fresh frozen); other products aren't on the menu, so they list what's on hand. One option per strain + crop year.
@@ -301,13 +301,6 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const shipT = shipping !== '' ? Number(shipping) : est?.charge != null && !est.problem ? Number(est.charge) : 0
   const ok = cust != null && used.length > 0 && !anyOver
   const setPick = (k: string, base: Omit<Pick, 'lbs'>, ch: Partial<Pick>) => setPicks(ps => ({ ...ps, [k]: Object.assign({ lbs: '' }, base, ps[k], ch) as Pick }))
-  function repeatLast() {
-    if (!lastO?.lines.length) { flash('No earlier order for this customer', true); return }
-    const next = { ...picks }
-    for (const l of lastO.lines) { const product = (l.product ?? 'fresh_frozen') as Product, year = l.crop_year ?? CUR_YEAR
-      next[pkey(product, l.strain, year)] = { product, strain: l.strain, year, lbs: String(Number(l.lbs)) } }
-    setPicks(next)
-  }
   async function save() {
     setBusy(true)
     try {
@@ -333,7 +326,8 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const ql = cq.trim().toLowerCase()
   const custOpts = customers.filter(x => x.active && x.kind === 'external' && (!ql || x.name.toLowerCase().includes(ql) || (x.address ?? '').toLowerCase().includes(ql))).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12)
   const resLeft = cust == null ? 0 : bal.filter(b => b.customer_id === cust).reduce((a, b) => a + Math.max(0, Number(b.remaining)), 0)
-  const opts = optionsFor(tab).filter(o => !q.trim() || o.strain.toLowerCase().includes(q.trim().toLowerCase()))
+  // Msg 313: strains this customer has reserves on come first
+  const opts = optionsFor(tab).filter(o => !q.trim() || o.strain.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => (b.res > 0 ? 1 : 0) - (a.res > 0 ? 1 : 0))
   const loading = !menu || !stock
   const usd = (v: number) => `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
   const usd2 = (v: number) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -364,7 +358,6 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
                 <div className="no-copts">{custOpts.map(x => <button key={x.id} onClick={() => { setCust(x.id); setCq('') }}><b>{x.name}</b><span className="muted small">{(x.address ?? '').split(',').slice(-2, -1)[0]?.trim() ?? ''}{x.reserves_enabled ? ' · reserves' : ''}</span></button>)}</div>
               </> : <>
                 <div className="row no-cust"><div className="grow"><div className="no-cname">{c.name}</div><div className="muted small">{lastO?.date ? `last order ${fmtShort(lastO.date)}` : lastO ? 'no orders yet' : ''}</div></div>
-                  <button className="ghost small" disabled={!lastO?.lines.length} onClick={repeatLast}>↻ Repeat last order</button>
                   <button className="ghost small" onClick={() => setCust(null)}>Change</button></div>
                 <div className="no-chips">
                   <span className="pill">{c.price_per_lb != null ? `${usd2(Number(c.price_per_lb))}/lb contract` : market.get(CUR_YEAR) != null ? `Market ${usd2(market.get(CUR_YEAR)!)}/lb` : 'Market price'}</span>
