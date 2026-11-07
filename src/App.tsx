@@ -82,7 +82,7 @@ const AccountingView = lazy(() => import('./acct/AccountingView'))
 const ProcessingView = lazy(() => import('./proc/ProcessingView'))
 const ComplianceView = lazy(() => import('./comp/ComplianceView'))
 
-type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'driver' | 'inbound' | 'archived' | 'items'
+type View = 'dash' | 'inventory' | 'fulfill' | 'map' | 'freezer' | 'transit' | 'load' | 'review' | 'activity' | 'settings' | 'sales' | 'cult' | 'nursery' | 'proc' | 'acct' | 'comp' | 'admin' | 'mine' | 'fleet' | 'driver' | 'inbound' | 'archived' | 'items' | 'customers'
 // modules: each person has a level (User / Admin) per module; Owners have all of them (Admin > Settings > Users)
 type Mod = 'dist' | 'sales' | 'cult' | 'nurs' | 'proc' | 'acct' | 'comp' | 'admin'
 const MOD_KEY: Record<Mod, ModKey> = { dist: 'distribution', sales: 'sales', cult: 'cultivation', nurs: 'nursery', proc: 'processing', acct: 'accounting', comp: 'compliance', admin: 'admin' }
@@ -845,8 +845,8 @@ export default function App() {
   const distSettings = <SettingsView key="dist-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Distribution settings" lists={['strains']}
     extra={[{ k: 'locations', l: 'Locations', node: <DistLocations sb={backend.client()} flash={flash} onChanged={() => { reload() }} /> }, { k: 'vehicles', l: 'Vehicles', node: <CompFleet sb={backend.client()} flash={flash} dept="distribution" /> }, { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="distribution" flash={flash} /> }]} />
   // Msg 300: Customers has its own home in the sidebar (Sales and Admin), with Customer logins beside it
-  const customersHome = (k: string) => <SettingsView key={k} home backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Customers" focus="sales"
-    lists={['customers']} canTerms={salesAdmin} extra={[{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> }]} />
+  const customersHome = (k: string, ro = false) => <SettingsView key={k} home readOnly={ro} backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Customers" focus="sales"
+    lists={['customers']} canTerms={salesAdmin} extra={ro ? [] : [{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> }]} />
   const salesSettings = <SettingsView key="sales-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Sales settings" focus="sales"
     lists={['strains']} canTerms={salesAdmin} extra={[
       { k: 'categories', l: 'Product categories', node: <CatListPanel backend={backend} k={PRODUCT_CATEGORIES_KEY} dflt={DEFAULT_CATEGORIES} title="Product categories" noun="Category" canEdit={salesAdmin} flash={flash}
@@ -882,6 +882,7 @@ export default function App() {
     { k: 'transit', l: <>Transit{badge(openLoads.length)}</>, s: 'Transit', n: openLoads.length, on: view === 'transit' || view === 'load', go: () => go('transit') },
     ...(staff ? [{ k: 'inbound', l: 'Inbound', on: view === 'inbound', go: () => go('inbound') }] : []),
     ...(staff ? [{ k: 'archived', l: 'Archived', on: view === 'archived', go: () => { setArchQ(null); go('archived') } }] : []),
+    ...(isAdminOf('dist') ? [{ k: 'customers', l: 'Customers', on: view === 'customers', go: () => go('customers') }] : []),
   ]
   const distTail: NavItem[] = [
     { k: 'review', l: <>Review{badge(reviewCount, true)}</>, s: 'Review', n: reviewCount, warn: true, on: view === 'review', go: () => go('review') },
@@ -890,7 +891,7 @@ export default function App() {
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
   const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
-    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), ...(isAdminOf('sales') ? [sItem('customers', 'Customers')] : [])]
+    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('customers', 'Customers')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
@@ -1130,7 +1131,7 @@ export default function App() {
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />
           if (salesTab === 'invoices') return <InvoicesView backend={backend} customers={snap.customers ?? []} flash={flash} isAdmin={salesAdmin} sender={me?.display_name} />
           if (salesTab === 'settings') return salesSettings
-          if (salesTab === 'customers') return customersHome('sales-cust')
+          if (salesTab === 'customers') return customersHome(isAdminOf('sales') ? 'sales-cust' : 'sales-cust-ro', !isAdminOf('sales'))
           return <ReservesView key={`sales-${ordersKey}`} backend={backend} flash={flash} isAdmin={salesAdmin} mode={salesTab} onCounts={refreshCounts} fulfil={new Map((forders ?? []).map(f => [f.id, f]))} onFulfil={refreshF} customers={snap.customers ?? []}
             onNewOrder={() => setNewOrder(true)} onDoc={(k, id) => setDoc({ kind: k, id })}
             onInvoice={async id => { try { const inv = await backend.makeInvoice(id); setDoc({ kind: 'invoice', id: inv.id }) } catch (e) { flash(String((e as Error).message ?? e), true) } }} strains={snap.strains ?? []}
@@ -1189,6 +1190,7 @@ export default function App() {
             isAdmin={isAdminOf('comp')} canEdit={isAdminOf('comp')} me={me?.email ?? null} /></Suspense>}
         </div>}
         {view === 'settings' && cur === 'dist' && distSettings}
+        {view === 'customers' && cur === 'dist' && isAdminOf('dist') && customersHome(isAdminOf('sales') ? 'dist-cust' : 'dist-cust-ro', !isAdminOf('sales'))}
       </main>
 
       {active(plan) && L && (

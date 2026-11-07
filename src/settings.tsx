@@ -184,7 +184,7 @@ function downloadTemplate(list: ListName, rows: ListRow[]) {
 
 /** A module's Settings: the shared lists it uses (vehicles, customers, strains) plus any extra sections of its own.
  *  The Strains list is the same one in every module that shows it. */
-export function SettingsView({ backend, inventoryStrains, onChanged, flash, lists, title, extra, canTerms, focus = 'dist', startOn, home }: {
+export function SettingsView({ backend, inventoryStrains, onChanged, flash, lists, title, extra, canTerms, focus = 'dist', startOn, home, readOnly }: {
   backend: Backend; inventoryStrains: Map<string, number>
   onChanged: () => void; flash: (t: string, bad?: boolean) => void
   lists: ListName[]; title: string; extra?: { k: string; l: string; node: ReactNode }[]; canTerms?: boolean
@@ -194,6 +194,8 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   startOn?: string
   /** its own sidebar page (Customers): title on top, sections as tabs instead of the Settings › picker */
   home?: boolean
+  /** look, don't change: no Add, import or Save (Sales staff, Distribution Admins on Customers) */
+  readOnly?: boolean
 }) {
   const [data, setData] = useState<Settings | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -238,6 +240,22 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       else ((i.data ?? []) as { customer_id: number; total: number }[]).forEach(r => m.set(r.customer_id, (m.get(r.customer_id) ?? 0) + Number(r.total)))
       setBal(m)
     }).catch(() => {})
+  }, [])
+  // each customer's last order date (newest first, a page at a time)
+  const [last, setLast] = useState<Map<number, string>>(new Map())
+  useEffect(() => {
+    if (!lists.includes('customers') || !sb) return
+    ;(async () => {
+      const m = new Map<number, string>()
+      for (let from = 0; from < 20000; from += 1000) {
+        const { data: o, error } = await sb.from('orders').select('customer_id,order_date').not('status', 'in', '(draft,cancelled)').not('order_date', 'is', null)
+          .order('order_date', { ascending: false }).range(from, from + 999)
+        if (error || !o?.length) break
+        for (const x of o as { customer_id: number; order_date: string }[]) if (!m.has(x.customer_id)) m.set(x.customer_id, x.order_date.slice(0, 10))
+        if (o.length < 1000) break
+      }
+      setLast(m)
+    })().catch(() => {})
   }, [])
   useEffect(() => { if (lists.includes('customers')) backend.paymentTerms().then(t => setTerms(t.filter(x => x.active))).catch(() => {}) }, [])
   const [carriers, setCarriers] = useState<{ id: number; name: string; license_no: string | null }[]>([])
@@ -340,12 +358,12 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       {other ? extra?.find(x => x.k === other)?.node : <>
       <div className="row toolbar">
         <input className="search" type="search" placeholder={`Search ${TITLES[tab].toLowerCase()}`} value={q} onChange={e => setQ(e.target.value)} />
-        {tab === 'customers' && <button className="ghost" onClick={() => setQbo(true)}>Import from QuickBooks</button>}
+        {tab === 'customers' && !readOnly && <button className="ghost" onClick={() => setQbo(true)}>Import from QuickBooks</button>}
         {tab === 'strains' && sb && <button className="ghost" onClick={() => setCodes(true)}>METRC codes</button>}
         {tab === 'strains' && sb && <button className="ghost" onClick={() => setGen(true)}>METRC item generator</button>}
-        <button className="primary" onClick={() => setEdit(tab === 'customers' ? { kind: 'external', active: true } as Partial<Customer> : tab === 'strains' ? { aliases: [], active: true, show_on_menu: true } as Partial<Strain> : { active: true, spaces: 8, across: 2 } as Partial<Vehicle>)}>+ Add</button>
+        {!readOnly && <button className="primary" onClick={() => setEdit(tab === 'customers' ? { kind: 'external', active: true } as Partial<Customer> : tab === 'strains' ? { aliases: [], active: true, show_on_menu: true } as Partial<Strain> : { active: true, spaces: 8, across: 2 } as Partial<Vehicle>)}>+ Add</button>}
       </div>
-      <Fold id={`set.${tab}.tools`} title="Import, export and retired">
+      {!readOnly && <Fold id={`set.${tab}.tools`} title="Import, export and retired">
         <div className="row toolbar">
           <label className="ghost small filebtn">Import spreadsheet
             <input type="file" accept=".xlsx,.xlsm,.csv" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFile(f) }} />
@@ -354,7 +372,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
           <label className="check small-check"><input type="checkbox" checked={showRetired} onChange={e => setShowRetired(e.target.checked)} /> Show retired</label>
         </div>
         <p className="muted">Import adds new {TITLES[tab].toLowerCase()} and updates existing ones by name. Blank cells don't overwrite anything. The download doubles as a template.</p>
-      </Fold>
+      </Fold>}
 
       {tab === 'strains' && unknownStrains.length > 0 && (
         <div className="warnbox">{unknownStrains.length} strain{unknownStrains.length > 1 ? 's' : ''} on pallets {unknownStrains.length > 1 ? "aren't" : "isn't"} in the list: {unknownStrains.slice(0, 6).join(', ')}{unknownStrains.length > 6 ? '…' : ''}. <a onClick={addMissing}>Add {unknownStrains.length > 1 ? 'them' : 'it'}</a>, or add {unknownStrains.length > 1 ? 'them' : 'it'} as another name on an existing strain.</div>
@@ -370,14 +388,14 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       {groupsOf(tab, shown, inventoryStrains).map(([gk, gl, gr]) => gr.length > 0 && (
         <Fold key={gk} id={`set.${tab}.${gk}`} title={gl} count={gr.length} open={gk === 'main'} force={!!q || (!!home && gk === 'main')}>
           <SetTable list={tab} rows={gr.filter(r => tab !== 'customers' || gk !== 'main' || ordF === 'all' || ((r as Customer).reserves_enabled ? 'res' : 'menu') === ordF)}
-            terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} bal={bal} sel={edit?.id ?? null} />
+            terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} bal={bal} last={last} sel={edit?.id ?? null} />
         </Fold>
       ))}
 
-      {edit && <EditForm key={`${tab}-${edit.id ?? 'new'}`} list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
+      {edit && <EditForm key={`${tab}-${edit.id ?? 'new'}`} readOnly={readOnly} list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
         tabExtra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' ? {
-          contract: canTerms ? <TermsByYear backend={backend} c={edit as Customer} /> : null,
-          logins: <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} /> } : undefined}
+          contract: canTerms && !readOnly ? <TermsByYear backend={backend} c={edit as Customer} /> : null,
+          logins: readOnly ? null : <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} /> } : undefined}
         extra={tab === 'customers' ? null
           : tab === 'strains' && edit.id != null ? <>
               {sb && <div className="row" style={{ margin: '6px 0 10px' }}><button className="ghost small" onClick={() => { const id = edit.id!; setEdit(null); setMetrcFor({ id, isNew: false }) }}>METRC: strain and items on every license</button></div>}
@@ -401,13 +419,14 @@ const palletsOf = (s: Strain, inv: Map<string, number>) =>
 type TCol = { k: string; l: string; num?: boolean; slim?: boolean; v: (r: ListRow) => string | number | null | undefined; cell?: (r: ListRow) => ReactNode }
 const money = (v: unknown, d = 2) => (v == null ? null : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`)
 const cityOf = (a: string | null) => { const p = (a ?? '').split(',').map(x => x.trim()); return p.length >= 3 ? p[p.length - 2] : null }
-function setCols(list: ListName, terms: { code: string; label: string }[], profiles: Map<number, StrainProfile>, inv: Map<string, number>, focus: StrainFocus, bal?: Map<number, number>): TCol[] {
+function setCols(list: ListName, terms: { code: string; label: string }[], profiles: Map<number, StrainProfile>, inv: Map<string, number>, focus: StrainFocus, bal?: Map<number, number>, last?: Map<number, string>): TCol[] {
   if (list === 'customers') {
     const C = (r: ListRow) => r as Customer
     return [
       { k: 'name', l: 'Customer', v: r => r.name, cell: r => <><b>{r.name}</b>{!r.active && <span className="muted"> · retired</span>}</> },
       { k: 'bal', l: 'Balance', num: true, slim: true, v: r => bal?.get(r.id!) ?? null, cell: r => bal?.has(r.id!) ? money(bal.get(r.id!)) : null },
-      { k: 'ord', l: 'Ordering', slim: true, v: r => C(r).kind === 'internal' ? 'Internal' : C(r).reserves_enabled ? 'Reserves on' : 'Menu only',
+      { k: 'last', l: 'Last order', slim: true, v: r => last?.get(r.id!) ?? null, cell: r => last?.has(r.id!) ? new Date(last.get(r.id!)! + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : null },
+      { k: 'ord', l: 'Ordering', v: r => C(r).kind === 'internal' ? 'Internal' : C(r).reserves_enabled ? 'Reserves on' : 'Menu only',
         cell: r => C(r).kind === 'internal' ? <span className="pill">Internal</span> : <span className={`pill ${C(r).reserves_enabled ? 'p-res' : ''}`}>{C(r).reserves_enabled ? 'Reserves on' : 'Menu only'}</span> },
       { k: 'terms', l: 'Terms', v: r => { const c = C(r).payment_terms; return c ? terms.find(t => t.code === c)?.label ?? c : null } },
       { k: 'price', l: '$ / lb', num: true, v: r => C(r).price_per_lb ?? null, cell: r => money(C(r).price_per_lb) },
@@ -463,8 +482,8 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
   const keep = ['name', 'code', 'status', ...BY[focus]]
   return keep.map(k => all.find(x => x.k === k)!).filter(Boolean).map(x => (x.k === 'code' || x.k === 'type' ? { ...x, slim: true } : x))
 }
-function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, sel }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; sel?: number | null }) {
-  const cols = setCols(list, terms, profiles, inv, focus, bal)
+function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, last, sel }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; last?: Map<number, string>; sel?: number | null }) {
+  const cols = setCols(list, terms, profiles, inv, focus, bal, last)
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: 'name', dir: 1 })
   const c = cols.find(x => x.k === sort.k) ?? cols[0]
   const sorted = [...rows].sort((a, b) => {
@@ -517,10 +536,10 @@ const CUST_TAB: Record<string, string> = { billing_address: 'billing', billing_c
 const STRAIN_TYPES_5 = ['Indica', 'Indica Hybrid', 'Hybrid', 'Sativa Hybrid', 'Sativa']
 const TYPE_SHORT5: Record<string, string> = { Indica: 'I', 'Indica Hybrid': 'I/H', Hybrid: 'H', 'Sativa Hybrid': 'S/H', Sativa: 'S' }
 
-export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers, cats, nurseries, tabExtra }: {
+export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers, cats, nurseries, tabExtra, readOnly }: {
   list: ListName; row: Partial<ListRow>; busy: boolean; onClose: () => void; onSave: (r: Partial<ListRow>) => void; extra?: React.ReactNode
   terms?: { code: string; label: string }[]; carriers?: { id: number; name: string; license_no: string | null }[]
-  cats?: string[]; nurseries?: string[]; tabExtra?: { contract?: React.ReactNode; logins?: React.ReactNode }
+  cats?: string[]; nurseries?: string[]; tabExtra?: { contract?: React.ReactNode; logins?: React.ReactNode }; readOnly?: boolean
 }) {
   const [r, setR] = useState<Record<string, unknown>>(row as Record<string, unknown>)
   const [touched, setTouched] = useState<Set<string>>(new Set())
@@ -587,11 +606,13 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
         <div className="sheet-h"><h2>{row.id ? (String(row.name ?? '') || `Edit ${SINGULAR[list]}`) : `Add ${SINGULAR[list]}`}</h2><button className="ghost" onClick={onClose}>✕</button></div>
         {isCust ? <>
           <nav className="ftabs">{tabs.map(([k, l]) => <button key={k} className={ctab === k ? 'on' : ''} onClick={() => setCtab(k)}>{l}</button>)}</nav>
+          <fieldset className="rofs" disabled={!!readOnly}>
           {ctab === 'overview' && ext && <div className="field fsec">
             <label>What they buy <span className="muted">(product categories; Sales admins edit the list in Sales settings › Product categories)</span></label>
             <MultiPick options={cats ?? []} value={(r.product_categories as string[] | undefined) ?? []} onChange={v => set('product_categories', v)} /></div>}
           <div className="fgrid">{cols.filter(c => (CUST_TAB[c.key] ?? 'overview') === ctab).map(fieldFor)}</div>
           {ctab === 'shipping' && carrier}
+          </fieldset>
           {ctab === 'contract' && tabExtra?.contract}
           {ctab === 'logins' && tabExtra?.logins}
         </> : list === 'strains' ? <>
@@ -612,7 +633,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
         {!isCust && list !== 'strains' && carrier}
         {extra}
         {locked && <p className="muted">{String(row.name)} is a Lifted site. You can edit its details but not rename or retire it.</p>}
-        <div className="row between fbar">
+        {readOnly ? <div className="row between fbar"><span className="muted">View only</span><button className="ghost" onClick={onClose}>Close</button></div> : <div className="row between fbar">
           {row.id && !locked
             ? <button className="ghost" disabled={busy} onClick={() => onSave({ id: row.id, active: !r.active } as Partial<ListRow>)}>{r.active ? 'Retire' : 'Restore'}</button>
             : <span />}
@@ -620,7 +641,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
             <button className="ghost" onClick={onClose}>Cancel</button>
             <button className="primary" disabled={busy || !String(r.name ?? '').trim() || !colorOk} onClick={submit}>Save</button>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   )
