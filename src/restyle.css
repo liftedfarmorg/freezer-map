@@ -717,3 +717,4 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .app.shell .scrim > .sheet.form:has(> .fbar) { display: flex; flex-direction: column; }
 .app.shell .scrim > .sheet.form:has(> .fbar) > * { flex: none; }
 .app.shell .scrim > .sheet.form > .fbar { margin-top: auto; }
+@media (min-width: 1000px) { .app.shell .scrim > .sheet.form.side:has(> .fbar) { padding-bottom: 0; } }
