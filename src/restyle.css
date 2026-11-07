@@ -335,3 +335,15 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .loadview .row.actions { position: sticky; bottom: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
   padding: 10px 0; border-top: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
 @media (max-width: 767px) { .loadview .row.actions { bottom: calc(64px + env(safe-area-inset-bottom)); } .lv-title h2 { font-size: 22px; } }
+
+/* Msg 288: stops keep their own color, but only on the number and a soft tint; no thick colored edges. Status pills in the brand family. */
+.loadview .stopcard { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--sc) 4%, var(--panel)); }
+.loadview .stopcard.delivered { background: color-mix(in srgb, var(--sc) 4%, var(--panel)); }
+.tcard.st-in_transit, .tcard.st-loading, .tcard.st-departing { box-shadow: var(--r-shadow); }
+.app.shell .pill.s-planning { background: var(--empty); color: var(--ink); }
+.app.shell .pill.s-loading, .app.shell .pill.s-departing { background: #f6ecd7; color: #7a5410; }
+.app.shell .pill.s-in_transit { background: #e3ecee; color: #3d5a60; }
+.app.shell .pill.s-delivered { background: var(--r-teal-bg); color: var(--r-teal-ink); }
+.app.shell .pill.s-cancelled { background: var(--empty); color: var(--muted); }
+.loadview .tpos.full { background: color-mix(in srgb, var(--sc) 8%, var(--panel)); border-color: color-mix(in srgb, var(--sc) 45%, var(--line)); }
+.loadview .titem { border-left-width: 2px; }
