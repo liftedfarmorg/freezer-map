@@ -309,4 +309,4 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .tc-fill { display: grid; gap: 5px; font-size: 13px; }
 .tc-bar { display: block; height: 6px; border-radius: 3px; background: var(--empty); overflow: hidden; max-width: 420px; }
 .tc-bar i { display: block; height: 100%; background: var(--r-teal); }
-@media (min-width: 1000px) { .tc-list { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); } }
+.tc-list { max-width: 980px; }
