@@ -159,8 +159,9 @@ function FzMap({ rows, loc }: { rows: PRow[]; loc: (p: Pallet) => Loc }) {
   const L0 = loc(rows[0].pallet)
   const spots: { k: string; label: string; on: boolean; split: boolean }[] = []
   for (let f = max; f >= 1; f--) for (const side of ['Left', 'Right']) {
-    const r = rows.find(x => loc(x.pallet).front === f && loc(x.pallet).side === side)
-    spots.push({ k: `${f}${side}`, label: r ? `${loc(r.pallet).spot} · ${r.pallet.code}` : '', on: !!r, split: !!r && !r.whole })
+    const rs = rows.filter(x => loc(x.pallet).front === f && loc(x.pallet).side === side)
+    const r = rs[0]
+    spots.push({ k: `${f}${side}`, label: r ? `${loc(r.pallet).spot} · ${rs.map(x => x.pallet.code).join(', ')}` : '', on: !!r, split: rs.some(x => !x.whole) })
   }
   if (!L0.side) return <div className="muted small">{[...mine.keys()].join(', ')}</div>
   return (
