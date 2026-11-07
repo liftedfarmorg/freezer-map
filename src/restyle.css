@@ -563,3 +563,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 /* Msg 301: view-only customer card */
 fieldset.rofs { border: 0; margin: 0; padding: 0; min-width: 0; }
 fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color: var(--ink); background: var(--bg); cursor: default; }
+
+/* Msg 302: phone filter chips: a real full-width row that scrolls sideways (inline-flex was sizing to its content and running off the screen) */
+@media (max-width: 699px) {
+  .app.shell .list.settings .seg.setf { display: flex; width: auto; max-width: none; min-width: 0; box-sizing: border-box; }
+}
