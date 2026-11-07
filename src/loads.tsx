@@ -596,12 +596,12 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
                   const p = ctx.pallet(i.pallet_id)
                   const s = stopOf(i.stop_id)
                   return (
-                    <span key={i.id} className={`titem ${s?.status === 'delivered' ? 'done' : ''}`} style={{ ['--sc' as string]: stopColor(s?.seq ?? 1) }}>
+                    <span key={i.id} className={`titem ${s?.status === 'delivered' || l.status === 'delivered' ? 'done' : ''}`} style={{ ['--sc' as string]: stopColor(s?.seq ?? 1) }}>
                       <b>{p?.code}</b> <span className="tstop">{s?.seq}</span>{here.length > 1 && <span className="tlayer">{i === here[0] ? 'top' : i === here[here.length - 1] ? 'bottom' : 'middle'}</span>}
                       <span className="strain">{p ? label(ctx, p) : ''}</span>
                       <span className="w">{p ? lbs(ctx.weight(p)) : ''} · {p && (p.status === 'in_freezer' || p.status === 'unslotted') && (s?.status === 'delivered' || l.status === 'delivered')
-                          ? `${s?.status === 'delivered' ? '✓' : '↩'} ${p.slot_id ? ctx.freezerSpot(p.slot_id) : 'needs a spot'}`
-                        : s?.status === 'delivered' ? '✓ delivered'
+                          ? `${s?.status === 'delivered' ? '✓' : '↩'} ${p.slot_id ? ctx.freezerSpot(p.slot_id) : 'needs a spot'}${(() => { const h = ctx.held(p.id) ?? ctx.contents(p.id).map(x => ctx.held(x.id)).find(Boolean); return h ? ` · ${h.split(' · ')[0]}` : '' })()}`
+                        : s?.status === 'delivered' ? `✓ ${ctx.customers.find(c => c.id === s.customer_id)?.name ?? 'delivered'}`
                         : i.loaded ? '✓ on truck' : p ? ctx.freezerSpot(p.slot_id) : ''}</span>
                     </span>
                   )
