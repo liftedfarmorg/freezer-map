@@ -288,7 +288,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 <td className="num"><b>{n0(orderLbs(o))}</b></td>
               </tr>,
               // Msg 304: the order opens in the big side card (full-height sheet on a phone) instead of under its row
-              open === -o.id ? <tr key={`x-${o.id}`} className="xrow-side"><td colSpan={6} style={{ padding: 0, border: 0 }}><div className="scrim" onClick={() => setOpen(null)}><div className="sheet form wide side osheet" onClick={e => e.stopPropagation()}>
+              open === -o.id ? <tr key={`x-${o.id}`} className="xrow-side"><td colSpan={6} className="slim" style={{ padding: 0, border: 0 }}><div className="scrim" onClick={() => setOpen(null)}><div className="sheet form wide side osheet" onClick={e => e.stopPropagation()}>
                     <div className="sheet-h"><div><h2>{o.so_number ?? `Order #${o.id}`}{o.is_sample && <> <span className="pill sample">Sample</span></>}</h2>
                       <div className="muted">{cname(o.customer_id)} · {fmtDate(o.order_date)} · <span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span> · {n0(orderLbs(o))} lbs</div></div>
                       <button className="ghost" onClick={() => setOpen(null)}>✕</button></div>
