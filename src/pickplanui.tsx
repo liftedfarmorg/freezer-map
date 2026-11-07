@@ -17,6 +17,8 @@ const got = (l: FLine) => l.picks.reduce((a, p) => a + Number(p.lbs), 0)
 const MODES: { k: Mode; label: string }[] = [
   { k: 'freezers', label: 'Fewest freezers' }, { k: 'oldest', label: 'Oldest harvest first' }, { k: 'splits', label: 'Fewest splits' }]
 const REASONS = ['Not there', 'Buried', 'Damaged', 'Other']
+/** a mixed pallet's strains, short: "A, B and 13 more" */
+const mixList = (cs: Pallet[]) => { const n = [...new Set(cs.map(c => c.strain).filter(Boolean))] as string[]; return n.length > 3 ? `${n.slice(0, 2).join(', ')} and ${n.length - 2} more` : n.join(', ') || `${cs.length} packages` }
 const boxes = (lbs: number) => lbs % 10 === 0 ? ` ${lbs / 10} boxes` : ''
 
 /** a row on the route: a planned pick, or a pallet already assigned (held) that still has to come out of a freezer */
@@ -155,7 +157,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
                     <div className={`pmp-row ${change === r.pallet.id ? 'on' : ''}`}>
                       <b className="pmp-spot">{L.spot}</b>
                       <b className="pmp-code">{r.pallet.code}</b>
-                      <span className="grow">{chip(r.lineId)} {r.pallet.kind === 'mixed' ? `Mixed: ${contents(r.pallet.id).map(c => c.strain).filter(Boolean).join(', ')}` : r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
+                      <span className="grow">{chip(r.lineId)} {r.pallet.kind === 'mixed' ? `Mixed: ${mixList(contents(r.pallet.id))}` : r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
                       <span className="pmp-lbs">{n0(r.lbs)}{!r.whole ? <span className="muted"> of {n0(w(r.pallet))}</span> : ''} lbs</span>
                       <span className={`pmp-do ${r.held ? 'held' : r.whole ? '' : 'split'}`}>{r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs)}`}</span>
                       {r.held ? <span className="pmp-chg" /> : <button className="linkbtn pmp-chg" onClick={() => { setChange(change === r.pallet.id ? null : r.pallet.id) }}>{change === r.pallet.id ? 'Cancel' : 'Change'}</button>}
@@ -247,7 +249,7 @@ function Walk({ walk, save, pallet, contents, loc, altsFor, chip, busy, lineOf, 
             <div><span>Pallet</span><b>{next.p.code}</b></div>
             {next.p.kind === 'mixed'
               ? <><div><span>Tag</span><b className="small">Scan any package on it</b></div>
-                <div><span>Mixed pallet</span><b>{contents(next.id).map(c => c.strain).filter(Boolean).join(', ') || `${contents(next.id).length} packages`}</b></div>
+                <div><span>Mixed pallet</span><b>{mixList(contents(next.id))}</b></div>
                 <div><span>On the pallet</span><b>{n0(contents(next.id).reduce((a, c) => a + w(c), 0))} lbs</b></div></>
               : <><div><span>Tag ends</span><b className="mono">…{(next.p.package_tag ?? '').slice(-7) || 'no tag'}</b></div>
                 <div><span>Strain</span><b>{next.p.strain}</b></div>
