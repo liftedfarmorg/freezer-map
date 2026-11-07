@@ -705,3 +705,16 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 /* Msg 325: who a pallet is held or loaded for, on its tile */
 .tile .pcust { grid-column: 1 / -1; grid-row: 3; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: rgb(255 255 255 / .6); color: #231f20; }
+
+/* Msg 332: the Save / Cancel / Retire bar at the bottom of an edit card sat above the card's bottom padding, so fields scrolled
+   past underneath it (worst on iPhones with the home bar). It now sits flush on the bottom edge and covers the full width. */
+.sheet.form:has(> .fbar) { padding-bottom: 0; }
+.sheet.form > .fbar { bottom: 0; margin: 8px -16px 0; padding: 12px 16px max(14px, env(safe-area-inset-bottom)); z-index: 2; box-shadow: 0 -6px 14px rgb(0 0 0 / .05); }
+@media (min-width: 1000px) {
+  .app.shell .scrim > .sheet.form.side > .fbar { margin: auto -24px 0; padding: 12px 24px 16px; }
+}
+/* Msg 332: when a card's fields are short, its Save bar still sits on the bottom edge (not halfway up) */
+.app.shell .scrim > .sheet.form:has(> .fbar) { display: flex; flex-direction: column; }
+.app.shell .scrim > .sheet.form:has(> .fbar) > * { flex: none; }
+.app.shell .scrim > .sheet.form > .fbar { margin-top: auto; }
+@media (min-width: 1000px) { .app.shell .scrim > .sheet.form.side:has(> .fbar) { padding-bottom: 0; } }
