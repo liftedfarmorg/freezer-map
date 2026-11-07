@@ -495,7 +495,7 @@ function StartRun({ c, kind, req, pre, onClose, onDone }: { c: Ctx; kind: Run['k
   const SUB: Record<Run['kind'], string> = { buck: 'Wet or unbucked packages go in whole (not weighed on the stem; wet ones count as dried in house)',
     sort: 'Bucked flower in; bucked standards and smalls out. No piece rate.', trim: 'Bucked, bucked standards or smalls (or machine trimmed standards to finish by hand), all or part of each',
     machine: 'Smalls or bucked in; standards and trim out. No piece rate. Marked machine trimmed inside the app only (never in METRC or for customers).' }
-  return <Sheet wide title={TITLE[kind]} sub={SUB[kind]} onClose={onClose}>
+  return <Sheet wide side title={TITLE[kind]} sub={SUB[kind]} onClose={onClose}>
     {!cands.length ? <p className="muted">No {TAKES[kind]} packages free to work on.</p> : <>
       <F label="Strain"><Pick value={strain} blank="Pick a strain…" options={strains.map(s => ({ v: s, l: `${s} (${n0(sum(cands.filter(p => p.strain === s).map(w)))} lbs)` }))} onChange={v => { setStrain(v); setPick({}); setRequest(null) }} /></F>
       {strain && <div className="cwrap"><table className="ctable">
@@ -695,7 +695,7 @@ function PackageSheet({ c, p, onClose }: { c: Ctx; p: Pallet; onClose: () => voi
   const here = live(p), free = here && !r && !h, can = c.canEdit
   const info = c.inv?.info(p.id)
   const go = (f: () => void) => { onClose(); f() }
-  return <Sheet title={p.code} sub={<><StrainLink name={p.strain} /> <Prod p={p.product} /></>} onClose={onClose}>
+  return <Sheet side title={p.code} sub={<><StrainLink name={p.strain} /> <Prod p={p.product} /></>} onClose={onClose}>
     {r && <div className="infobox">Being {r.kind === 'buck' ? 'bucked' : r.kind === 'sort' ? 'sorted' : r.kind === 'machine' ? 'machine trimmed' : 'trimmed'} in <a onClick={() => c.openRun(r)}>{r.code}</a>. Open the run to finish it.</div>}
     {h && <div className="infobox held">Committed to {h}. Distribution ships it from Fulfillment.</div>}
     {can && <div className="actions">

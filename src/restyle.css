@@ -524,13 +524,15 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 /* Msg 299: big side card (customers, strains, run sheets). The page stays usable on the left: tables fold to their key columns, the open row is highlighted, click another row to switch. */
 .ctable tr.sel > td { background: var(--r-teal-bg); }
 .ctable tr.sel > td:first-child { box-shadow: inset 3px 0 0 var(--r-teal); }
+/* Msg 304: the side card is wider (up to 980 px) and works for any sheet marked side (orders, packages, start a run too) */
 @media (min-width: 1000px) {
-  .app.shell .scrim:has(> .sheet.form.side) { left: auto; right: 0; width: min(860px, 58vw); padding: 0; background: none; justify-content: stretch; align-items: stretch; }
-  .app.shell .scrim > .sheet.form.side { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border-radius: 0; overflow-y: auto; padding: 20px 24px;
+  .app.shell { --sidew: min(980px, 64vw); }
+  .app.shell .scrim:has(> .sheet.form.side), .app.shell .scrim:has(> .sheet.side) { left: auto; right: 0; width: var(--sidew); padding: 0; background: none; justify-content: stretch; align-items: stretch; }
+  .app.shell .scrim > .sheet.form.side, .app.shell .scrim > .sheet.side { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border-radius: 0; overflow-y: auto; padding: 20px 24px;
     box-shadow: -10px 0 30px rgb(0 0 0 / .10); border-left: 1px solid var(--line); }
-  .app.shell:has(.scrim > .sheet.form.side) main { padding-right: calc(min(860px, 58vw) + 12px); }
-  .app.shell:has(.scrim > .sheet.form.side) table.slimmable :is(th, td):not(.slim) { display: none; }
-  .app.shell:has(.scrim > .sheet.form.side) table.slimmable { min-width: 0; width: 100%; }
+  .app.shell:has(.scrim > .sheet.side) main { padding-right: calc(var(--sidew) + 12px); }
+  .app.shell:has(.scrim > .sheet.side) table.slimmable :is(th, td):not(.slim) { display: none; }
+  .app.shell:has(.scrim > .sheet.side) table.slimmable { min-width: 0; width: 100%; }
 }
 
 /* Msg 300: quiet scrollbar in the dark sidebar (thin, only a faint thumb, no arrows or white track) */
@@ -567,4 +569,21 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 /* Msg 302: phone filter chips: a real full-width row that scrolls sideways (inline-flex was sizing to its content and running off the screen) */
 @media (max-width: 699px) {
   .app.shell .list.settings .seg.setf { display: flex; width: auto; max-width: none; min-width: 0; box-sizing: border-box; }
+}
+
+/* Msg 304: small yes/no pop-ups (cancel an order) stay centered, even inside a side card */
+.app.shell .scrim.confirm-scrim:has(> .sheet.form.confirm) { left: 0; width: auto; inset: 0; justify-content: center; align-items: center; padding: 16px; background: rgb(0 0 0 / .35); z-index: 30; }
+.app.shell .scrim.confirm-scrim > .sheet.form.confirm { width: min(460px, 100%); max-width: 460px; height: auto; max-height: none; border-radius: 20px; padding: 20px 22px; box-shadow: 0 24px 60px rgb(0 0 0 / .25); border: 0; }
+.sheet.form.confirm h2 { margin: 0 0 6px; font-size: 20px; }
+.primary.danger { background: var(--bad, #b42318); border-color: var(--bad, #b42318); color: #fff; }
+.ghost.danger { color: var(--bad, #b42318); }
+.odetail .ocancel, .ocancel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.osheet .rescard.odetail { border: 0; padding: 0; box-shadow: none; background: none; }
+
+/* Msg 304: the load page uses the width on computers: stops on the left, the truck on the right */
+@media (min-width: 1200px) {
+  .app.shell .loadview { max-width: 1320px; grid-template-columns: minmax(0, 1fr) minmax(420px, 560px); column-gap: 22px; grid-auto-flow: row dense; align-items: start; }
+  .app.shell .loadview > * { grid-column: 1 / -1; }
+  .app.shell .loadview > .stops { grid-column: 1; }
+  .app.shell .loadview > .truck-wrap, .app.shell .loadview > .pickuplist { grid-column: 2; position: sticky; top: 12px; }
 }

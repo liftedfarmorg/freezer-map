@@ -1889,7 +1889,7 @@ function PalletSheet({ ix, p, others, busy, where, flash, onArchived, onClose, o
   const statusText: Record<string, string> = { merged: 'Merged (closed out)', shipped: 'Delivered (left inventory)', depleted: isMixed ? 'Broken apart' : 'Depleted', archived: 'Not in a freezer (old record)', in_transit: where(p) }
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet side psheet" onClick={e => e.stopPropagation()}>
         <div className="sheet-h">
           <div>
             <h2>{p.code}</h2>
