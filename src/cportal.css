@@ -639,3 +639,15 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-yrunm .cp-meta b { color: var(--ink); }
 .cp-desk .cp-yres.cp-sub > .cp-yrunname { grid-column: span 2; flex-wrap: nowrap; white-space: nowrap; justify-content: flex-start; text-align: left; }
 .cp-desk .cp-yres.cp-sub > .cp-yrunname .cp-ptag, .cp-desk .cp-yres.cp-sub > .cp-yrunname .cp-chip { font-size: 11px; }
+/* sent yield report: locked until Edit report */
+.cp .cp-yfs { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.cp .cp-yfs:disabled .cp-yamt { background: #f7f9f6; }
+.cp .cp-yfs:disabled .cp-yamt input, .cp .cp-yfs:disabled .cp-ynote input { color: var(--ink); -webkit-text-fill-color: var(--ink); opacity: 1; background: transparent; }
+.cp .cp-yfs:disabled .cp-yamt select { opacity: 1; color: var(--ink); appearance: none; -webkit-appearance: none; background: #f7f9f6; padding: 0 10px; }
+.cp .cp-yfs:disabled .cp-ycard.cp-done { box-shadow: none; }
+.cp .cp-yfs:disabled .cp-yproc input:not(:checked) { opacity: .45; }
+.cp .cp-note.cp-ylock { background: var(--teal-bg); color: var(--teal-ink); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cp .cp-note.cp-ylock > span { flex: 1; min-width: 220px; }
+.cp .cp-note.cp-ylock svg { vertical-align: -3px; }
+.cp .cp-note.cp-ylock .cp-btn { height: 40px; font-size: 15px; color: var(--teal-dk); border-color: var(--teal-dk); }
+.cp .cp-note.cp-ylock svg { width: 18px; height: 18px; }

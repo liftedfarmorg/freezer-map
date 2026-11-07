@@ -1388,6 +1388,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const yToDo = yOrders.filter(x => !x.rep?.sentAt)
   const [yOrder, setYOrder] = useState<number | null>(null)
   const [yDraft, setYDraft] = useState<YieldLine[]>([])
+  const [yEdit, setYEdit] = useState(true)   // a sent report opens locked; Edit report unlocks it
   const [yTxt, setYTxt] = useState<Record<string, string>>({})   // what's typed in each amount box, so "3." and "0.50" stay as typed
   const openYield = (orderId: number) => {
     const x = yOrders.find(z => z.o.order!.id === orderId); if (!x) return
@@ -1398,7 +1399,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const saved = x.rep?.lines ?? []
     setYDraft([...by.values()].map(l => { const sv = saved.find(z => z.s === l.s && z.y === l.y)
       return { ...l, note: sv?.note ?? '', parts: sv?.parts?.length ? sv.parts.map(p => ({ ...p })) : [newPart(l.shipped)] } }))
-    setYTxt({}); setYOrder(orderId); go('yield')
+    setYEdit(!x.rep?.sentAt); setYTxt({}); setYOrder(orderId); go('yield')
   }
   // grams for each step of one part, and the yields worked out from them
   const yCalc = (p: YPart) => {
@@ -1418,7 +1419,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const fn = (backend as unknown as { saveYields?: (id: number, lines: YieldLine[], send: boolean) => Promise<void> }).saveYields
     const ok = await run(async () => { if (fn) await fn.call(backend, yOrder, yDraft, send); return true })
     if (ok === undefined) return
-    toast(send ? 'Yields sent to Lifted. Thank you!' : 'Saved. You can finish later.'); await reload(); go('yields')
+    toast(send ? (d?.yields?.find(r => r.orderId === yOrder)?.sentAt ? 'Revisions sent to Lifted.' : 'Yields sent to Lifted. Thank you!') : 'Saved. You can finish later.'); await reload(); go('yields')
   }
 
   // one row per strain + crop year: every part they've reported, totals and lbs-weighted yields
@@ -1483,7 +1484,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <button role="tab" aria-selected={tab === 'results'} aria-pressed={tab === 'results'} onClick={() => setYTab('results')}>My results</button>
             <button role="tab" aria-selected={tab === 'report'} aria-pressed={tab === 'report'} onClick={() => setYTab('report')}>Report yields{yToDo.length > 0 ? ` (${yToDo.length})` : ''}</button></div>
           {tab === 'report' ? <>
-            {yToDo.length > 0 && <div className={c('note teal')}><b>{plural(yToDo.length, 'order')}</b> waiting for yields. It takes a minute per strain, and you can save and finish later.</div>}
+            {yToDo.length > 0 && <div className={c('note teal')}><b>{plural(yToDo.length, 'order')}</b> waiting for yields. It takes less than a minute per strain, and you can save and finish later.</div>}
             <section className={c('card')}>
               {yOrders.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>Once an order ships, it shows up here.</p>}
               {yOrders.map(({ o, rep }) => { const ls = o.order!.order_lines, strains = [...new Set(ls.map(l => l.strain))], done = rep?.lines.filter(yDone).length ?? 0
@@ -1497,7 +1498,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : <>
             <div className={c(`kpis ${desk ? 'five' : 'ykpis'}`)}>
               <div className={c('kpi')}><p>Fresh frozen run</p><b>{fmt(rows.reduce((a, x) => a + x.lbs, 0))} lbs</b><small>{plural(rows.length, 'strain')}</small></div>
-              <div className={c('kpi tint')}><p>Hash yield</p><b>{pct(tot.hashPct)}</b><small>of fresh frozen</small></div>
+              <div className={c('kpi')}><p>Hash yield</p><b>{pct(tot.hashPct)}</b><small>of fresh frozen</small></div>
               <div className={c('kpi')}><p>Rosin yield</p><b>{pct(tot.rosinOfHash)}</b><small>of hash</small></div>
               <div className={c('kpi')}><p>Rosin yield</p><b>{pct(tot.rosinOfFF)}</b><small>of fresh frozen</small></div>
               <div className={c('kpi')}><p>BHO yield</p><b>{pct(tot.bhoPct)}</b><small>of fresh frozen</small></div>
@@ -1556,12 +1557,18 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const filled = yDraft.filter(yDone).length
     const overOf = (l: YieldLine) => Math.round((l.parts.reduce((a, p) => a + (p.ff ?? 0), 0) - l.shipped) * 100) / 100
     const over = yDraft.filter(l => overOf(l) > 0)
+    const sentAt = x.rep?.sentAt ?? null, locked = !!sentAt && !yEdit
     return (
       <div className={c('screen yform')}>
         <header className={c('hdr')}>{back('yields', 'Yields')}<h1>Yields · {x.o.label}</h1>
-          <p className={c('sub')}>Shipped {shortDate(x.o.date)}. Fill in what you have; leave a strain blank if you haven't run it yet.</p></header>
+          <p className={c('sub')}>{sentAt ? `Shipped ${shortDate(x.o.date)}. Sent to Lifted ${shortDate(sentAt)}.` : `Shipped ${shortDate(x.o.date)}. Fill in what you have; leave a strain blank if you haven't run it yet.`}</p></header>
         <main className={c('main')}>
-          <p className={c('meta yhint')}>Pick <b>Hash</b> (tick <b>Rosin</b> if you pressed it) or <b>BHO</b>. Enter amounts in grams, kg or lbs, or pick <b>%</b>: hash and BHO % are of the fresh frozen, rosin % is of the hash. Ran a strain two ways? Use <b>+ Split this strain</b>.</p>
+          {sentAt && (locked
+            ? <div className={c('note ylock')}><span>{I.check} <b>Sent to Lifted {shortDate(sentAt)}.</b> This report is locked. Edit it to change a number, then submit your revisions.</span>
+                <button className={c('btn ghost')} onClick={() => setYEdit(true)}>Edit report</button></div>
+            : <div className={c('note gold')}><b>Editing a sent report.</b> Your changes go to Lifted when you tap Submit revisions.</div>)}
+          {!locked && <p className={c('meta yhint')}>Pick <b>Hash</b> (tick <b>Rosin</b> if you pressed it) or <b>BHO</b>. Enter amounts in grams, kg or lbs, or pick <b>%</b>: hash and BHO % are of the fresh frozen, rosin % is of the hash. Ran a strain two ways? Use <b>+ Split this strain</b>.</p>}
+          <fieldset className={c('yfs')} disabled={locked}>
           {desk && <div className={c('yhead')}><span>Strain</span><span>Process</span><span>Fresh frozen run</span><span>Hash / BHO</span><span>Rosin</span><span /></div>}
           {yDraft.map((l, i) => { const used = l.parts.reduce((a, p) => a + (p.ff ?? 0), 0), left = Math.round((l.shipped - used) * 100) / 100
             return <section key={l.s + l.y} className={c(`card ycard ${left < 0 ? 'bad' : yDone(l) ? 'done' : ''}`)}>
@@ -1585,17 +1592,22 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                       <div className={c(`ycell ${p.bho || !p.rosin ? 'off' : ''}`)}>{p.bho || !p.rosin ? (desk ? <span className={c('meta')}>{p.bho ? '' : 'No rosin'}</span> : null) : <>
                         <span className={c('ylbl')}>Rosin</span>{amount(i, pi, l, p, 'rosin')}
                         <span className={c('yout')}>{k.rosinOfHash != null || k.rosinOfFF != null ? <>{k.rosinOfHash != null && <><b>{pct(k.rosinOfHash)}</b> of hash</>}{k.rosinOfHash != null && k.rosinOfFF != null ? ' · ' : ''}{k.rosinOfFF != null && <>{pct(k.rosinOfFF)} of FF</>}</> : ' '}</span></>}</div>
-                      <div className={c('ycell yx')}>{l.parts.length > 1 && <button className={c('iconbtn')} aria-label={`Remove part ${pi + 1}`} onClick={() => { setL(i, { parts: l.parts.filter((_, z) => z !== pi) }); setYTxt({}) }}>{I.close}</button>}</div>
+                      <div className={c('ycell yx')}>{!locked && l.parts.length > 1 && <button className={c('iconbtn')} aria-label={`Remove part ${pi + 1}`} onClick={() => { setL(i, { parts: l.parts.filter((_, z) => z !== pi) }); setYTxt({}) }}>{I.close}</button>}</div>
                     </div> })}
-                  <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. multiple runs, or some to hash, some to BHO)' : ''}</button>
+                  {!locked && <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. multiple runs, or some to hash, some to BHO)' : ''}</button>}
                 </div>
               </div>
               <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => setL(i, { note: e.target.value })} /></label>
             </section> })}
+          </fieldset>
         </main>
-        <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>
+        {locked ? <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => go('yields')}>Back to Yields</button>
+          <button className={c('btn')} style={{ flex: 1.4 }} onClick={() => setYEdit(true)}>Edit report</button></div>
+        : <div className={c('dock white')}>{sentAt
+          ? <button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => openYield(x.o.order!.id)}>Cancel changes</button>
+          : <button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>}
           <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || filled === 0 || over.length > 0} title={over.length ? `More lbs than shipped: ${over.map(l => l.s).join(', ')}` : undefined}
-            onClick={() => saveYields(true)}>{over.length ? (desk ? `Fix the red line${over.length > 1 ? 's' : ''} (more than shipped)` : 'Fix the red lines') : filled === 0 ? 'Fill in a strain' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>
+            onClick={() => saveYields(true)}>{over.length ? (desk ? `Fix the red line${over.length > 1 ? 's' : ''} (more than shipped)` : 'Fix the red lines') : filled === 0 ? 'Fill in a strain' : sentAt ? 'Submit revisions' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>}
       </div>
     )
   }
