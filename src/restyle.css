@@ -310,3 +310,28 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .tc-bar { display: block; height: 6px; border-radius: 3px; background: var(--empty); overflow: hidden; max-width: 420px; }
 .tc-bar i { display: block; height: 100%; background: var(--r-teal); }
 .tc-list { max-width: 980px; }
+
+/* load page (Msg 287): header card with the route, rounded stop cards, the truck on a card */
+.loadview { display: grid; gap: 14px; }
+.lv-head { display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 16px 20px 18px; box-shadow: var(--r-shadow); }
+.lv-back { justify-self: start; font-weight: 600; }
+.lv-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lv-title h2 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
+.lv-meta { font-size: 14px; color: var(--muted); }
+.lv-head .tc-bar { max-width: 520px; }
+.loadview .warnbox, .loadview .okbox, .loadview .dcard { border-radius: 16px; }
+.loadview .stops { display: grid; gap: 12px; }
+.loadview .stopcard { border-radius: 18px; border: 1px solid var(--line); border-left: 6px solid var(--sc); padding: 14px 16px; gap: 8px; box-shadow: var(--r-shadow); }
+.loadview .stopcard > .row:first-child { font-size: 16px; }
+.loadview .stopnum { width: 26px; height: 26px; font-size: 13px; margin-right: 4px; }
+.loadview .stopcard.delivered { opacity: 1; background: color-mix(in srgb, var(--r-teal) 5%, var(--panel)); }
+.loadview .stoporders { display: grid; gap: 6px; width: 100%; }
+.loadview .sorder { border-radius: 12px; background: var(--bg); border: 1px solid var(--line); padding: 8px 12px; }
+.loadview .truck-wrap { border: 1px solid var(--line); border-radius: 26px 26px 14px 14px; padding: 12px; box-shadow: var(--r-shadow); }
+.loadview .truck-label { font-weight: 700; }
+.loadview .truck { gap: 8px; }
+.loadview .tpos { border-radius: 14px; min-height: 72px; }
+.loadview .tpos.empty { border-style: dashed; background: transparent; }
+.loadview .row.actions { position: sticky; bottom: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
+  padding: 10px 0; border-top: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
+@media (max-width: 767px) { .loadview .row.actions { bottom: calc(64px + env(safe-area-inset-bottom)); } .lv-title h2 { font-size: 22px; } }

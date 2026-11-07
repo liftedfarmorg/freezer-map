@@ -94,6 +94,14 @@ function label(ctx: LoadCtx, p: Pallet) {
 
 // ---------- list ----------
 
+/** the route a load runs: the farm (or pickup) through its numbered stops; delivered ones turn green (Msg 286) */
+function RouteLine({ ctx, l, st }: { ctx: LoadCtx; l: Load; st: LoadStop[] }) {
+  return <div className="tc-route">
+    <span className="tc-stop origin"><i>●</i>{isPickup(l) ? 'Pickup' : 'Farm'}</span>
+    {st.map(s => <Fragment key={s.id}><span className={`tc-link ${s.status}`} /><span className={`tc-stop ${s.status}`}><i style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.status === 'delivered' ? '✓' : s.status === 'not_delivered' ? '✕' : s.seq}</i>{ctx.customers.find(c => c.id === s.customer_id)?.name}</span></Fragment>)}
+  </div>
+}
+
 export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id: number) => void; onNew: () => void }) {
   const [pickup, setPickup] = useState(false)
   const open = ctx.loads.filter(l => l.status !== 'delivered' && l.status !== 'cancelled')
@@ -107,10 +115,7 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
       <button key={l.id} className={`li loadcard tcard st-${l.status}`} onClick={() => onOpen(l.id)}>
         <div className="tc-top"><b className="tc-code">{l.code}</b><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></div>
         <div className="tc-meta"><span><b>{isPickup(l) ? 'Customer pickup' : v?.name ?? 'Vehicle?'}</b></span><span>{fmtDate(l.load_date)}</span>{l.driver && <span>{l.driver}</span>}</div>
-        <div className="tc-route">
-          <span className="tc-stop origin"><i>●</i>{isPickup(l) ? 'Pickup' : 'Farm'}</span>
-          {st.map(s => <Fragment key={s.id}><span className={`tc-link ${s.status}`} /><span className={`tc-stop ${s.status}`}><i style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.status === 'delivered' ? '✓' : s.status === 'not_delivered' ? '✕' : s.seq}</i>{ctx.customers.find(c => c.id === s.customer_id)?.name}</span></Fragment>)}
-        </div>
+        <RouteLine ctx={ctx} l={l} st={st} />
         {(() => {
           const os = (ctx.orders ?? []).filter(o => o.stop && st.some(s => s.id === o.stop!.id))
           return os.length > 0 && <div className="tc-orders">{os.map(o => <span key={o.id} className="pill">{soOf(o)} · {o.customer}</span>)}</div>
@@ -401,14 +406,17 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
 
   return (
     <div className="loadview">
-      <div className="fz-head">
-        <button className="ghost" onClick={onBack}>‹ Transit</button>
-        <div className="fz-title">
-          <h2>{l.code} <span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></h2>
-          <div className="muted">{isPickup(l) ? 'Customer pickup' : v?.name} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''} · {isPickup(l) ? `${items.length} pallet${items.length === 1 ? '' : 's'}` : `${items.length}/${spaces} positions`} · {lbs(totalW)}</div>
-          {l.notes && <div className="muted">{l.notes}</div>}
+      <div className="lv-head">
+        <button className="linkbtn lv-back" onClick={onBack}>‹ Transit</button>
+        <div className="lv-title">
+          <h2>{l.code}</h2><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span>
+          <span className="grow" />
+          {canEdit && !isPickup(l) && <button className="ghost small" onClick={onEdit}>Edit</button>}
         </div>
-        {canEdit && !isPickup(l) && <button className="ghost small" onClick={onEdit}>Edit</button>}
+          <div className="lv-meta">{isPickup(l) ? 'Customer pickup' : v?.name} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''} · {isPickup(l) ? `${items.length} pallet${items.length === 1 ? '' : 's'}` : `${items.length}/${spaces} positions`} · {lbs(totalW)}</div>
+        <RouteLine ctx={ctx} l={l} st={stops} />
+        {!isPickup(l) && spaces > 0 && <span className="tc-bar"><i style={{ width: `${Math.min(100, Math.round(new Set(items.map(i => i.position)).size / spaces * 100))}%` }} /></span>}
+        {l.notes && <div className="muted">{l.notes}</div>}
       </div>
 
       {l.status === 'departing' && <div className="warnbox">
