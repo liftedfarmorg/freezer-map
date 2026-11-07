@@ -411,7 +411,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
     }
     const seqOfLine = (lineId: number) => lineId < 0 ? stopOf(-lineId)?.seq : stops.find(s => loadOrders.some(o => o.stop?.id === s.id && o.lines.some(x => x.id === lineId)))?.seq
     const desc = [...stops].sort((a, b) => b.seq - a.seq).map(s => `Stop ${s.seq}`).join(', ')
-    return <PlanMyPick orders={loadOrders} cands={ctx.freeFor} loc={loc} pallet={ctx.pallet} backend={ctx.backend}
+    return <PlanMyPick orders={loadOrders} cands={ctx.freeFor} loc={loc} pallet={ctx.pallet} contents={ctx.contents} backend={ctx.backend}
       reload={ctx.reloadAll} flash={ctx.flash}
       back={() => setPulling(false)} title={`Pull route · ${l.code}`} sub={stops.length > 1 ? `Stage pulled pallets last stop first: ${desc}` : undefined}
       backLabel={l.code} walkKey={`pmp-walk:l${l.id}`} held={held}

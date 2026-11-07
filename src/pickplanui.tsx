@@ -28,8 +28,9 @@ const store = {
   set(k: string, v: Saved | null) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k) } catch { /* private mode: walk still works, just isn't kept */ } },
 }
 
-export function PlanMyPick({ orders, cands, loc, pallet, backend, reload, flash, back, title, sub, tagOf, held = [], walkKey, backLabel }: {
+export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, reload, flash, back, title, sub, tagOf, held = [], walkKey, backLabel }: {
   orders: FOrder[]; cands: (l: FLine) => Pallet[]; loc: (p: Pallet) => Loc; pallet: (id: number) => Pallet | undefined; backend: Backend
+  contents: (id: number) => Pallet[]   // packages on a mixed pallet
   reload: () => Promise<void>; flash: (t: string, bad?: boolean) => void; back: () => void
   title: string; sub?: string; tagOf?: (lineId: number) => Tag | undefined; held?: RRow[]; walkKey: string; backLabel: string
 }) {
@@ -116,7 +117,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, backend, reload, flash,
   }
   const chip = (lineId: number) => { const t = tagOf?.(lineId); return t ? <span className="pmp-tag" style={{ background: t.color }}>{t.label}</span> : null }
 
-  if (walk && walking) return <Walk walk={walk} save={saveWalk} pallet={pallet} loc={loc} altsFor={altsFor} chip={chip} busy={busy} lineOf={lineOf} tol={tol}
+  if (walk && walking) return <Walk walk={walk} save={saveWalk} pallet={pallet} contents={contents} loc={loc} altsFor={altsFor} chip={chip} busy={busy} lineOf={lineOf} tol={tol}
     close={() => { setWalking(false); scrollTop() }} finish={async rs => { if (await assign(rs)) { saveWalk(null); setWalking(false) } }} />
 
   return (
@@ -154,7 +155,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, backend, reload, flash,
                     <div className={`pmp-row ${change === r.pallet.id ? 'on' : ''}`}>
                       <b className="pmp-spot">{L.spot}</b>
                       <b className="pmp-code">{r.pallet.code}</b>
-                      <span className="grow">{chip(r.lineId)} {r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
+                      <span className="grow">{chip(r.lineId)} {r.pallet.kind === 'mixed' ? `Mixed: ${contents(r.pallet.id).map(c => c.strain).filter(Boolean).join(', ')}` : r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
                       <span className="pmp-lbs">{n0(r.lbs)}{!r.whole ? <span className="muted"> of {n0(w(r.pallet))}</span> : ''} lbs</span>
                       <span className={`pmp-do ${r.held ? 'held' : r.whole ? '' : 'split'}`}>{r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs)}`}</span>
                       {r.held ? <span className="pmp-chg" /> : <button className="linkbtn pmp-chg" onClick={() => { setChange(change === r.pallet.id ? null : r.pallet.id) }}>{change === r.pallet.id ? 'Cancel' : 'Change'}</button>}
@@ -193,8 +194,8 @@ export function PlanMyPick({ orders, cands, loc, pallet, backend, reload, flash,
 }
 
 /** the phone walk: one pallet at a time, door to back, freezer by freezer */
-function Walk({ walk, save, pallet, loc, altsFor, chip, busy, lineOf, tol, close, finish }: {
-  walk: Saved; save: (v: Saved) => void; pallet: (id: number) => Pallet | undefined; loc: (p: Pallet) => Loc
+function Walk({ walk, save, pallet, contents, loc, altsFor, chip, busy, lineOf, tol, close, finish }: {
+  walk: Saved; save: (v: Saved) => void; pallet: (id: number) => Pallet | undefined; contents: (id: number) => Pallet[]; loc: (p: Pallet) => Loc
   altsFor: (lineId: number, lbs: number, skip: Set<number>, fzIn: Set<number | null>) => { p: Pallet; L: Loc; same: boolean; text: string }[]
   chip: (lineId: number) => ReactNode; busy: boolean; lineOf: (id: number) => FLine | undefined; tol: number
   close: () => void; finish: (rows: PRow[]) => void
@@ -212,7 +213,7 @@ function Walk({ walk, save, pallet, loc, altsFor, chip, busy, lineOf, tol, close
   const [why, setWhy] = useState(REASONS[0])
   const mark = (id: number) => { if (!done.has(id)) save({ ...walk, done: [...walk.done, id] }) }
   const scan = (tag: string) => {
-    const r = rows.find(x => sameTag(x.p.package_tag, tag))
+    const r = rows.find(x => sameTag(x.p.package_tag, tag) || (x.p.kind === 'mixed' && contents(x.id).some(c => sameTag(c.package_tag, tag))))
     if (!r) { setMsg({ t: "That tag isn't on this pick. Check the label and scan again.", bad: true }); return }
     if (done.has(r.id)) { setMsg({ t: `${r.p.code} is already picked.` }); return }
     mark(r.id); setMsg({ t: `${r.p.code} picked${r.whole ? '' : `: split ${n0(r.lbs)} lbs off it`}.` })
@@ -244,9 +245,13 @@ function Walk({ walk, save, pallet, loc, altsFor, chip, busy, lineOf, tol, close
           {L.inFront.length > 0 && <div className="warn-t small">{L.inFront.length} pallet{L.inFront.length === 1 ? '' : 's'} in front of it</div>}
           <div className="walk-grid">
             <div><span>Pallet</span><b>{next.p.code}</b></div>
-            <div><span>Tag ends</span><b className="mono">…{(next.p.package_tag ?? '').slice(-7) || 'no tag'}</b></div>
-            <div><span>Strain</span><b>{next.p.strain}</b></div>
-            <div><span>On the pallet</span><b>{n0(w(next.p))} lbs{next.p.boxes ? ` · ${next.p.boxes} boxes` : ''}</b></div>
+            {next.p.kind === 'mixed'
+              ? <><div><span>Tag</span><b className="small">Scan any package on it</b></div>
+                <div><span>Mixed pallet</span><b>{contents(next.id).map(c => c.strain).filter(Boolean).join(', ') || `${contents(next.id).length} packages`}</b></div>
+                <div><span>On the pallet</span><b>{n0(contents(next.id).reduce((a, c) => a + w(c), 0))} lbs</b></div></>
+              : <><div><span>Tag ends</span><b className="mono">…{(next.p.package_tag ?? '').slice(-7) || 'no tag'}</b></div>
+                <div><span>Strain</span><b>{next.p.strain}</b></div>
+                <div><span>On the pallet</span><b>{n0(w(next.p))} lbs{next.p.boxes ? ` · ${next.p.boxes} boxes` : ''}</b></div></>}
           </div>
           <div className={`walk-do ${next.whole ? '' : 'split'}`}>{next.whole ? 'Take the whole pallet' : `Take${boxes(next.lbs)} (${n0(next.lbs)} lbs). Leave ${n0(w(next.p) - next.lbs)} lbs on ${next.p.code}.`}</div>
         </div>

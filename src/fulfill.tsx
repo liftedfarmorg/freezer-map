@@ -24,12 +24,16 @@ const GROUPS: FState[] = ['open', 'needs_ok', 'ready', 'loaded', 'shipped']
 export function heldInFreezers(os: FOrder[], pal: Map<number, Pallet> | ((id: number) => Pallet | undefined), loc: (p: Pallet) => Loc) {
   const get = typeof pal === 'function' ? pal : (id: number) => pal.get(id)
   const out: { lineId: number; pallet: Pallet; lbs: number; whole: boolean; held: true }[] = []
+  const byTop = new Map<number, (typeof out)[number]>()
   for (const o of os) for (const l of o.lines) for (const pk of l.picks) {
-    const p = get(pk.pallet_id)
-    if (!p || p.status !== 'in_freezer' || p.container_id) continue
+    const pk0 = get(pk.pallet_id)
+    const p = pk0?.container_id ? get(pk0.container_id) : pk0   // a package on a mixed pallet: pull the mixed pallet once
+    if (!p || p.status !== 'in_freezer') continue
     const L = loc(p)
     if (L.fz == null || L.staging) continue
-    out.push({ lineId: l.id, pallet: p, lbs: Number(pk.lbs), whole: true, held: true })
+    const had = byTop.get(p.id)
+    if (had) had.lbs += Number(pk.lbs)
+    else { const r = { lineId: l.id, pallet: p, lbs: Number(pk.lbs), whole: true, held: true as const }; byTop.set(p.id, r); out.push(r) }
   }
   return out
 }
@@ -178,7 +182,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
   const needs = o.lines.some(l => !l.cant_fill && Number(l.lbs) - got(l) > 5)
   const toPull = loc ? heldInFreezers([o], pal, loc).length : 0
   const planBar = needs || toPull > 0
-  if (planning && loc) return <PlanMyPick orders={[o]} cands={freeFor} loc={loc} pallet={id => pal.get(id)} backend={backend} reload={reload} flash={flash}
+  if (planning && loc) return <PlanMyPick orders={[o]} cands={freeFor} loc={loc} pallet={id => pal.get(id)} contents={id => pallets.filter(p => p.container_id === id)} backend={backend} reload={reload} flash={flash}
     back={() => { setPlanning(false); scrollTop() }} title="Plan my pick" sub={o.customer} backLabel={o.so ?? `Order #${o.id}`} walkKey={`pmp-walk:o${o.id}`}
     held={heldInFreezers([o], pal, loc)} />
   return (
