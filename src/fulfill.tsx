@@ -4,7 +4,7 @@ import { TagInput } from './taginput'
 import { ScanButton } from './scan'
 import { useBack, scrollTop } from './nav'
 import { sameTag, useScanHandler } from './scanroute'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Backend } from './api'
 import type { Customer, FLine, FOrder, FState, Load, LoadDriver, LoadStop, Pallet, Vehicle } from './types'
 import { StageAlerts, StageForm, useStages } from './stage'
@@ -36,6 +36,14 @@ export function heldInFreezers(os: FOrder[], pal: Map<number, Pallet> | ((id: nu
     else { const r = { lineId: l.id, pallet: p, lbs: Number(pk.lbs), whole: true, held: true as const }; byTop.set(p.id, r); out.push(r) }
   }
   return out
+}
+/** PICK-5: folding long orders and big mixed pallets. Phones only for now; flip these to fold on computers too (Aziz decides from the prototype). */
+const FOLD_ON_COMPUTERS = false
+function useNarrow() {
+  const q = '(max-width: 640px)'
+  const [n, setN] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(q).matches)
+  useEffect(() => { const m = window.matchMedia?.(q); if (!m) return; const f = () => setN(m.matches); m.addEventListener?.('change', f); return () => m.removeEventListener?.('change', f) }, [])
+  return n
 }
 const got = (l: FLine) => l.picks.reduce((a, p) => a + Number(p.lbs), 0)
 export const orderLbs = (o: FOrder) => o.lines.reduce((a, l) => a + Number(l.lbs), 0)
@@ -144,6 +152,9 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
   const [packSel, setPackSel] = useState<number[]>([])
   const [scanRes, setScanRes] = useState<{ p: Pallet; msg: string; line?: FLine } | null>(null)
   const [planning, setPlanning] = useState(false)
+  const [showFilled, setShowFilled] = useState(false)   // PICK-5
+  const [openMix, setOpenMix] = useState<number[]>([])   // PICK-5
+  const narrow = useNarrow()
   // on a load that hasn't left: still editable (it can only leave once it's complete and OK'd)
   const onOpenLoad = o.state === 'loaded' && !!o.stop && ['planning', 'loading'].includes(o.stop.load_status)
   const fill = o.state === 'loaded' ? (o.fill ?? 'ready') : o.state
@@ -211,6 +222,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
         <span className={`pill fs-${o.state}`}>{STATE_LABEL[o.state]}</span>
         <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `requested delivery ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : o.source === 'qbo' ? 'from QuickBooks' : ''].filter(Boolean).join(' · ')}</span>
       </div>
+      {o.state === 'shipped' && <div className="okbox shipline-top">Shipped {fmt(o.shipped_date)}{o.stop ? ` on ${o.stop.load}` : ''}{o.stop?.stop_status === 'delivered' ? ' · Delivered' : ''}{(o.stop?.manifest || o.inv_manifest) ? ` · METRC manifest ${o.stop?.manifest || o.inv_manifest}` : ''}{o.inv ? ` · invoice ${o.inv}` : ''}.</div>}
       {o.notes && <p className="muted">"{o.notes}"</p>}
       {editable && loc && planBar && <div className="pmp-bar">
         <div className="grow"><b>{!needs ? `${toPull} assigned pallet${toPull === 1 ? '' : 's'} still in freezers` : orderGot(o) > 0 ? 'Still needs pallets' : 'Nothing picked yet'}</b><div className="small">{needs ? 'Let the app find the rest in as few freezers as it can.' : 'Walk the route to pull them, door to back.'}</div></div>
@@ -234,7 +246,19 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
       {fill === 'needs_ok' && <div className="warnbox">Some lines don't match what was ordered. {isSales ? 'OK the new amounts below, or change the pallets.' : `Sales has to OK the new amounts before this can ${onOpenLoad ? 'leave' : 'go on a load'}.`}
         {isSales && <div className="row" style={{ marginTop: 8 }}><button className="primary small" disabled={busy} onClick={() => run(() => backend.approveFill(o.id), 'Amounts OK\'d')}>OK these amounts</button></div>}</div>}
 
-      {o.lines.map(l => {
+      {(() => {
+        // PICK-5: long orders fold the lines that are already filled into one row (open, short, over and can't-fill lines stay open)
+        const filled = (l: FLine) => !l.cant_fill && l.picks.length > 0 && Math.abs(got(l) - Number(l.lbs)) <= 0.5 && adding !== l.id
+        const nFilled = o.lines.filter(filled).length
+        const fold = (narrow || FOLD_ON_COMPUTERS) && o.lines.length > 6 && nFilled >= 3
+        return fold ? <button className="fold-filled" onClick={() => setShowFilled(v => !v)} aria-expanded={showFilled}>
+          <span><b className="ok-t">{nFilled} line{nFilled === 1 ? '' : 's'} filled ✓</b><span className="muted"> of {o.lines.length}</span></span>
+          <span className="linkbtn">{showFilled ? 'Hide' : 'Show'}</span></button> : null
+      })()}
+      {o.lines.filter(l => {
+        const fold = (narrow || FOLD_ON_COMPUTERS) && o.lines.length > 6 && o.lines.filter(x => !x.cant_fill && x.picks.length > 0 && Math.abs(got(x) - Number(x.lbs)) <= 0.5).length >= 3
+        return !fold || showFilled || adding === l.id || !(!l.cant_fill && l.picks.length > 0 && Math.abs(got(l) - Number(l.lbs)) <= 0.5)
+      }).map(l => {
         const g = got(l), diff = g - Number(l.lbs)
         return (
           <section key={l.id} className="dcard fline">
@@ -292,7 +316,9 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
             return <div key={mid} className="packm">
               <div className="row between"><button className="linkbtn" onClick={() => openPallet(mid)}><b>{m?.code ?? 'Mixed'}</b></button>
                 <span className="muted">{cs.length} pkg{cs.length === 1 ? '' : 's'} · {n0(cs.reduce((a, x) => a + Number(x.current_weight ?? 0), 0))} lbs{m ? ` · ${where(m)}` : ''}</span></div>
-              <div className="muted small">{cs.map(x => `${x.code} ${x.strain ?? ''}`).join(' · ')}</div>
+              {(narrow || FOLD_ON_COMPUTERS) && cs.length > 4 && !openMix.includes(mid)
+                ? <button className="linkbtn small" onClick={() => setOpenMix(v => [...v, mid])}>{cs.length} packages · Show</button>
+                : <div className="muted small">{cs.map(x => `${x.code} ${x.strain ?? ''}`).join(' · ')}{(narrow || FOLD_ON_COMPUTERS) && cs.length > 4 && <> <button className="linkbtn small" onClick={() => setOpenMix(v => v.filter(x => x !== mid))}>Hide</button></>}</div>}
               {others.length > 0 && <div className="small-note warn-t">Also carries {others.join(', ')}: they go on the truck together.</div>}
             </div>
           })}
@@ -345,7 +371,6 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
         {o.state === 'loaded' && o.stop && <div className="row between wrap"><span>{isPk(o) ? 'Customer pickup' : 'On'} <b>{o.stop.load}</b> <span className="muted">· {fmt(o.stop.load_date)} · {o.stop.load_status.replace('_', ' ')}</span></span>
           <div className="row"><button className="ghost small" onClick={() => openLoad(o.stop!.load_id)}>Open load</button>
             {(o.stop.load_status === 'planning' || o.stop.load_status === 'loading' || o.stop.load_status === 'cancelled') && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.orderOffLoad(o.id), isPk(o) ? 'Not a pickup any more' : 'Taken off the load')}>{isPk(o) ? 'Not a pickup' : 'Take off load'}</button>}</div></div>}
-        {o.state === 'shipped' && <span>Shipped {fmt(o.shipped_date)}{o.stop ? ` on ${o.stop.load}` : ''}{o.stop?.stop_status === 'delivered' ? ' · Delivered' : ''}{(o.stop?.manifest || o.inv_manifest) ? ` · METRC manifest ${o.stop?.manifest || o.inv_manifest}` : ''}{o.inv ? ` · invoice ${o.inv}` : ''}.</span>}
         {combine && <Combine o={o} line={combine} pallets={pallets} heldBy={heldBy} onLoad={onLoad} inRun={inRun} where={where} rank={rank} canon={canon} busy={busy}
           close={() => setCombine(null)}
           submit={(src, tag) => run(() => backend.combineForLine(combine.id, src, tag), `Combined into one ${combine.strain} package${tag ? '' : ' (tag pending)'}`).then(() => setCombine(null))} />}
@@ -448,17 +473,17 @@ function LoadChooser({ o, loads, vehicles, stops = [], customers = [], busy, clo
   const [v, setV] = useState<number | null>(vs[0]?.id ?? null)
   const [d, setD] = useState(o.wanted_date && o.wanted_date >= today() ? o.wanted_date : today())
   return (
-    <div className="dlist">
+    <div className="dlist lchoose">
       <div className="row between"><b>{title ?? `Put ${o.customer} on a load`}</b><button className="ghost small" onClick={close}>Cancel</button></div>
       {open.map(l => <button key={l.id} className="drow click" disabled={busy} onClick={() => onPick(l.id)}><span><b>{l.code}</b><span className="muted"> · {fmt(l.load_date)} · {vehicles.find(x => x.id === l.vehicle_id)?.name ?? ''} · {l.status}</span>
         {stopsAt(l).length > 0 && <span className="muted small"><br />Stops: {names(l)}</span>}
-        {!title && hasMe(l) && <span className="ok-t small"><br />Already stops at {o.customer}: joins that stop</span>}</span><span>Add ›</span></button>)}
+        {!title && hasMe(l) && <span className="ok-t small"><br />Already stops at {o.customer}: joins that stop</span>}</span><span className="lc-add">Add ›</span></button>)}
       {!open.length && <p className="muted">No loads being planned. Make a new one:</p>}
-      <div className="drow"><span className="grow"><b>New load</b></span>
+      <div className="drow lc-new"><span className="grow"><b>New load</b></span>
         <Select value={v ?? ''} onChange={e => setV(Number(e.target.value))}>{vs.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select>
         <input type="date" value={d} onChange={e => setD(e.target.value)} />
         <button className="primary small" disabled={busy || v == null} onClick={() => onNew(v!, d)}>Make load</button></div>
-      {onPickup && <div className="drow"><span className="grow"><b>Customer pickup</b><span className="muted small"><br />{o.customer} comes to get it with their own driver and truck</span></span>
+      {onPickup && <div className="drow lc-new"><span className="grow"><b>Customer pickup</b><span className="muted small"><br />{o.customer} comes to get it with their own driver and truck</span></span>
         <input type="date" value={d} onChange={e => setD(e.target.value)} />
         <button className="ghost small" disabled={busy} onClick={() => onPickup(d)}>Make pickup</button></div>}
     </div>
