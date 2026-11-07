@@ -282,3 +282,31 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .ctable.ftable th.num { text-align: right; }
 .ftable td.fmeter { min-width: 150px; }
 .ftable td.fmeter .meter { margin: 0 0 2px; }
+
+/* Transit cards (Msg 286): same list, new card design */
+.tc-h { margin: 18px 0 8px; font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.tc-list { display: grid; gap: 10px; }
+.li.loadcard.tcard { display: grid; gap: 10px; padding: 16px 18px; border-radius: 18px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--r-shadow); text-align: left; }
+.li.loadcard.tcard:hover { border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); }
+.tcard.st-cancelled { opacity: .55; }
+.tcard.st-in_transit { box-shadow: inset 4px 0 0 #3b82f6, var(--r-shadow); }
+.tcard.st-loading, .tcard.st-departing { box-shadow: inset 4px 0 0 #e0a106, var(--r-shadow); }
+.tc-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tc-code { font-size: 17px; letter-spacing: -.2px; }
+.tc-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--muted); }
+.tc-meta b { color: var(--ink); font-weight: 600; }
+.tc-route { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.tc-stop { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; }
+.tc-stop i { font-style: normal; width: 22px; height: 22px; border-radius: 11px; background: var(--sc, #5f6b64); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.tc-stop.origin i { background: var(--r-ink); font-size: 9px; }
+.tc-stop.origin { color: var(--muted); }
+.tc-stop.delivered i { background: var(--r-teal); }
+.tc-stop.not_delivered i { background: #be123c; }
+.tc-stop.not_delivered { text-decoration: line-through; color: var(--muted); }
+.tc-link { width: 26px; height: 3px; border-radius: 2px; background: var(--line); }
+.tc-link.delivered { background: var(--r-teal); }
+.tc-orders { display: flex; flex-wrap: wrap; gap: 6px; }
+.tc-fill { display: grid; gap: 5px; font-size: 13px; }
+.tc-bar { display: block; height: 6px; border-radius: 3px; background: var(--empty); overflow: hidden; max-width: 420px; }
+.tc-bar i { display: block; height: 100%; background: var(--r-teal); }
+@media (min-width: 1000px) { .tc-list { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); } }

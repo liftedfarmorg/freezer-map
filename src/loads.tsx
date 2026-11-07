@@ -1,7 +1,7 @@
 import { Select } from './combo'
 import { ScanButton } from './scan'
 import { sameTag, useScanHandler } from './scanroute'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { metrcRun, openMetrcManifest } from './metrcCall'
 import type { AppTransfer, StopCheckRow } from './metrcCall'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -104,17 +104,21 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
     const it = ctx.items.filter(i => i.load_id === l.id)
     const w = it.reduce((a, i) => { const p = ctx.pallet(i.pallet_id); return a + (p ? ctx.weight(p) : 0) }, 0)
     return (
-      <button key={l.id} className="li loadcard" onClick={() => onOpen(l.id)}>
-        <div className="row between"><b>{l.code}</b><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></div>
-        <div>{isPickup(l) ? 'Customer pickup' : v?.name ?? 'Vehicle?'} · {fmtDate(l.load_date)}{l.driver ? ` · ${l.driver}` : ''}</div>
-        <div className="stopline">
-          {st.map(s => <span key={s.id} className={`stopchip ${s.status}`} style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.seq}. {ctx.customers.find(c => c.id === s.customer_id)?.name}</span>)}
+      <button key={l.id} className={`li loadcard tcard st-${l.status}`} onClick={() => onOpen(l.id)}>
+        <div className="tc-top"><b className="tc-code">{l.code}</b><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span></div>
+        <div className="tc-meta"><span><b>{isPickup(l) ? 'Customer pickup' : v?.name ?? 'Vehicle?'}</b></span><span>{fmtDate(l.load_date)}</span>{l.driver && <span>{l.driver}</span>}</div>
+        <div className="tc-route">
+          <span className="tc-stop origin"><i>●</i>{isPickup(l) ? 'Pickup' : 'Farm'}</span>
+          {st.map(s => <Fragment key={s.id}><span className={`tc-link ${s.status}`} /><span className={`tc-stop ${s.status}`}><i style={{ ['--sc' as string]: stopColor(s.seq) }}>{s.status === 'delivered' ? '✓' : s.status === 'not_delivered' ? '✕' : s.seq}</i>{ctx.customers.find(c => c.id === s.customer_id)?.name}</span></Fragment>)}
         </div>
         {(() => {
           const os = (ctx.orders ?? []).filter(o => o.stop && st.some(s => s.id === o.stop!.id))
-          return os.length > 0 && <div className="muted small">Orders: {os.map(o => `${soOf(o)} ${o.customer}`).join(' · ')}</div>
+          return os.length > 0 && <div className="tc-orders">{os.map(o => <span key={o.id} className="pill">{soOf(o)} · {o.customer}</span>)}</div>
         })()}
-        <div className="muted">{isPickup(l) ? `${it.length} pallet${it.length === 1 ? '' : 's'}` : `${it.length}/${v?.spaces ?? '?'} positions used`} · {it.filter(i => i.loaded).length} loaded · {lbs(w)}</div>
+        <div className="tc-fill">
+          {!isPickup(l) && <span className="tc-bar"><i style={{ width: `${Math.min(100, v?.spaces ? Math.round(it.length / v.spaces * 100) : 0)}%` }} /></span>}
+          <span className="muted">{isPickup(l) ? `${it.length} pallet${it.length === 1 ? '' : 's'}` : `${it.length}/${v?.spaces ?? '?'} positions`} · {it.filter(i => i.loaded).length} loaded · {lbs(w)}</span>
+        </div>
       </button>
     )
   }
@@ -127,8 +131,9 @@ export function TransitView({ ctx, onOpen, onNew }: { ctx: LoadCtx; onOpen: (id:
         if (await ctx.run(async () => { id = (await rpc<Load>(ctx.api.client(), 'create_pickup', { p_customer: cust, p_date: date, p_notes: notes || null })).id }, 'Pickup made')) { setPickup(false); onOpen(id) }
       }} />}
       {open.length === 0 && <p className="muted">No active loads. Tap New load to plan one.</p>}
-      {open.map(card)}
-      {done.length > 0 && <><h3>Last 14 days</h3>{done.map(card)}</>}
+      {open.length > 0 && <h3 className="tc-h">Active <span className="muted">{open.length}</span></h3>}
+      <div className="tc-list">{open.map(card)}</div>
+      {done.length > 0 && <><h3 className="tc-h">Last 14 days <span className="muted">{done.length}</span></h3><div className="tc-list">{done.map(card)}</div></>}
     </div>
   )
 }
