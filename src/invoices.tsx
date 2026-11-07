@@ -342,7 +342,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     <div className="no-tot"><div><span className="muted">Total lbs</span><b>{n0f(lbsT)}</b></div><div><span className="muted">Product</span><span>{usd(dolT)}</span></div>
       <div><span className="muted">Shipping{shipping === '' ? ' (estimate)' : ''}</span><span>{cust == null ? '—' : usd(shipT)}</span></div>
       <div className="g"><span>Total</span><span>{usd(dolT + (cust == null ? 0 : shipT))}</span></div>
-      <p className="muted small">Terms: {termsCode ? terms.find(t => t.code === termsCode)?.label ?? termsCode : c ? terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt' : '—'}. Dry products are priced on the invoice. The order is confirmed and gets its SO number right away, then shows in Distribution → Fulfillment.</p>
+      <p className="muted small">{c && <>Terms: {termsCode ? terms.find(t => t.code === termsCode)?.label ?? termsCode : terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}. </>}{used.some(p => priceOf(p) == null) && <>Lines with no $/lb get their price when the invoice is made. </>}The order is confirmed and gets its SO number right away, then shows in Distribution → Fulfillment.</p>
       <button className="primary big" disabled={busy || !ok} onClick={save}>{busy ? 'Saving…' : 'Create order'}</button></div>
   </>
   return (
@@ -380,7 +380,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
                       <td className="num c-o" data-l="open ">{n0f(o.open)}</td>
                       {tab === 'fresh_frozen' && <td className={`num c-r ${o.res > 0 ? 'resv' : 'muted'}`} data-l="their reserve ">{o.res > 0 ? n0f(o.res) : '—'}</td>}
                       <td className="num c-p"><input className="qty price" type="number" step="0.25" min="0" inputMode="decimal" aria-label={`$/lb for ${o.strain}`}
-                        placeholder={auto == null ? 'invoice' : ''} value={p?.price !== undefined ? p.price : auto != null ? String(auto) : ''} onChange={e => setPick(k, base, { price: e.target.value })} /></td>
+                        placeholder={auto == null ? 'set later' : ''} value={p?.price !== undefined ? p.price : auto != null ? String(auto) : ''} onChange={e => setPick(k, base, { price: e.target.value })} /></td>
                       <td className="num c-l"><input className={`qty ${over ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" placeholder="0" aria-label={`Lbs of ${o.strain}`}
                         value={p?.lbs ?? ''} onChange={e => setPick(k, base, { lbs: e.target.value })} />{over && <div className="warn-t small">only {n0f(availOf(p!))}</div>}</td>
                       {tab === 'fresh_frozen' && <td className="c-s">{p && Number(p.lbs) > 0 && <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
