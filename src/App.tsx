@@ -711,7 +711,7 @@ export default function App() {
     if (!staging) for (const o of ix.slot.values()) if (o.freezer_id === f.id && o.col === s.col && o.front_rank < s.front_rank)
       for (const q of ix.inSlot.get(o.id) ?? []) inFront.push(q.id)
     return { fz: f.id, fzLabel: staging ? `${f.site} Staging` : trailer ? `${f.site} ${fName(f)}` : `${f.site} Freezer ${f.number}`,
-      sort: staging ? 0 : trailer ? 1000 + f.number : f.number, site: f.site, spot: staging ? `S${s.row}` : trailer ? s.code.slice(2) : s.code,
+      sort: staging ? 0 : trailer ? 1000 + f.number : f.number, site: f.site, staging, spot: staging ? `S${s.row}` : trailer ? s.code.slice(2) : s.code,
       front: staging ? s.row : s.front_rank, side: staging ? '' : s.col === 1 ? 'Left' : 'Right', inFront }
   }
   const siteOf = (p: Pallet): string | null => {
@@ -745,6 +745,10 @@ export default function App() {
     newMixedOnStop: (stop, onTruck) => setForm({ kind: 'stopmixed', stop, onTruck }),
     putBack: (item, p) => { setView('map'); startPlacing({ title: `Putting ${p.code} back in a freezer`, sub: 'Open a freezer and tap the slot.', run: slot => act(() => backend.unloadPallet(item.id, slot.id), `${p.code} back in ${slot.code}`) }) },
     api: backend,
+    loc: locOf, backend, flash, reloadAll: async () => { await reload(); await refreshF() },
+    freeFor: l => snap.pallets.filter(p => (p.status === 'in_freezer' || p.status === 'unslotted') && p.pushed !== false && !p.container_id && p.kind !== 'mixed' && (p.current_weight ?? 0) > 0
+      && canonOf(p.strain) === canonOf(l.strain) && (p.product ?? 'fresh_frozen') === (l.product ?? 'fresh_frozen')
+      && (p.crop_year == null || l.crop_year == null || p.crop_year === l.crop_year) && !heldBy.has(p.id) && !ix.loadOf.has(p.id) && !snap.inRun?.[p.id]),
   }
   const invCtx: InvCtx = {
     pallets: snap.pallets, pallet: id => ix.pallet.get(id), where, grade: p => gradeOf(ix, p),

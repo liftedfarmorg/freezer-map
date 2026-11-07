@@ -5,10 +5,13 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { metrcRun, openMetrcManifest } from './metrcCall'
 import type { AppTransfer, StopCheckRow } from './metrcCall'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Backend } from './api'
 import { lbs } from './forms'
-import type { Customer, FOrder, Load, LoadBlocker, LoadDriver, LoadItem, LoadStop, Pallet, StopInput, StopManifest, StopShipping, Vehicle } from './types'
+import type { Customer, FLine, FOrder, Load, LoadBlocker, LoadDriver, LoadItem, LoadStop, Pallet, StopInput, StopManifest, StopShipping, Vehicle } from './types'
 import { PickupForm, PickupPanel, ShipLine, money, rpc } from './ship'
-import { STATE_LABEL, orderGot, orderLbs } from './fulfill'
+import { STATE_LABEL, orderGot, orderLbs, heldInFreezers } from './fulfill'
+import { PlanMyPick, type RRow } from './pickplanui'
+import type { Loc } from './pickplan'
 import { StopAlerts, StopOutcomeSheet, outcomeText } from './driver'
 import type { DLoad, DStop } from './driver'
 import { kickNotify } from './push'
@@ -36,6 +39,9 @@ export interface LoadCtx {
   canShip?: boolean                            // Sales: can change a stop's shipping
   canRecord?: boolean                          // 215: Distribution User/Admin: record or fix stop outcomes, carrier driver links
   newMixedOnStop?: (stopId: number, onTruck: boolean) => void   // build a mixed pallet right on a stop
+  loc?: (p: Pallet) => Loc                      // PICK-2: freezer, spot, what's in front (pull route)
+  freeFor?: (l: FLine) => Pallet[]              // PICK-2: free pallets for an order line (same rule as + Assign pallets)
+  backend?: Backend; flash?: (t: string, bad?: boolean) => void; reloadAll?: () => Promise<void>   // PICK-2
   api: {
     createLoad(v: number, d: string, s: StopInput[], driver: string, notes: string): Promise<Load>
     updateLoad(id: number, v: number, d: string, driver: string, notes: string): Promise<void>
@@ -268,6 +274,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const [manifestFor, setManifestFor] = useState<{ stop: number; value: string } | null>(null)
   const [departAsk, setDepartAsk] = useState(false)
   const [carrier, setCarrier] = useState<string | null>(null)
+  const [pulling, setPulling] = useState(false)   // PICK-2: whole-load pull route
   // 215: the driver portal's view of this load (packages, outcomes), the outcome sheet, the carrier driver's link
   const [dl, setDl] = useState<DLoad | null>(null)
   const [dlOff, setDlOff] = useState(false)   // 215 not run yet: the old Mark delivered button
@@ -389,6 +396,28 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   const metrcBlock = stops.filter(s => s.status === 'pending' && items.some(i => i.stop_id === s.id) && (modes[internalStop(s) ? 'transfer' : 'manifest'] ?? 'off') !== 'off')
     .filter(s => { const cs = checks.filter(x => x.stop_id === s.id); return !cs.length || cs.some(x => !x.ok || !fresh(x.checked_at)) }).map(s => s.seq)
 
+  // PICK-2: one pull route for every stop on the load (orders still needing pallets get planned; assigned / planned pallets still in a freezer come along)
+  const loadOrders = (ctx.orders ?? []).filter(o => o.stop?.load_id === l.id && o.state !== 'shipped' && o.state !== 'cancelled')
+  if (pulling && ctx.loc && ctx.freeFor && ctx.backend && ctx.flash && ctx.reloadAll) {
+    const loc = ctx.loc
+    const held: RRow[] = heldInFreezers(loadOrders, ctx.pallet, loc)
+    const seen = new Set(held.map(r => r.pallet.id))
+    for (const i of items) {
+      const p = ctx.pallet(i.pallet_id)
+      if (!p || i.loaded || seen.has(p.id) || p.status !== 'in_freezer') continue
+      const L = loc(p)
+      if (L.fz == null || L.staging) continue
+      held.push({ lineId: -i.stop_id, pallet: p, lbs: ctx.weight(p), whole: true, held: true })
+    }
+    const seqOfLine = (lineId: number) => lineId < 0 ? stopOf(-lineId)?.seq : stops.find(s => loadOrders.some(o => o.stop?.id === s.id && o.lines.some(x => x.id === lineId)))?.seq
+    const desc = [...stops].sort((a, b) => b.seq - a.seq).map(s => `Stop ${s.seq}`).join(', ')
+    return <PlanMyPick orders={loadOrders} cands={ctx.freeFor} loc={loc} pallet={ctx.pallet} backend={ctx.backend}
+      reload={ctx.reloadAll} flash={ctx.flash}
+      back={() => setPulling(false)} title={`Pull route · ${l.code}`} sub={stops.length > 1 ? `Stage pulled pallets last stop first: ${desc}` : undefined}
+      backLabel={l.code} walkKey={`pmp-walk:l${l.id}`} held={held}
+      tagOf={id => { const q = seqOfLine(id); return q ? { label: `Stop ${q}`, color: stopColor(q) } : undefined }} />
+  }
+
   function tapPos(pos: number) {
     const here = items.filter(i => i.position === pos)
     if (placeItem) {
@@ -418,6 +447,9 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
         {!isPickup(l) && spaces > 0 && <span className="tc-bar"><i style={{ width: `${Math.min(100, Math.round(new Set(items.map(i => i.position)).size / spaces * 100))}%` }} /></span>}
         {l.notes && <div className="muted">{l.notes}</div>}
       </div>
+      {canEdit && ctx.loc && ctx.freeFor && (loadOrders.length > 0 || items.some(i => !i.loaded)) && <div className="pmp-bar">
+        <div className="grow"><b>Pull route</b><div className="small">Every stop in one walk, as few freezers as it can.</div></div>
+        <button className="primary" onClick={() => setPulling(true)}>Plan the pull ›</button></div>}
 
       {l.status === 'departing' && <div className="warnbox">
         <b>Departing.</b> {l.depart_error ?? 'Making the METRC manifests. Nothing has left yet.'}
