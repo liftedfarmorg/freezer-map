@@ -1690,8 +1690,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => modify(o.order!)}>Modify order</button>
                   <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--red)', flex: 1 }} onClick={() => setConfirmCancel(o)}>Cancel order</button></div>
                   : o.status === 'fulfillment' ? <div className={c('note')} style={{ background: 'var(--ful-bg)', color: 'var(--ful)', fontSize: 13, padding: '10px 12px' }}>Lifted is packing this order, so it can't be changed or cancelled here. Contact your Lifted rep to make changes.</div>
-                  : o.inv || (d?.yields && o.order) ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
-                    {o.inv && <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', gap: 8, flex: 1 }} onClick={() => viewInvoice(o)}>{I.doc}View invoice (PDF)</button>}
+                  : o.status === 'shipped' ? <div className={c('row')} style={{ gap: 8, flexWrap: 'wrap' }}>
+                    {o.inv ? <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', gap: 8, flex: 1 }} onClick={() => viewInvoice(o)}>{I.doc}View invoice (PDF)</button>
+                      : <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, gap: 8, flex: 1 }} disabled title="The invoice shows here as soon as Lifted sends it (usually the day it ships)">{I.doc}Invoice not ready yet</button>}
                     {d?.yields && o.order && <button className={c('btn ghost')} style={{ height: 44, fontSize: 15, color: 'var(--teal-dk)', borderColor: 'var(--teal-dk)', flex: 1 }} onClick={() => openYield(o.order!.id)}>{d.yields.find(r => r.orderId === o.order!.id)?.sentAt ? 'View / edit yields' : 'Report yields'}</button>}</div> : null}
               </div>}</div>
           }) : <p className={c('meta')} style={{ padding: 16 }}>Nothing here.</p>}</section>
