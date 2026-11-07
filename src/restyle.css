@@ -587,3 +587,66 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .app.shell .loadview > .stops { grid-column: 1; }
   .app.shell .loadview > .truck-wrap, .app.shell .loadview > .pickuplist { grid-column: 2; position: sticky; top: 12px; }
 }
+
+/* Msg 308: new sales order (prototype Msg 305/306): customer, a menu table you type lbs into, running summary */
+.sheet.no2 { display: flex; flex-direction: column; }
+.no2 .no-body { display: flex; gap: 14px; align-items: flex-start; flex: 1; min-height: 0; }
+.no2 .no-main { flex: 1; min-width: 0; display: grid; gap: 12px; }
+.no2 .no-sec { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: grid; gap: 10px; }
+.no2 .no-h { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.no2 .no-copts { display: grid; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; max-height: 320px; overflow-y: auto; }
+.no2 .no-copts:empty { display: none; }
+.no2 .no-copts button { display: grid; text-align: left; padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--panel); font: inherit; color: var(--ink); cursor: pointer; }
+.no2 .no-copts button:hover { background: var(--r-teal-bg); }
+.no2 .no-cust { gap: 8px; align-items: center; }
+.no2 .no-cname { font-size: 19px; font-weight: 700; }
+.no2 .no-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.no2 .no-chips .pill { height: 26px; font-size: 12.5px; background: var(--bg); color: var(--ink); }
+.no2 .no-chips .pill.warnp { background: #f6ecd7; color: #7a5410; }
+.no2 .no-tabs { display: flex; align-items: flex-end; gap: 16px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px; }
+.no2 .no-tabs .no-h { padding-bottom: 12px; flex: none; }
+.no2 .no-tabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 0; border-bottom: 3px solid transparent; background: none; padding: 8px 2px 10px; font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.no2 .no-tabs button.on { color: var(--ink); border-bottom-color: var(--r-teal); }
+.no2 .no-tabs button b { min-width: 20px; height: 20px; border-radius: 10px; background: var(--brand); color: var(--brand-ink); font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center; }
+.no2 .no-twrap { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.no2 .no-table { width: 100%; }
+.no2 .no-table th { position: sticky; top: 0; z-index: 1; }
+.no2 .no-table tr.on > td { background: var(--r-teal-bg); }
+.no2 .no-table tr.bad > td { background: #fdf0f2; }
+.no2 .no-table td.resv { color: var(--r-teal-ink); font-weight: 600; }
+.no2 .qty { width: 88px; height: 36px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; font: inherit; font-size: 15px; text-align: right; background: var(--panel); color: var(--ink); }
+.no2 .qty.price { width: 82px; color: var(--muted); }
+.no2 .qty.price:focus, .no2 .qty:focus { color: var(--ink); outline: 2px solid var(--r-teal); border-color: var(--r-teal); }
+.no2 .qty.bad { border-color: var(--bad, #b42318); color: var(--bad, #b42318); }
+.no2 .smp { height: 28px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel); font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.no2 .smp.on { background: #fbf3cf; border-color: #e2c76a; color: #6b5200; }
+.no2 .no-det { font-weight: 600; text-align: left; }
+.no2 .no-detg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.no2 .no-detg .field.wide { grid-column: 1 / -1; }
+.no2 .no-sum { width: 300px; flex: none; position: sticky; top: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; max-height: calc(100vh - 120px); }
+.no-sum-lines { overflow: auto; flex: 1; min-height: 0; }
+.no-sline { display: flex; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.no-sline.bad { background: #fdf0f2; }
+.no-tot { padding: 12px 14px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.no-tot > div { display: flex; justify-content: space-between; font-size: 14px; }
+.no-tot > div.g { font-size: 18px; font-weight: 700; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.no-tot .primary.big { height: 48px; font-size: 16px; width: 100%; }
+.no2 .no-bar { display: none; }
+/* phone and tablet: one column, the total and Create order sit in a bar at the bottom; tap it for the lines */
+@media (max-width: 999px) {
+  .no2 .no-sum { display: none; }
+  .no2 .no-detg { grid-template-columns: 1fr; }
+  .no2 .no-bar { display: flex; align-items: center; gap: 10px; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 2px; margin-top: 10px; }
+  .no2 .no-bar .linkbtn { text-align: left; font-size: 16px; }
+  .no2 .no-twrap { max-height: none; border: 0; }
+  .no2 .no-table thead { display: none; }
+  .no2 .no-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "n p l" "o p l" "r p l" "s s s"; gap: 2px 8px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .no2 .no-table td { border: 0; padding: 0; background: none !important; }
+  .no2 .no-table .c-n { grid-area: n; } .no2 .no-table .c-o { grid-area: o; } .no2 .no-table .c-r { grid-area: r; } .no2 .no-table .c-p { grid-area: p; } .no2 .no-table .c-l { grid-area: l; } .no2 .no-table .c-s { grid-area: s; }
+  .no2 .no-table td.c-o, .no2 .no-table td.c-r { font-size: 12.5px; color: var(--muted); text-align: left; }
+  .no2 .no-table td.c-o::before, .no2 .no-table td.c-r::before { content: attr(data-l); }
+  .no2 .no-table tr.on { background: var(--r-teal-bg); } .no2 .no-table tr.bad { background: #fdf0f2; }
+  .no2 .qty { height: 42px; }
+  .scrim.no-sumscrim { z-index: 40; }
+  .sheet.no-sumsheet { width: 100%; max-height: 80vh; display: flex; flex-direction: column; }
+}

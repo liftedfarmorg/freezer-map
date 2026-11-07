@@ -209,18 +209,15 @@ function useStockByYear(backend: Backend) {
   }, [])
   return m
 }
-/** the year to sell from: this year if it's in stock, else the newest year that is */
-const pickYear = (stock: Map<string, Map<number, number>> | null, strain: string, product: string) => {
-  const y = stock?.get(sk(strain, product)); if (!y) return CUR_YEAR
-  if ((y.get(CUR_YEAR) ?? 0) > 0) return CUR_YEAR
-  const has = [...y.entries()].filter(([, l]) => l > 0).map(([yr]) => yr).sort((a, b) => b - a)
-  return has[0] ?? CUR_YEAR
-}
 
 export function NewOrderSheet({ backend, customers, strains, flash, onClose, onDone }: {
   backend: Backend; customers: Customer[]; strains: Strain[]; flash: Flash; onClose: () => void; onDone: (id: number) => void
 }) {
+  // Msg 308: new order redesigned (prototype Msg 305/306): customer with context, a menu table per product where you type lbs
+  // (price autofills from the customer's price and can be changed), a running summary with the total, details folded away.
+  // Same saves as before: createOrder, then sample lines, then shipping.
   const [cust, setCust] = useState<number | null>(null)
+  const [cq, setCq] = useState('')
   const [po, setPo] = useState('')
   const [wanted, setWanted] = useState('')
   const [notes, setNotes] = useState('')
@@ -229,10 +226,14 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const [quoted, setQuoted] = useState(false)
   const [est, setEst] = useState<{ charge: number | null; descr: string | null; rule: string; problem: string | null } | null>(null)
   const [terms, setTerms] = useState<PaymentTerm[]>([])
-  const [lines, setLines] = useState<{ strain: string; lbs: string; price: string; product: Product; sample?: boolean; hold?: string; year: number; yearSet?: boolean }[]>([{ strain: '', lbs: '', price: '', product: 'fresh_frozen', year: CUR_YEAR }])
+  const [tab, setTab] = useState<Product>('fresh_frozen')
+  const [q, setQ] = useState('')
+  const [det, setDet] = useState(false)
+  const [sumOpen, setSumOpen] = useState(false)
+  // one entry per product + strain + crop year: lbs typed, price (only kept when changed from the autofill), sample + hold
+  type Pick = { product: Product; strain: string; year: number; lbs: string; price?: string; sample?: boolean; hold?: string }
+  const [picks, setPicks] = useState<Record<string, Pick>>({})
   const stock = useStockByYear(backend)
-  // strain or product changed: the year follows what's in stock, until someone picks a year by hand
-  useEffect(() => { setLines(ls => ls.map(l => l.yearSet || !l.strain.trim() ? l : { ...l, year: pickYear(stock, l.strain, l.product) })) }, [stock])
   const [busy, setBusy] = useState(false)
   useEffect(() => { backend.paymentTerms().then(setTerms).catch(() => {}) }, [])
   // market price per crop year (164): what a customer with no contract price pays
@@ -247,6 +248,22 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     const sb = backend.client()
     if (!sb || cust == null) return
     sb.rpc('ship_quote', { p_customers: [cust], p_class: 'box', p_carrier_cost: null }).then(({ data }) => { const r = (data ?? [])[0]; if (r) setEst(r) })
+  }, [cust])
+  // the customer's balance and last order (for the chips and Repeat last order)
+  const [cbal, setCbal] = useState<number | null>(null)
+  const [lastO, setLastO] = useState<{ date: string | null; lines: { strain: string; lbs: number; crop_year: number | null; product: Product | null }[] } | null>(null)
+  useEffect(() => {
+    setCbal(null); setLastO(null)
+    const sb = backend.client()
+    if (!sb || cust == null) return
+    Promise.all([sb.from('acct_customer_balances').select('balance').eq('customer_id', cust).eq('env', 'production'), sb.from('invoices').select('total').eq('customer_id', cust).eq('status', 'open')]).then(([qb, inv]) => {
+      const b = (qb.data ?? [])[0] as { balance: number | null } | undefined
+      setCbal(b && b.balance != null ? Number(b.balance) : ((inv.data ?? []) as { total: number }[]).reduce((a, x) => a + Number(x.total), 0))
+    }).catch(() => {})
+    sb.from('orders').select('order_date,order_lines(strain,lbs,crop_year,product)').eq('customer_id', cust).not('status', 'in', '(draft,cancelled)')
+      .order('order_date', { ascending: false }).order('id', { ascending: false }).limit(1)
+      .then(({ data }) => { const o = (data ?? [])[0] as { order_date: string | null; order_lines: { strain: string; lbs: number; crop_year: number | null; product: Product | null }[] } | undefined
+        setLastO(o ? { date: o.order_date, lines: o.order_lines ?? [] } : { date: null, lines: [] }) }, () => {})
   }, [cust])
   // Strain pick list (Aziz 11/4, same as the order editor): fresh frozen / standards / smalls = the open menu (+ this customer's
   // reserves on fresh frozen); other products aren't on the menu, so they list what's on hand. One option per strain + crop year.
@@ -271,23 +288,33 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     if (product === 'fresh_frozen' && cust != null) for (const b of bal) if (b.customer_id === cust && Number(b.remaining) > 0) at(b.strain, b.crop_year ?? CUR_YEAR).res += Number(b.remaining)
     return [...m.values()].sort((a, b) => a.strain.localeCompare(b.strain) || b.year - a.year)
   }
-  const lineKey = (l: { strain: string; year: number }) => `${l.strain.trim().toLowerCase()}|${l.year}`
-  // blocked past what's available: all lines of the same product + strain + crop year together
-  const lineAvail = (l: typeof lines[number]) => optionsFor(l.product).find(x => x.k === lineKey(l))
-  const lineOver = (l: typeof lines[number]) => {
-    if (!l.strain.trim() || !(Number(l.lbs) > 0)) return null
-    const a = lineAvail(l), max = a ? a.open + a.res : 0
-    const used = lines.filter(x => x.product === l.product && lineKey(x) === lineKey(l)).reduce((t, x) => t + (Number(x.lbs) || 0), 0)
-    return used > max ? max : null
+  const pkey = (product: Product, strain: string, year: number) => `${product}|${strain.trim().toLowerCase()}|${year}`
+  // the price that fills in: fresh frozen = their contract price, else the market price for that crop year; dry products = on the invoice
+  const autoPrice = (product: Product, year: number): number | null => product !== 'fresh_frozen' ? null : c?.price_per_lb != null ? Number(c.price_per_lb) : market.get(year) ?? null
+  const used = Object.values(picks).filter(p => Number(p.lbs) > 0)
+  const availOf = (p: { product: Product; strain: string; year: number }) => { const o = optionsFor(p.product).find(x => x.k === `${p.strain.trim().toLowerCase()}|${p.year}`); return o ? o.open + o.res : 0 }
+  const overOf = (p: Pick) => Number(p.lbs) > 0 && Number(p.lbs) > availOf(p) ? availOf(p) : null
+  const anyOver = used.some(p => overOf(p) != null)
+  const priceOf = (p: Pick) => p.price !== undefined && p.price !== '' ? Number(p.price) : autoPrice(p.product, p.year)
+  const lbsT = used.reduce((a, p) => a + Number(p.lbs), 0)
+  const dolT = used.reduce((a, p) => a + (priceOf(p) ?? 0) * Number(p.lbs), 0)
+  const shipT = shipping !== '' ? Number(shipping) : est?.charge != null && !est.problem ? Number(est.charge) : 0
+  const ok = cust != null && used.length > 0 && !anyOver
+  const setPick = (k: string, base: Omit<Pick, 'lbs'>, ch: Partial<Pick>) => setPicks(ps => ({ ...ps, [k]: Object.assign({ lbs: '' }, base, ps[k], ch) as Pick }))
+  function repeatLast() {
+    if (!lastO?.lines.length) { flash('No earlier order for this customer', true); return }
+    const next = { ...picks }
+    for (const l of lastO.lines) { const product = (l.product ?? 'fresh_frozen') as Product, year = l.crop_year ?? CUR_YEAR
+      next[pkey(product, l.strain, year)] = { product, strain: l.strain, year, lbs: String(Number(l.lbs)) } }
+    setPicks(next)
   }
-  const anyOver = lines.some(l => lineOver(l) != null)
-  const ok = cust != null && lines.some(l => l.strain.trim() && Number(l.lbs) > 0) && !anyOver
   async function save() {
     setBusy(true)
     try {
-      const ls: NewOrderLine[] = lines.filter(l => l.strain.trim() && Number(l.lbs) > 0).map(l => ({ strain: l.strain.trim(), lbs: Number(l.lbs), price: l.price === '' ? null : Number(l.price), product: l.product, crop_year: l.year }))
+      // price goes in only when someone changed it from the autofill; blank = their contract / market price, worked out as before
+      const ls: NewOrderLine[] = used.map(p => { const auto = autoPrice(p.product, p.year), typed = p.price !== undefined && p.price !== '' ? Number(p.price) : null
+        return { strain: p.strain.trim(), lbs: Number(p.lbs), price: typed != null && typed !== auto ? typed : null, product: p.product, crop_year: p.year } })
       const o = await backend.createOrder(cust!, ls, po, wanted || null, notes, termsCode || null)
-      const used = lines.filter(l => l.strain.trim() && Number(l.lbs) > 0)
       if (used.some(l => l.sample)) {
         try {
           // lines come back in the order they were sent
@@ -303,65 +330,107 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
       flash(`${o.so_number} created`); onDone(o.id)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
+  const ql = cq.trim().toLowerCase()
+  const custOpts = customers.filter(x => x.active && x.kind === 'external' && (!ql || x.name.toLowerCase().includes(ql) || (x.address ?? '').toLowerCase().includes(ql))).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12)
+  const resLeft = cust == null ? 0 : bal.filter(b => b.customer_id === cust).reduce((a, b) => a + Math.max(0, Number(b.remaining)), 0)
+  const opts = optionsFor(tab).filter(o => !q.trim() || o.strain.toLowerCase().includes(q.trim().toLowerCase()))
+  const loading = !menu || !stock
+  const usd = (v: number) => `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const usd2 = (v: number) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const nIn = (p: Product) => used.filter(x => x.product === p).length
+  const summary = <>
+    <div className="no-sum-lines">{!used.length ? <p className="muted small" style={{ margin: 14 }}>Type lbs next to a strain. Lines show up here.</p>
+      : used.map(p => { const k = pkey(p.product, p.strain, p.year), pr = priceOf(p)
+        return <div key={k} className={`no-sline ${overOf(p) != null ? 'bad' : ''}`}><div className="grow"><b>{p.strain}</b> {p.year !== CUR_YEAR && <span className="muted small">{p.year}</span>}
+          <div className="muted small">{PRODUCT_LABEL[p.product]}{p.sample ? ' · sample' : ''}{overOf(p) != null ? ` · only ${n0f(overOf(p)!)} available` : ''}</div></div>
+          <span className="nw">{n0f(Number(p.lbs))} lbs</span><span className="nw">{pr != null ? usd(pr * Number(p.lbs)) : 'on invoice'}</span>
+          <button className="linkbtn" aria-label={`Remove ${p.strain}`} onClick={() => setPicks(ps => { const n = { ...ps }; delete n[k]; return n })}>✕</button></div> })}</div>
+    <div className="no-tot"><div><span className="muted">Total lbs</span><b>{n0f(lbsT)}</b></div><div><span className="muted">Product</span><span>{usd(dolT)}</span></div>
+      <div><span className="muted">Shipping{shipping === '' ? ' (estimate)' : ''}</span><span>{cust == null ? '—' : usd(shipT)}</span></div>
+      <div className="g"><span>Total</span><span>{usd(dolT + (cust == null ? 0 : shipT))}</span></div>
+      <p className="muted small">Terms: {termsCode ? terms.find(t => t.code === termsCode)?.label ?? termsCode : c ? terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt' : '—'}. Dry products are priced on the invoice. The order is confirmed and gets its SO number right away, then shows in Distribution → Fulfillment.</p>
+      <button className="primary big" disabled={busy || !ok} onClick={save}>{busy ? 'Saving…' : 'Create order'}</button></div>
+  </>
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet form neworder" onClick={e => e.stopPropagation()}>
+      <div className="sheet form neworder side no2" onClick={e => e.stopPropagation()}>
         <div className="sheet-h"><h2>New sales order</h2><button className="ghost" onClick={onClose}>✕</button></div>
-        <div className="field"><label>Customer</label>
-          <Select value={cust ?? ''} onChange={e => setCust(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">Pick a customer…</option>
-            {customers.filter(x => x.active && x.kind === 'external').sort((a, b) => a.name.localeCompare(b.name)).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </Select>
-          {c && <span className="muted">{c.price_per_lb != null ? `Contract price ${money(Number(c.price_per_lb))}/lb` : `No contract price: market price ${[...new Set(lines.filter(l => l.product === 'fresh_frozen').map(l => l.year))].map(y => market.has(y) ? `${money(market.get(y)!)}/lb (${y} crop)` : `not set for ${y}`).join(', ') || 'applies'}`} · {terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}</span>}
-          {c && licenseWarning(c) && <div className="warnbox">{licenseWarning(c)} Compliance keeps customer licenses in Compliance › Library › Customer licenses.</div>}</div>
-        <div className="field"><label>Lines <span className="muted">(price blank = their contract price for fresh frozen, or the market price if they have none; dry products get priced on the invoice)</span></label>
-          {lines.map((l, i) => (<div key={i} className="nolinewrap">
-            <div className="row noline">
-              <Select value={l.product} aria-label="Product" onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, product: e.target.value as Product, strain: '', year: CUR_YEAR, yearSet: false } : x))}>
-                {SALE_PRODUCTS.map(p => <option key={p} value={p}>{PRODUCT_LABEL[p]}</option>)}</Select>
-              {(() => { const opts = optionsFor(l.product), cur = l.strain.trim() ? lineKey(l) : ''
-                return <Select value={cur} aria-label="Strain" disabled={!menu || !stock} onChange={e => { const o = opts.find(x => x.k === e.target.value)
-                  setLines(ls => ls.map((x, j) => j === i ? { ...x, strain: o?.strain ?? '', year: o?.year ?? CUR_YEAR, yearSet: true } : x)) }}>
-                  <option value="">{!menu || !stock ? 'Loading…' : opts.length ? 'Strain' : 'Nothing available'}</option>
-                  {cur && !opts.some(x => x.k === cur) && <option value={cur}>{l.strain} ({l.year}) · not available</option>}
-                  {opts.map(x => <option key={x.k} value={x.k}>{x.strain}{x.year !== CUR_YEAR ? ` (${x.year} crop)` : ''} · {Math.round(x.open + x.res).toLocaleString()} lbs available{x.res > 0 ? ` (${Math.round(x.res).toLocaleString()} reserve${x.open > 0 ? ` + ${Math.round(x.open).toLocaleString()} open` : ''})` : ''}</option>)}
-                </Select> })()}
-              <input type="number" placeholder="lbs" value={l.lbs} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, lbs: e.target.value } : x))} />
-              <input type="number" placeholder="$/lb" value={l.price} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} />
-              {lines.length > 1 && <button className="ghost small" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>✕</button>}
-            </div>
-            {lineOver(l) != null && <div className="small-note" style={{ color: 'var(--bad)', fontWeight: 600 }}>Only {Math.round(lineOver(l)!).toLocaleString()} lbs of {l.strain} ({l.year}) available{lines.filter(x => x.product === l.product && lineKey(x) === lineKey(l)).length > 1 ? ' across these lines' : ''}</div>}
-            {l.product === 'fresh_frozen' && <div className="row nosample">
-              <label className="check"><input type="checkbox" checked={!!l.sample} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, sample: e.target.checked } : x))} /> Sample</label>
-              {l.sample && <><input type="number" step="10" min="0" placeholder="hold lbs" value={l.hold ?? ''} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, hold: e.target.value } : x))} />
-                <span className="muted small">lbs to hold for them</span></>}
-            </div>}
+        <div className="no-body">
+          <div className="no-main">
+            <section className="no-sec">
+              {!c ? <>
+                <div className="no-h">1 · Customer</div>
+                <input className="search" type="search" autoFocus placeholder="Type a customer or city" value={cq} onChange={e => setCq(e.target.value)} aria-label="Customer" />
+                <div className="no-copts">{custOpts.map(x => <button key={x.id} onClick={() => { setCust(x.id); setCq('') }}><b>{x.name}</b><span className="muted small">{(x.address ?? '').split(',').slice(-2, -1)[0]?.trim() ?? ''}{x.reserves_enabled ? ' · reserves' : ''}</span></button>)}</div>
+              </> : <>
+                <div className="row no-cust"><div className="grow"><div className="no-cname">{c.name}</div><div className="muted small">{lastO?.date ? `last order ${fmtShort(lastO.date)}` : lastO ? 'no orders yet' : ''}</div></div>
+                  <button className="ghost small" disabled={!lastO?.lines.length} onClick={repeatLast}>↻ Repeat last order</button>
+                  <button className="ghost small" onClick={() => setCust(null)}>Change</button></div>
+                <div className="no-chips">
+                  <span className="pill">{c.price_per_lb != null ? `${usd2(Number(c.price_per_lb))}/lb contract` : market.get(CUR_YEAR) != null ? `Market ${usd2(market.get(CUR_YEAR)!)}/lb` : 'Market price'}</span>
+                  <span className="pill">{terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'}</span>
+                  {cbal != null && <span className={`pill ${cbal > 0 ? 'warnp' : ''}`}>{cbal > 0 ? `${usd(cbal)} owed` : 'Nothing owed'}</span>}
+                  <span className="pill">{c.reserves_enabled ? `Reserves: ${n0f(resLeft)} lbs left` : 'Menu only'}</span>
+                </div>
+                {licenseWarning(c) && <div className="warnbox">{licenseWarning(c)} Compliance keeps customer licenses in Compliance › Library › Customer licenses.</div>}
+              </>}
+            </section>
+            <section className="no-sec no-menu">
+              <div className="no-tabs"><span className="no-h">2 · What they want</span>{SALE_PRODUCTS.map(p => <button key={p} className={tab === p ? 'on' : ''} onClick={() => { setTab(p); setQ('') }}>{PRODUCT_LABEL[p]}{nIn(p) > 0 && <b>{nIn(p)}</b>}</button>)}</div>
+              <input className="search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
+              {loading ? <p className="muted">Loading what's available…</p> : !opts.length ? <p className="muted">Nothing available{q ? ` for "${q}"` : ''}.</p> :
+                <div className="no-twrap"><table className="ctable no-table"><thead><tr><th>Strain</th><th className="num">Open</th>{tab === 'fresh_frozen' && <th className="num">Their reserve</th>}<th className="num">$/lb</th><th className="num">Lbs</th>{tab === 'fresh_frozen' && <th />}</tr></thead>
+                  <tbody>{opts.map(o => { const k = pkey(tab, o.strain, o.year), p = picks[k], base = { product: tab, strain: o.strain, year: o.year }, auto = autoPrice(tab, o.year)
+                    const over = p && overOf(p) != null
+                    return <tr key={k} className={p && Number(p.lbs) > 0 ? (over ? 'bad' : 'on') : ''}>
+                      <td className="c-n"><b>{o.strain}</b> {o.year !== CUR_YEAR && <span className="muted small">{o.year} crop</span>}</td>
+                      <td className="num c-o" data-l="open ">{n0f(o.open)}</td>
+                      {tab === 'fresh_frozen' && <td className={`num c-r ${o.res > 0 ? 'resv' : 'muted'}`} data-l="their reserve ">{o.res > 0 ? n0f(o.res) : '—'}</td>}
+                      <td className="num c-p"><input className="qty price" type="number" step="0.25" min="0" inputMode="decimal" aria-label={`$/lb for ${o.strain}`}
+                        placeholder={auto == null ? 'invoice' : ''} value={p?.price !== undefined ? p.price : auto != null ? String(auto) : ''} onChange={e => setPick(k, base, { price: e.target.value })} /></td>
+                      <td className="num c-l"><input className={`qty ${over ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" placeholder="0" aria-label={`Lbs of ${o.strain}`}
+                        value={p?.lbs ?? ''} onChange={e => setPick(k, base, { lbs: e.target.value })} />{over && <div className="warn-t small">only {n0f(availOf(p!))}</div>}</td>
+                      {tab === 'fresh_frozen' && <td className="c-s">{p && Number(p.lbs) > 0 && <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                        <button className={`smp ${p.sample ? 'on' : ''}`} aria-pressed={!!p.sample} onClick={() => setPick(k, base, { sample: !p.sample })}>Sample</button>
+                        {p.sample && <input className="qty" type="number" step="10" min="0" placeholder="hold" aria-label="Lbs to hold" value={p.hold ?? ''} onChange={e => setPick(k, base, { hold: e.target.value })} />}</span>}</td>}
+                    </tr> })}</tbody></table></div>}
+              {used.some(l => l.sample) && <p className="muted small">Sample lines hold the "hold" lbs for {c?.name ?? 'the customer'} from now until {c?.sample_hold_days ?? 10} days after the order ships. Cancelling the order drops the hold.</p>}
+            </section>
+            <section className="no-sec">
+              <button className="linkbtn no-det" onClick={() => setDet(!det)}>{det ? '▾' : '▸'} 3 · Details <span className="muted">PO, delivery date, terms, shipping, notes</span></button>
+              {det && <div className="no-detg">
+                <div className="field"><label>Customer PO</label><input value={po} onChange={e => setPo(e.target.value)} /></div>
+                <div className="field"><label>Requested Delivery Date</label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
+                <div className="field"><label>Payment terms <span className="muted">(this order only)</span></label>
+                  <Select value={termsCode} onChange={e => setTermsCode(e.target.value)}>
+                    <option value="">{c ? `Customer default (${terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'})` : 'Customer default'}</option>
+                    {terms.filter(t => t.active).map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
+                  </Select></div>
+                <div className="field"><label>Shipping <span className="muted">(blank = the load works it out when it leaves)</span></label>
+                  <input type="number" step="0.01" min="0" value={shipping} onChange={e => setShipping(e.target.value)} placeholder={est?.charge != null ? String(est.charge) : '0.00'} />
+                  {est && <span className="muted small">{est.rule === 'free' ? `Contract customer: FREE shipping${est.descr ? ` ${est.descr.replace('FREE contract shipping', '').trim()}` : ''}`
+                    : est.rule === 'pickup' ? 'They pick up: no shipping'
+                    : est.problem ? est.problem : `Estimate, one stop on a box truck: $${Number(est.charge).toFixed(2)} (${est.descr})`}</span>}
+                  {shipping !== '' && <label className="check"><input type="checkbox" checked={quoted} onChange={e => setQuoted(e.target.checked)} /> I quoted this to the customer (it wins over the load's calculation)</label>}</div>
+                <div className="field wide"><label>Notes</label><input value={notes} onChange={e => setNotes(e.target.value)} /></div>
+              </div>}
+            </section>
           </div>
-          ))}
-          <button className="ghost small" onClick={() => setLines(ls => [...ls, { strain: '', lbs: '', price: '', product: ls[ls.length - 1]?.product ?? 'fresh_frozen', year: CUR_YEAR }])}>+ Line</button></div>
-        {lines.some(l => l.sample) && <p className="muted small">Sample lines hold the "hold lbs" for {c?.name ?? 'the customer'} from now until {c?.sample_hold_days ?? 10} days after the order ships. Cancelling the order drops the hold.</p>}
-        <div className="grid2">
-          <div className="field"><label>Customer PO</label><input value={po} onChange={e => setPo(e.target.value)} /></div>
-          <div className="field"><label>Requested Delivery Date</label><input type="date" value={wanted} onChange={e => setWanted(e.target.value)} /></div>
+          <aside className="no-sum">
+            <div className="no-h" style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>The order</div>
+            {summary}
+          </aside>
         </div>
-        <div className="field"><label>Payment terms <span className="muted">(this order only)</span></label>
-          <Select value={termsCode} onChange={e => setTermsCode(e.target.value)}>
-            <option value="">{c ? `Customer default (${terms.find(t => t.code === c.payment_terms)?.label ?? 'Due on receipt'})` : 'Customer default'}</option>
-            {terms.filter(t => t.active).map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
-          </Select></div>
-        <div className="field"><label>Shipping <span className="muted">(blank = the load works it out when it leaves)</span></label>
-          <input type="number" step="0.01" min="0" value={shipping} onChange={e => setShipping(e.target.value)} placeholder={est?.charge != null ? String(est.charge) : '0.00'} />
-          {est && <span className="muted small">{est.rule === 'free' ? `Contract customer: FREE shipping${est.descr ? ` ${est.descr.replace('FREE contract shipping', '').trim()}` : ''}`
-            : est.rule === 'pickup' ? 'They pick up: no shipping'
-            : est.problem ? est.problem : `Estimate, one stop on a box truck: $${Number(est.charge).toFixed(2)} (${est.descr})`}</span>}
-          {shipping !== '' && <label className="check"><input type="checkbox" checked={quoted} onChange={e => setQuoted(e.target.checked)} /> I quoted this to the customer (it wins over the load's calculation)</label>}</div>
-        <div className="field"><label>Notes</label><input value={notes} onChange={e => setNotes(e.target.value)} /></div>
-        <p className="muted">The order is confirmed and gets its SO number right away, then shows in Distribution → Fulfillment.</p>
-        <div className="row between"><span /><div className="row"><button className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !ok} onClick={save}>Create order</button></div></div>
+        <div className="no-bar"><button className="linkbtn grow" onClick={() => setSumOpen(true)}><b>{usd(dolT + (cust == null ? 0 : shipT))}</b><span className="muted small"> · {n0f(lbsT)} lbs · {used.length} line{used.length === 1 ? '' : 's'} ▴</span></button>
+          <button className="primary" disabled={busy || !ok} onClick={save}>Create order</button></div>
+        {sumOpen && <div className="scrim no-sumscrim" onClick={() => setSumOpen(false)}><div className="sheet no-sumsheet" onClick={e => e.stopPropagation()}>
+          <div className="sheet-h"><h2>The order</h2><button className="ghost" onClick={() => setSumOpen(false)}>✕</button></div>{summary}</div></div>}
       </div>
     </div>
   )
 }
+const n0f = (v: number) => Math.round(v).toLocaleString()
+const fmtShort = (d: string) => new Date(d.slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 
 /** Sales > Settings > Payment terms */
 export function TermsPanel({ backend, flash, canEdit }: { backend: Backend; flash: Flash; canEdit: boolean }) {
