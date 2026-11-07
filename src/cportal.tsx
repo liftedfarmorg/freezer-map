@@ -50,6 +50,7 @@ const I = {
   back: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>,
   down: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>,
   up: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6b64" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>,
+  chat: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.2A8 8 0 1 1 21 12Z" /><path d="M9 10.5h6M9 13.5h4" /></svg>,
   clock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ verticalAlign: '-3px' }}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   user: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6" /></svg>,
   plusbox: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}><rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 8v8M8 12h8" /></svg>,
@@ -574,6 +575,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')} style={{ color: 'var(--gold)' }}>Sample Holds for You</p><p className={c('big')}>{plural(hs.length, 'strain')} · {fmt(hs.reduce((a, h) => a + holdLbs(h), 0))} lbs</p></div><span className={c('pillbtn')} style={{ background: '#fff', color: 'var(--gold)' }}>Review</span></div>
             <p className={c('foot')} style={{ color: 'var(--ink)', fontWeight: 500 }}>{shown}</p>
             <p className={c('foot')} style={{ color: 'var(--gold)', marginTop: 2 }}>{soon ? `Next hold ends in ${plural(daysUntil(soon.until), 'day')} (${soon.strain})` : 'Waiting on Lifted to confirm'}</p></button>}
+          {helpButton('phone')}
         </main>
         <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>
       </div>
@@ -657,8 +659,44 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </section>}
           </div>
         </div>
+        {helpButton('desk')}
       </div>
     )
+  }
+
+  // ---------- help & feedback: a note to Lifted (not a ticket; Sales sees them in Sales > Customer feedback) ----------
+  const [fb, setFb] = useState<{ kind: 'problem' | 'question' | 'idea'; text: string; sent: boolean } | null>(null)
+  const helpButton = (where: 'desk' | 'phone') => <div className={c(`helpbar ${where}`)}>
+    <span>Something not working, or have a question?</span>
+    <button className={c('btn ghost helpbtn')} onClick={() => setFb({ kind: 'problem', text: '', sent: false })}>{I.chat} Help &amp; feedback</button></div>
+  async function sendFeedback() {
+    if (!fb || !fb.text.trim()) return
+    const device = `${desk ? 'Desktop' : 'Phone'} · ${navigator.userAgent.slice(0, 160)}`
+    const ok = await run(async () => { const r = await backend.client()?.rpc('send_portal_feedback', { p_kind: fb.kind, p_message: fb.text.trim(), p_screen: screen, p_device: device })
+      if (r?.error) throw new Error(r.error.message); return true })
+    if (ok) setFb({ ...fb, sent: true })
+  }
+  function feedbackSheet() {
+    if (!fb) return null
+    const kinds: [typeof fb.kind, string][] = [['problem', "Something's not working"], ['question', 'A question'], ['idea', 'An idea']]
+    return <><div className={c('scrim')} onClick={() => setFb(null)} />
+      <div className={c('sheet')} role="dialog" aria-modal="true" aria-labelledby="cp-fb-t">
+        {fb.sent ? <>
+          <h2 id="cp-fb-t" style={{ margin: 0, fontSize: 22 }}>Thanks, we got it</h2>
+          <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>Your note went straight to the Lifted team. If it needs an answer, we'll reach out to {me.email}.</p>
+          <button className={c('btn full')} onClick={() => setFb(null)}>Done</button></>
+        : <>
+          <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 id="cp-fb-t" style={{ margin: 0, fontSize: 22 }}>Help &amp; feedback</h2>
+            <button className={c('iconbtn')} style={{ color: 'var(--ink)', borderColor: 'var(--line)' }} onClick={() => setFb(null)} aria-label="Close">{I.close}</button></div>
+          <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>Tell us what's going on. It goes straight to your Lifted team.</p>
+          <div className={c('filters')} role="radiogroup" aria-label="What is it?">{kinds.map(([k, l]) => <button key={k} role="radio" aria-checked={fb.kind === k} aria-pressed={fb.kind === k} onClick={() => setFb({ ...fb, kind: k })}>{l}</button>)}</div>
+          <label className={c('field')}>{fb.kind === 'problem' ? 'What happened?' : fb.kind === 'question' ? 'Your question' : 'Your idea'}
+            <textarea className={c('fbtext')} rows={5} maxLength={5000} autoFocus value={fb.text} onChange={e => setFb({ ...fb, text: e.target.value })}
+              placeholder={fb.kind === 'problem' ? 'What were you trying to do, and what went wrong?' : fb.kind === 'question' ? 'Ask us anything about the portal, your orders or reserves' : 'What would make the portal better for you?'} /></label>
+          <p className={c('meta')} style={{ margin: 0, fontSize: 13 }}>We'll see your name, which screen you were on, and whether you're on a phone or computer.</p>
+          <div className={c('row')} style={{ gap: 10 }}><button className={c('btn ghost')} style={{ flex: 1 }} onClick={() => setFb(null)}>Cancel</button>
+            <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || !fb.text.trim()} onClick={sendFeedback}>{busy ? 'Sending…' : 'Send to Lifted'}</button></div></>}
+      </div></>
   }
 
   // the +/− step chooser (Reserves & Menu and the desktop order screen share it)
@@ -1234,7 +1272,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               {detail.length === 0 && <p className={c('meta')} style={{ padding: '0 18px 16px', margin: 0 }}>Use + or type lbs on any strain to start your order.</p>}
               <div className={c('olines')}>
                 {detail.map(x => <div key={x.k} className={c('oline')}>
-                  <div className={c('row')} style={{ gap: 8 }}><span className={c('grow')} style={{ fontWeight: 600, minWidth: 0 }}>{x.s} {tagPill(x.s)} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</span>
+                  <div className={c('row')} style={{ gap: 8 }}><span className={c('grow')} style={{ fontWeight: 600, minWidth: 0 }}>{x.s} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</span>
                     <span className={c('num')}>{fmt(x.q)} lbs</span>{x.price != null && <b className={c('num')} style={{ width: 78, textAlign: 'right' }}>{money(x.q * x.price)}</b>}</div>
                   {x.sample && x.hold > 0 && <p className={c('meta')} style={{ margin: '2px 0 0', fontSize: 12 }}>Hold {fmt(x.hold)} lbs if you like it</p>}
                 </div>)}
@@ -1250,8 +1288,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 </div>
               </div>
               <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--line-2)' }}>
-                <label className={c('field')}>PO # <span className={c('meta')} style={{ marginTop: -6 }}>optional</span><input type="text" value={po} onChange={e => setPo(e.target.value)} /></label>
                 <label className={c('field')}>Note <span className={c('meta')} style={{ marginTop: -6 }}>optional</span><input type="text" placeholder="Pickup or delivery details" value={note} onChange={e => setNote(e.target.value)} /></label>
+                <label className={c('field')}>PO # <span className={c('meta')} style={{ marginTop: -6 }}>optional</span><input type="text" value={po} onChange={e => setPo(e.target.value)} /></label>
               </div>
             </section>
           </aside>
@@ -1767,6 +1805,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : desk && screen === 'home' ? DeskHome() : desk && screen === 'order' ? DeskOrderScreen() : SCREENS[screen]()}
       </div>
       {account()}
+      {feedbackSheet()}
       {toastMsg && <div className={c('toast')} role="status" aria-live="polite">{toastMsg}</div>}
     </div>
   )
