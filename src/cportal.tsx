@@ -1458,15 +1458,17 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const rows = sortRows('yres', yStrains.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)),
       { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1, g: x => gradeN(x.s) })
     const tot = yAgg(rows.flatMap(x => x.runs))
-    const runList = (x: YStrain) => <div className={c('yruns')}>
-      {desk && <div className={c('yrun head')}><span>Order</span><span>FF run</span><span>Process</span><span>Hash / BHO</span><span>Rosin</span><span>Notes</span></div>}
-      {x.runs.map((r, i) => <div key={i} className={c('yrun')}>
-        <span><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button> <span className={c('muted')}>{shortDate(r.date)}</span>{r.draft && <> <span className={c('chip c-wait')}>Draft</span></>}</span>
-        <span>{fmt(r.p.ff ?? 0)} lbs</span>
-        <span>{r.p.bho ? <span className={c('ptag bho')}>BHO</span> : <span className={c('ptag')}>{r.p.rosin ? 'Hash + rosin' : 'Hash'}</span>}</span>
-        <span>{r.p.bho ? <><b>{pct(r.k.bhoPct)}</b> <span className={c('muted')}>BHO · {gFmt(r.k.bhoG)}</span></> : r.k.hashG != null ? <><b>{pct(r.k.hashPct)}</b> <span className={c('muted')}>hash · {gFmt(r.k.hashG)}</span></> : <span className={c('muted')}>–</span>}</span>
-        <span>{r.k.rosinG != null ? <><b>{pct(r.k.rosinOfHash)}</b> <span className={c('muted')}>of hash · {gFmt(r.k.rosinG)}</span></> : <span className={c('muted')}>–</span>}</span>
-        <span className={c('muted')}>{r.note || ''}</span></div>)}</div>
+    // each run under its strain: on desktop the same columns as the strain row above, so every % lines up
+    const proc = (r: YRun) => r.p.bho ? <span className={c('ptag bho')}>BHO</span> : <span className={c('ptag')}>{r.p.rosin ? 'Hash + rosin' : 'Hash'}</span>
+    const runList = (x: YStrain) => desk
+      ? <div className={c('yruns2')}>{x.runs.map((r, i) => <div key={i} className={c('yres sub')}>
+          <span className={c('yrunname')}><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button>
+            <span className={c('muted')}>{shortDate(r.date)}</span>{proc(r)}{r.draft && <span className={c('chip c-wait')}>Draft</span>}</span>
+          <span>{fmt(r.p.ff ?? 0)} lbs</span>
+          <span>{pct(r.k.hashPct)}</span><span>{pct(r.k.rosinOfHash)}</span><span>{pct(r.k.rosinOfFF)}</span><span>{pct(r.k.bhoPct)}</span><span /></div>)}</div>
+      : <div className={c('yruns')}>{x.runs.map((r, i) => <div key={i} className={c('yrunm')}>
+          <p className={c('name')} style={{ fontSize: 14 }}><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button> <span className={c('muted')} style={{ fontWeight: 400 }}>{shortDate(r.date)} · {fmt(r.p.ff ?? 0)} lbs</span> {proc(r)}{r.draft && <> <span className={c('chip c-wait')}>Draft</span></>}</p>
+          <p className={c('meta')}>{r.p.bho ? <>BHO <b>{pct(r.k.bhoPct)}</b> of FF</> : <>Hash <b>{pct(r.k.hashPct)}</b> of FF{r.k.rosinG != null && <> · Rosin <b>{pct(r.k.rosinOfHash)}</b> of hash · {pct(r.k.rosinOfFF)} of FF</>}</>}</p></div>)}</div>
     return (
       <div className={c('screen ylist')}>
         <header className={c('hdr')}>{back('home', 'Home')}<h1>Yields</h1>

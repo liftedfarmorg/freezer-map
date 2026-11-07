@@ -626,3 +626,16 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
   .cp-desk .cp-dhome .cp-dgrid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .cp-desk .cp-htb.cp-gt { grid-template-columns: minmax(110px, 1fr) 44px 38px 62px 60px 54px 70px 66px; column-gap: 5px; padding: 0 14px; }
 }
+/* runs under a strain: desktop rows share the strain table's columns */
+.cp-desk .cp-yruns2 { background: #f7f9f6; border-top: 1px solid var(--line-2); }
+.cp-desk .cp-yres.cp-sub { cursor: default; font-size: 14px; padding-block: 8px; color: var(--muted); border-top: 1px solid #edf0ec; }
+.cp-desk .cp-yres.cp-sub:hover { background: none; }
+.cp-desk .cp-yres.cp-sub > :nth-child(n+2) { color: var(--ink); }
+.cp-desk .cp-yres.cp-sub:first-child { border-top: 0; }
+.cp .cp-yrunname { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 14px; }
+.cp .cp-yrunm { padding: 8px 0; border-bottom: 1px solid var(--line-2); }
+.cp .cp-yrunm:last-child { border-bottom: 0; }
+.cp .cp-yrunm p { margin: 0; }
+.cp .cp-yrunm .cp-meta b { color: var(--ink); }
+.cp-desk .cp-yres.cp-sub > .cp-yrunname { grid-column: span 2; flex-wrap: nowrap; white-space: nowrap; justify-content: flex-start; text-align: left; }
+.cp-desk .cp-yres.cp-sub > .cp-yrunname .cp-ptag, .cp-desk .cp-yres.cp-sub > .cp-yrunname .cp-chip { font-size: 11px; }
