@@ -6,7 +6,7 @@ import { t } from './i18n'
 export type NotifyPrefs = Record<string, boolean | undefined>
 export const NOTIFY_TYPES: [string, string, string][] = [
   ['t_load_assigned', 'Put on a load', 'when you\'re picked as the driver of a load'],
-  ['t_load_left', 'Load leaving', 'when a load you drive departs'],
+  ['t_load_left', 'Load departed: record your stops', 'when a load you drive leaves, with the link to record each stop'],
   ['t_delivery', 'Delivery problems', 'a stop that wasn\'t a plain delivery (rejected, not delivered)'],
   ['t_metrc', 'METRC follow-ups', 'manifests to void or rejections to check after a delivery'],
   ['t_staging', 'Move back to GVR', 'a GVR pallet staged at OHR whose order was cancelled or isn\'t shipping within 2 days'],

@@ -408,3 +408,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .drv .list > .card { border-radius: 16px; padding: 18px 20px; }
 .drv .drv-tabs { max-width: 860px; margin: 0 auto 4px; }
 @media (max-width: 767px) { .app.shell .drv .list { padding: 0 0 12px; } .drv .list > .card { padding: 14px 16px; } }
+
+/* tab rows (Admin settings and others): one line each, scroll sideways if they do not fit (Msg 293) */
+.app.shell .seg.tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.app.shell .seg.tabs button { white-space: nowrap; flex: none; }
+.app.shell .seg.tabs button .muted { margin-left: 4px; }
