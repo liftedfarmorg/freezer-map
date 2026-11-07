@@ -117,7 +117,7 @@ export function PlanMyPick({ o, cands, loc, backend, reload, flash, back }: {
                       <b className="pmp-code">{r.pallet.code}</b>
                       <span className="grow">{r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
                       <span className="pmp-lbs">{n0(r.lbs)}{!r.whole ? <span className="muted"> of {n0(w(r.pallet))}</span> : ''} lbs</span>
-                      <span className={`pmp-do ${r.whole ? '' : 'split'}`}>{r.whole ? 'Whole' : `Split${r.pallet.boxes ? ` ${Math.round(r.lbs / 10)} boxes` : ''}`}</span>
+                      <span className={`pmp-do ${r.whole ? '' : 'split'}`}>{r.whole ? 'Whole' : `Split${r.lbs % 10 === 0 ? ` ${r.lbs / 10} boxes` : ''}`}</span>
                       <button className="linkbtn" onClick={() => { setChange(change === r.pallet.id ? null : r.pallet.id) }}>{change === r.pallet.id ? 'Cancel' : 'Change'}</button>
                     </div>
                     {change === r.pallet.id && (

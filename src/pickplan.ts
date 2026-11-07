@@ -116,15 +116,28 @@ export function makePlan(lines: PLine[], tol: number, mode: Mode, loc: (p: Palle
     }
   }
   if (best) return best
-  // can't cover it in 4 freezers (or at all): favor the freezers holding the most of what's needed
-  const lbsIn = new Map<number, number>()
-  for (const l of open) for (const p of l.cands) lbsIn.set(loc(p).fz ?? -1, (lbsIn.get(loc(p).fz ?? -1) ?? 0) + w(p))
-  const ranked = [...fz].sort((a, b) => (lbsIn.get(b) ?? 0) - (lbsIn.get(a) ?? 0))
-  for (let k = 1; k <= ranked.length; k++) {
-    const p = plain(open, tol, mode, loc, new Set(ranked.slice(0, k)))
-    if (p.short.size === 0 || k === ranked.length) return p
+  // more than 4 freezers needed: add freezers one at a time, each time the one that finishes the most lines
+  // (most lbs still needed as the tie-break), then drop any freezer the rest can do without
+  const lbsOf = (l: PLine, s: Set<number>) => l.cands.filter(p => s.has(loc(p).fz ?? -1)).reduce((a, p) => a + w(p), 0)
+  const done = (l: PLine, s: Set<number>) => lbsOf(l, s) >= l.need - tol
+  const chosen = new Set<number>()
+  while (open.some(l => !done(l, chosen))) {
+    let pick = -2, gain = -1, lbs = -1
+    for (const f of fz) {
+      if (chosen.has(f)) continue
+      const s = new Set(chosen); s.add(f)
+      const g = open.filter(l => !done(l, chosen) && done(l, s)).length
+      const more = open.filter(l => !done(l, chosen)).reduce((a, l) => a + Math.min(l.need, lbsOf(l, s)) - Math.min(l.need, lbsOf(l, chosen)), 0)
+      if (g > gain || (g === gain && more > lbs)) { pick = f; gain = g; lbs = more }
+    }
+    if (pick === -2 || (gain === 0 && lbs <= 0)) break
+    chosen.add(pick)
   }
-  return plain(open, tol, mode, loc)
+  for (const f of [...chosen]) {
+    const s = new Set(chosen); s.delete(f)
+    if (open.every(l => done(l, s) || !done(l, chosen))) chosen.delete(f)
+  }
+  return plain(open, tol, mode, loc, chosen)
 }
 const sumShort = (p: Plan) => [...p.short.values()].reduce((a, b) => a + b, 0)
 
