@@ -599,8 +599,9 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
                     <span key={i.id} className={`titem ${s?.status === 'delivered' ? 'done' : ''}`} style={{ ['--sc' as string]: stopColor(s?.seq ?? 1) }}>
                       <b>{p?.code}</b> <span className="tstop">{s?.seq}</span>{here.length > 1 && <span className="tlayer">{i === here[0] ? 'top' : i === here[here.length - 1] ? 'bottom' : 'middle'}</span>}
                       <span className="strain">{p ? label(ctx, p) : ''}</span>
-                      <span className="w">{p ? lbs(ctx.weight(p)) : ''} · {s?.status === 'delivered' ? '✓ delivered'
-                        : l.status === 'delivered' && p && (p.status === 'in_freezer' || p.status === 'unslotted') ? `↩ back${p.slot_id ? ` · ${ctx.freezerSpot(p.slot_id)}` : ' (needs a spot)'}`
+                      <span className="w">{p ? lbs(ctx.weight(p)) : ''} · {p && (p.status === 'in_freezer' || p.status === 'unslotted') && (s?.status === 'delivered' || l.status === 'delivered')
+                          ? `${s?.status === 'delivered' ? '✓' : '↩'} ${p.slot_id ? ctx.freezerSpot(p.slot_id) : 'needs a spot'}`
+                        : s?.status === 'delivered' ? '✓ delivered'
                         : i.loaded ? '✓ on truck' : p ? ctx.freezerSpot(p.slot_id) : ''}</span>
                     </span>
                   )
@@ -728,9 +729,11 @@ function PositionSheet({ ctx, load, pos, items: raw, stops, onClose, onMove, onS
                 {(() => {
                   // after the load left: the stop's outcome, not the truck plan
                   const st = stops.find(x => x.id === i.stop_id)
-                  if (st?.status === 'delivered') return <span className="pill s-delivered">Delivered</span>
-                  if (load.status === 'delivered' && (p.status === 'in_freezer' || p.status === 'unslotted'))
-                    return <span className="pill s-back">↩ Back{p.slot_id != null ? ` · ${ctx.freezerSpot(p.slot_id)}` : ' (needs a spot)'}</span>
+                  const spot = p.slot_id != null ? ctx.freezerSpot(p.slot_id) : 'Needs a spot'
+                  const here = p.status === 'in_freezer' || p.status === 'unslotted'
+                  // received at our site: where it is now (e.g. GVR Staging · 18); came back: same, marked back
+                  if (st?.status === 'delivered') return <span className="pill s-delivered">{here ? `✓ ${spot}` : 'Delivered'}</span>
+                  if (load.status === 'delivered' && here) return <span className="pill s-back">↩ {spot}</span>
                   return <span className={`pill ${i.loaded ? 's-in_transit' : 's-planning'}`}>{i.loaded ? 'On truck' : 'Planned'}</span>
                 })()}
               </div>
