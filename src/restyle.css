@@ -455,6 +455,7 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .fpick .drow { flex-wrap: wrap; row-gap: 6px; }
   .fpick .drow > .grow { flex: 1 1 100%; min-width: 0; }
   .fpick .drow > b { margin-right: auto; }
+  .fpick .drow button { padding: 6px 10px; min-height: 40px; font-size: 13px; }
   .fpick .tagrow { flex-wrap: wrap; }
   .fpick .tagrow .grow-in { min-width: 0; flex: 1 1 180px; }
   /* Plan my pick rows: spot, pallet and lbs on top; strain under; Whole/Split and Change on the right */
