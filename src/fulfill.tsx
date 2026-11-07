@@ -86,7 +86,7 @@ export function FulfillView(props: FulfillProps) {
         return (
           <section key={g}>
             <h3 className="grouph">{STATE_LABEL[g]} <span className="muted">{all.length}</span></h3>
-            <div className="cwrap settable-w"><table className="ctable settable ftable">
+            <div className="cwrap settable-w fwrap"><table className="ctable settable ftable">
               <thead><tr><th className="pin">Customer</th><th>Order</th><th className="num">Strains</th><th className="num">Lbs</th>
                 {(g === 'open' || g === 'needs_ok') && <th>Picked</th>}<th>{g === 'shipped' ? 'Shipped' : 'Requested'}</th><th>Load</th><th>Status</th></tr></thead>
               <tbody>{os.map(o => {
@@ -108,6 +108,24 @@ export function FulfillView(props: FulfillProps) {
                 </tr>
               )
             })}</tbody></table></div>
+            {/* PICK-3: phones get one card per order instead of the sideways table */}
+            <div className="fcards">{os.map(o => {
+              const want = orderLbs(o), have = orderGot(o)
+              const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
+              const when = g === 'shipped' ? (o.shipped_date ? `Shipped ${fmt(o.shipped_date)}` : '') : o.wanted_date ? `Wanted ${fmt(o.wanted_date)}` : o.order_date ? `Ordered ${fmt(o.order_date)}` : ''
+              return (
+                <button key={o.id} className="fcard" onClick={() => { setOpenId(o.id); scrollTop() }}>
+                  <span className="fcard-top"><b>{o.customer}</b>
+                    <span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
+                      : g === 'loaded' && o.fill && o.fill !== 'ready' ? (o.fill === 'open' ? 'Needs pallets' : 'Needs OK')
+                      : g === 'loaded' && isPk(o) ? 'Pickup'
+                      : g === 'shipped' && o.stop?.stop_status === 'delivered' ? 'Delivered' : STATE_LABEL[g]}</span></span>
+                  <span className="muted small">{o.so ?? `Order #${o.id}`} · {o.lines.length} strain{o.lines.length === 1 ? '' : 's'} · <b>{n0(want)} lbs</b></span>
+                  {(g === 'open' || g === 'needs_ok') && <span className="fcard-m"><Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} /><span className="muted small">{n0(have)} picked</span></span>}
+                  {(when || o.stop) && <span className="small"><span className={late ? 'bad-t' : 'muted'}>{when}</span>{o.stop ? <span className="muted">{when ? ' · ' : ''}{o.stop.load} {fmt(o.stop.load_date)}</span> : null}</span>}
+                </button>
+              )
+            })}</div>
             {cut && <button className="ghost small" onClick={() => setAllShipped(true)}>Show all {all.length} shipped</button>}
           </section>
         )

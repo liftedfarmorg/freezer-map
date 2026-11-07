@@ -437,3 +437,33 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .walk-act > * { flex: 1 1 140px; min-height: 52px; font-size: 16px; }
 .walk-alt { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; min-height: 56px; margin-top: 6px; color: var(--ink); }
 .walk-alt > b { min-width: 44px; font-size: 16px; }
+/* PICK-3: Fulfillment on phones */
+.fulfill .fcards { display: none; }
+@media (max-width: 640px) {
+  .fulfill .fwrap { display: none; }
+  .fulfill .fcards { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+  .fcard { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 56px; box-shadow: var(--r-shadow); cursor: pointer; }
+  .fcard-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 16px; }
+  .fcard-top b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fcard-top .pill { flex: none; }
+  .fcard-m { display: flex; align-items: center; gap: 10px; }
+  .fcard-m > :first-child { flex: 1; }
+  .fulfill > p.muted, .fulfill .toolbar .search { max-width: 100%; }
+  .fulfill .toolbar .search { width: 100%; box-sizing: border-box; }
+  /* + Assign pallets list: buttons drop under the pallet instead of running off the side */
+  .fpick .drow { flex-wrap: wrap; row-gap: 6px; }
+  .fpick .drow > .grow { flex: 1 1 100%; min-width: 0; }
+  .fpick .drow > b { margin-right: auto; }
+  .fpick .tagrow { flex-wrap: wrap; }
+  .fpick .tagrow .grow-in { min-width: 0; flex: 1 1 180px; }
+  /* Plan my pick rows: spot, pallet and lbs on top; strain under; Whole/Split and Change on the right */
+  .pmp-row { display: grid; grid-template-columns: auto auto 1fr auto; grid-template-areas: "spot code lbs lbs" "what what what what" "do do do chg"; gap: 4px 10px; align-items: center; }
+  .pmp-row .pmp-spot { grid-area: spot; min-width: 0; }
+  .pmp-row .pmp-code { grid-area: code; min-width: 0; }
+  .pmp-row .pmp-lbs { grid-area: lbs; text-align: right; }
+  .pmp-row .grow { grid-area: what; }
+  .pmp-row .pmp-do { grid-area: do; justify-self: start; }
+  .pmp-row .pmp-chg { grid-area: chg; min-width: 0; }
+  .pmp-alt .pmp-lbs { min-width: 0; }
+}
