@@ -10,6 +10,8 @@ import type { Customer, FLine, FOrder, FState, Load, LoadDriver, LoadStop, Palle
 import { StageAlerts, StageForm, useStages } from './stage'
 import { Meter } from './dash'
 import { PRODUCT_LABEL } from './types'
+import { PlanMyPick } from './pickplanui'
+import type { Loc } from './pickplan'
 
 const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
 const fmt = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
@@ -26,6 +28,8 @@ export interface FulfillProps {
   err?: string | null; backend: Backend; orders: FOrder[] | null; reload: () => Promise<void>; flash: (t: string, bad?: boolean) => void
   pallets: Pallet[]; heldBy: Map<number, FOrder>; onLoad: (id: number) => boolean; inRun?: (id: number) => string | undefined
   where: (p: Pallet) => string; siteOf: (p: Pallet) => string | null; rank: (p: Pallet) => number; canon: (s: string | null | undefined) => string
+  /** PICK-1: freezer, spot and what's in front of a pallet (Plan my pick) */
+  loc?: (p: Pallet) => Loc
   loads: Load[]; vehicles: Vehicle[]; isSales: boolean; openLoad: (id: number) => void; openPallet: (id: number) => void
   stops?: LoadStop[]; customers?: Customer[]; drivers?: LoadDriver[]
   /** which order is open (kept by the app so a load's stop can open an order here) */
@@ -95,7 +99,7 @@ export function FulfillView(props: FulfillProps) {
   )
 }
 
-function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, inRun, where, siteOf, rank, canon, loads, vehicles, isSales, openLoad, openPallet, stops, customers, drivers, stage }: FulfillProps & { o: FOrder; back: () => void; stage: ReturnType<typeof useStages> }) {
+function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, inRun, where, siteOf, rank, canon, loc, loads, vehicles, isSales, openLoad, openPallet, stops, customers, drivers, stage }: FulfillProps & { o: FOrder; back: () => void; stage: ReturnType<typeof useStages> }) {
   const [adding, setAdding] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadPick, setLoadPick] = useState(false)
@@ -104,6 +108,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
   const [combine, setCombine] = useState<FLine | null>(null)
   const [packSel, setPackSel] = useState<number[]>([])
   const [scanRes, setScanRes] = useState<{ p: Pallet; msg: string; line?: FLine } | null>(null)
+  const [planning, setPlanning] = useState(false)
   // on a load that hasn't left: still editable (it can only leave once it's complete and OK'd)
   const onOpenLoad = o.state === 'loaded' && !!o.stop && ['planning', 'loading'].includes(o.stop.load_status)
   const fill = o.state === 'loaded' ? (o.fill ?? 'ready') : o.state
@@ -146,12 +151,17 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
     assign(line!, p)
     return true
   } : null)
+  const freeFor = (l: FLine) => pallets.filter(p => (p.status === 'in_freezer' || p.status === 'unslotted') && p.pushed !== false && !p.container_id && p.kind !== 'mixed' && (p.current_weight ?? 0) > 0
+    && canon(p.strain) === canon(l.strain) && (p.product ?? 'fresh_frozen') === (l.product ?? 'fresh_frozen')
+    && (p.crop_year == null || l.crop_year == null || p.crop_year === l.crop_year) && !heldBy.has(p.id) && !onLoad(p.id) && !inRun?.(p.id))
   const pal = useMemo(() => new Map(pallets.map(p => [p.id, p])), [pallets])
   // where this order's pallets are right now (OHR / GVR / on a truck)
   const at = new Map<string, number>()
   for (const l of o.lines) for (const pk of l.picks) { const p = pal.get(pk.pallet_id); const s = p ? (p.status === 'in_transit' ? 'truck' : siteOf(p) ?? '?') : '?'; at.set(s, (at.get(s) ?? 0) + 1) }
   const sites = [...at.keys()].filter(s => s === 'OHR' || s === 'GVR').sort()
   const moving = o.state !== 'shipped' && o.state !== 'loaded'
+  const planBar = o.lines.some(l => !l.cant_fill && Number(l.lbs) - got(l) > 5)
+  if (planning && loc) return <PlanMyPick o={o} cands={freeFor} loc={loc} backend={backend} reload={reload} flash={flash} back={() => { setPlanning(false); scrollTop() }} />
   return (
     <div className="list fulfill">
       <button className="ghost small" onClick={back}>‹ Fulfillment</button>
@@ -161,6 +171,9 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
         <span className="muted">{[o.po && `PO ${o.po}`, o.order_date && `ordered ${fmt(o.order_date)}`, o.wanted_date && `requested delivery ${fmt(o.wanted_date)}`, o.source === 'roshi' ? 'from Roshi' : o.source === 'portal' ? 'from the portal' : o.source === 'qbo' ? 'from QuickBooks' : ''].filter(Boolean).join(' · ')}</span>
       </div>
       {o.notes && <p className="muted">"{o.notes}"</p>}
+      {editable && loc && planBar && <div className="pmp-bar">
+        <div className="grow"><b>{orderGot(o) > 0 ? 'Still needs pallets' : 'Nothing picked yet'}</b><div className="small">Let the app find the rest in as few freezers as it can.</div></div>
+        <button className="primary" onClick={() => { setPlanning(true); scrollTop() }}>Plan my pick ›</button></div>}
       {editable && <p className="muted small-note scanhint">Tap Scan and scan a pallet's tag to assign it to the line it matches.</p>}
       {scanRes && (
         <div className="scrim" onClick={() => setScanRes(null)}>
@@ -210,9 +223,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
                 <button className="ghost small" disabled={busy} title="Pull from several pallets of this strain into one new METRC tag" onClick={() => setCombine(l)}>Combine into one tag</button>
                 {g === 0 && <button className="ghost small" disabled={busy} onClick={() => run(() => backend.cantFill(l.id, true), `${l.strain} marked can't fill`)}>Can't fill</button>}</div>}
               {editable && adding === l.id && <Pick line={l} need={Math.max(0, Number(l.lbs) - g)} busy={busy} close={() => setAdding(null)}
-                cands={pallets.filter(p => (p.status === 'in_freezer' || p.status === 'unslotted') && p.pushed !== false && !p.container_id && p.kind !== 'mixed' && (p.current_weight ?? 0) > 0
-                  && canon(p.strain) === canon(l.strain) && (p.product ?? 'fresh_frozen') === (l.product ?? 'fresh_frozen')
-                  && (p.crop_year == null || l.crop_year == null || p.crop_year === l.crop_year) && !heldBy.has(p.id) && !onLoad(p.id) && !inRun?.(p.id))}
+                cands={freeFor(l)}
                 where={where} rank={rank}
                 onWhole={p => run(() => backend.pickPallet(l.id, p.id), `${p.code} assigned`).then(() => setAdding(null))}
                 onPart={(p, lbs, tag) => run(() => backend.pickPart(l.id, p.id, lbs, tag), `${n0(lbs)} lbs from ${p.code} assigned. Split it when you pull it.`).then(() => setAdding(null))} />}

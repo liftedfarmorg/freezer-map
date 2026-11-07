@@ -23,6 +23,7 @@ import type { Jump } from './admin'
 import { DeadlinesPanel, SalesDashboard, SalesReview } from './salesdash'
 import { MySettings } from './mine'
 import { ContractProductPrices, DocSheet, InvoicesView, MarketPricePanel, NewOrderSheet, SharedDocPage, TermsPanel } from './invoices'
+import type { Loc } from './pickplan'
 import { FulfillView, STATE_LABEL } from './fulfill'
 import { applyTheme } from './theme'
 import { money } from './docs'
@@ -697,6 +698,22 @@ export default function App() {
     if (p.status === 'unslotted' && p.received_site) return `Received at ${p.received_site}, needs a spot`
     return whereIs(ix, p.slot_id)
   }
+  // PICK-1: freezer, spot and what sits between a pallet and the door (Plan my pick)
+  const locCache = new Map<number, Loc>()
+  const locOf = (p: Pallet): Loc => locCache.get(p.id) ?? (locCache.set(p.id, locCalc(p)), locCache.get(p.id)!)
+  const locCalc = (p: Pallet): Loc => {
+    const top = p.container_id ? ix.pallet.get(p.container_id) ?? p : p
+    const s = top.slot_id != null ? ix.slot.get(top.slot_id) : undefined
+    const f = s ? ix.freezer.get(s.freezer_id) : undefined
+    if (!s || !f) return { fz: null, fzLabel: 'Needs a spot', sort: 9999, site: top.received_site ?? null, spot: '', front: 99, side: '', inFront: [] }
+    const staging = f.kind === 'staging', trailer = f.kind === 'trailer'
+    const inFront: number[] = []
+    if (!staging) for (const o of ix.slot.values()) if (o.freezer_id === f.id && o.col === s.col && o.front_rank < s.front_rank)
+      for (const q of ix.inSlot.get(o.id) ?? []) inFront.push(q.id)
+    return { fz: f.id, fzLabel: staging ? `${f.site} Staging` : trailer ? `${f.site} ${fName(f)}` : `${f.site} Freezer ${f.number}`,
+      sort: staging ? 0 : trailer ? 1000 + f.number : f.number, site: f.site, spot: staging ? `S${s.row}` : trailer ? s.code.slice(2) : s.code,
+      front: staging ? s.row : s.front_rank, side: staging ? '' : s.col === 1 ? 'Left' : 'Right', inFront }
+  }
   const siteOf = (p: Pallet): string | null => {
     const top = p.container_id ? ix.pallet.get(p.container_id) ?? p : p
     const fz = top.slot_id != null ? ix.freezer.get(ix.slot.get(top.slot_id)?.freezer_id ?? -1) : undefined
@@ -1105,7 +1122,7 @@ export default function App() {
               ? m.set(p.strain.toLowerCase(), (m.get(p.strain.toLowerCase()) ?? 0) + Number(p.current_weight ?? 0)) : m, new Map<string, number>())} />
         })()}
         {view === 'fulfill' && cur === 'dist' && <FulfillView err={fErr} backend={backend} orders={forders} reload={async () => { await reload(); await refreshF() }} flash={flash}
-          pallets={snap.pallets} heldBy={heldBy} onLoad={id => ix.loadOf.has(id)} inRun={id => snap.inRun?.[id]} where={where} siteOf={siteOf} rank={p => (p.slot_id != null ? ix.slot.get(p.slot_id)?.front_rank : null) ?? 99}
+          pallets={snap.pallets} heldBy={heldBy} onLoad={id => ix.loadOf.has(id)} inRun={id => snap.inRun?.[id]} where={where} siteOf={siteOf} loc={locOf} rank={p => (p.slot_id != null ? ix.slot.get(p.slot_id)?.front_rank : null) ?? 99}
           canon={canonOf} loads={snap.loads ?? []} vehicles={snap.vehicles ?? []} isSales={isSales} stops={snap.stops ?? []} customers={snap.customers ?? []} drivers={snap.drivers ?? []} openId={fOpen} setOpenId={setFOpen}
           openLoad={id => { setLoadId(id); setView('load'); scrollTop() }} openPallet={setPalletId} />}
         {view === 'inbound' && <InboundView sb={backend.client()} flash={flash} onChanged={() => { reload() }} />}
