@@ -251,3 +251,30 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 
 /* preview badge hides while a sheet or pop-up is open */
 .is-preview body:has(.scrim)::before { display: none; }
+
+/* settings lists as tables (Msg 285): sortable headers, name pinned, scrolls sideways */
+.settable-w { overflow-x: auto; margin: 4px 0 8px; }
+.ctable.settable { min-width: 100%; width: max-content; font-size: 14px; border-radius: 14px; }
+.ctable.settable th { padding: 0; background: var(--panel); }
+.ctable.settable th button { width: 100%; background: none; border: 0; padding: 10px 12px; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); text-align: left; white-space: nowrap; cursor: pointer; }
+.ctable.settable th.num button { text-align: right; }
+.ctable.settable td { padding: 10px 12px; white-space: nowrap; vertical-align: middle; background: var(--panel); }
+.ctable.settable td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ctable.settable .pin { position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 var(--line); }
+.ctable.settable th.pin { z-index: 2; }
+.ctable.settable tr.tap { cursor: pointer; }
+.ctable.settable tr.tap:hover td { background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }
+.ctable.settable tr.retired td { opacity: .6; }
+.ctable.settable .trunc { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.ctable.settable .mono { font-size: 12.5px; }
+.pill.p-res { background: var(--r-teal-bg); color: var(--r-teal-ink); }
+.stcell { display: inline-flex; align-items: center; gap: 10px; }
+.sthumb.sm { width: 28px; height: 28px; border-radius: 8px; font-size: 11px; flex: none; }
+.setf { display: inline-flex; margin: 0 0 8px; }
+
+/* edit forms (settings): a side panel on computers so the table stays in view */
+@media (min-width: 1000px) {
+  .app.shell .scrim:has(> .sheet.form) { justify-content: flex-end; align-items: stretch; padding: 0; background: rgb(0 0 0 / .18); }
+  .app.shell .scrim > .sheet.form { width: 460px; max-width: 460px; height: 100%; max-height: none; margin: 0; border-radius: 0; overflow-y: auto; box-shadow: -10px 0 30px rgb(0 0 0 / .12); }
+}

@@ -195,6 +195,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const [busy, setBusy] = useState(false)
   const [other, setOther] = useState<string | null>(startOn ?? (lists.length ? null : extra?.[0]?.k ?? null))
   const [qbo, setQbo] = useState(false)
+  const [ordF, setOrdF] = useState<'all' | 'res' | 'menu'>('all')   // customers table: All / Reserves on / Menu only
   const [terms, setTerms] = useState<{ code: string; label: string }[]>([])
   const [metrcFor, setMetrcFor] = useState<{ id: number; isNew: boolean } | null>(null)
   const [codes, setCodes] = useState(false)
@@ -294,17 +295,13 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       )}
 
       {shown.length === 0 && <p className="muted">Nothing here yet. Add one, or import a spreadsheet.</p>}
+      {tab === 'customers' && shown.length > 0 && (() => { const ext = (shown as Customer[]).filter(c => c.active && c.kind !== 'internal')
+        return <div className="seg setf" role="group" aria-label="Ordering">{([['all', 'All', ext.length], ['res', 'Reserves on', ext.filter(c => c.reserves_enabled).length], ['menu', 'Menu only', ext.filter(c => !c.reserves_enabled).length]] as const).map(([k, l, n]) =>
+          <button key={k} className={ordF === k ? 'on' : ''} onClick={() => setOrdF(k)}>{l} <span className="segn">{n}</span></button>)}</div> })()}
       {groupsOf(tab, shown, inventoryStrains).map(([gk, gl, gr]) => gr.length > 0 && (
         <Fold key={gk} id={`set.${tab}.${gk}`} title={gl} count={gr.length} open={gk === 'main'} force={!!q}>
-          {tab === 'strains' ? <div className="strows">{gr.map(r => <StrainRow key={r.id} s={r as Strain} p={profiles.get(r.id)} pallets={palletsOf(r as Strain, inventoryStrains)} focus={focus} onOpen={() => setEdit(structuredClone(r))} />)}</div>
-          : gr.map(r => (
-            <button key={r.id} className={`li setrow ${r.active ? '' : 'retired'}`} onClick={() => setEdit(structuredClone(r))}>
-              <div className="grow">
-                <div><b>{r.name}</b>{!r.active && <span className="muted"> · retired</span>}</div>
-                <div className="muted">{summary(tab, r, inventoryStrains)}</div>
-              </div>
-            </button>
-          ))}
+          <SetTable list={tab} rows={gr.filter(r => tab !== 'customers' || gk !== 'main' || ordF === 'all' || ((r as Customer).reserves_enabled ? 'res' : 'menu') === ordF)}
+            terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} />
         </Fold>
       ))}
 
@@ -331,6 +328,86 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
 export type StrainFocus = 'dist' | 'sales' | 'cult' | 'nurs'
 const palletsOf = (s: Strain, inv: Map<string, number>) =>
   [s.name, ...(s.aliases ?? [])].reduce((a, x) => a + (inv.get(x) ?? [...inv.entries()].find(([k]) => k.toLowerCase() === x.toLowerCase())?.[1] ?? 0), 0)
+// ---------- settings lists as sortable tables (restyle, Msg 285) ----------
+type TCol = { k: string; l: string; num?: boolean; v: (r: ListRow) => string | number | null | undefined; cell?: (r: ListRow) => ReactNode }
+const money = (v: unknown, d = 2) => (v == null ? null : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`)
+const cityOf = (a: string | null) => { const p = (a ?? '').split(',').map(x => x.trim()); return p.length >= 3 ? p[p.length - 2] : null }
+function setCols(list: ListName, terms: { code: string; label: string }[], profiles: Map<number, StrainProfile>, inv: Map<string, number>, focus: StrainFocus): TCol[] {
+  if (list === 'customers') {
+    const C = (r: ListRow) => r as Customer
+    return [
+      { k: 'name', l: 'Customer', v: r => r.name, cell: r => <><b>{r.name}</b>{!r.active && <span className="muted"> · retired</span>}</> },
+      { k: 'ord', l: 'Ordering', v: r => C(r).kind === 'internal' ? 'Internal' : C(r).reserves_enabled ? 'Reserves on' : 'Menu only',
+        cell: r => C(r).kind === 'internal' ? <span className="pill">Internal</span> : <span className={`pill ${C(r).reserves_enabled ? 'p-res' : ''}`}>{C(r).reserves_enabled ? 'Reserves on' : 'Menu only'}</span> },
+      { k: 'terms', l: 'Terms', v: r => { const c = C(r).payment_terms; return c ? terms.find(t => t.code === c)?.label ?? c : null } },
+      { k: 'price', l: '$ / lb', num: true, v: r => C(r).price_per_lb ?? null, cell: r => money(C(r).price_per_lb) },
+      { k: 'cl', l: 'Contract lbs', num: true, v: r => C(r).contract_lbs ?? null, cell: r => C(r).contract_lbs == null ? null : Number(C(r).contract_lbs).toLocaleString() },
+      { k: 'mm', l: 'Monthly min', num: true, v: r => C(r).monthly_min_lbs ?? null, cell: r => C(r).monthly_min_lbs == null ? null : Number(C(r).monthly_min_lbs).toLocaleString() },
+      { k: 'dep', l: 'Deposit', num: true, v: r => C(r).deposit_usd ?? null, cell: r => money(C(r).deposit_usd, 0) },
+      { k: 'lic', l: 'License', v: r => C(r).license, cell: r => C(r).license && <span className="mono">{C(r).license}</span> },
+      { k: 'city', l: 'City', v: r => cityOf(C(r).address) },
+      { k: 'contact', l: 'Contact', v: r => C(r).contact },
+      { k: 'be', l: 'Billing email', v: r => C(r).billing_email, cell: r => C(r).billing_email && <span className="trunc">{C(r).billing_email}</span> },
+      { k: 'qbo', l: 'QuickBooks name', v: r => C(r).qbo_name },
+    ]
+  }
+  if (list === 'vehicles') {
+    const V = (r: ListRow) => r as Vehicle
+    return [
+      { k: 'name', l: 'Vehicle', v: r => r.name, cell: r => <><b>{r.name}</b>{!r.active && <span className="muted"> · retired</span>}</> },
+      { k: 'spaces', l: 'Spaces', num: true, v: r => V(r).spaces ?? null },
+      { k: 'across', l: 'Across', num: true, v: r => V(r).across ?? null },
+      { k: 'owner', l: 'Owner', v: r => V(r).owner },
+      { k: 'kind', l: 'Kind', v: r => V(r).kind },
+      { k: 'plate', l: 'Plate', v: r => V(r).plate, cell: r => V(r).plate && <span className="mono">{V(r).plate}</span> },
+      { k: 'notes', l: 'Notes', v: r => V(r).notes, cell: r => V(r).notes && <span className="trunc">{V(r).notes}</span> },
+    ]
+  }
+  const S = (r: ListRow) => r as Strain, P = (r: ListRow) => profiles.get(r.id)
+  const n = (x: unknown, d = 1) => { const v = r1(x, d); return v == null ? null : Number(v) }
+  const STAT: Record<string, string> = { pallets: 'pallets', sl: 'sl', hc: 'hc', y: 'yield', ro: 'rooting', cu: 'cuts', hv: 'harvest' }
+  const all: TCol[] = [
+    { k: 'name', l: 'Strain', v: r => r.name, cell: r => { const ph = P(r)?.set?.photo_url
+      return <span className="stcell">{ph ? <img className="sthumb sm" src={ph} alt="" loading="lazy" /> : <span className="sthumb sm init" style={{ background: S(r).color || `hsl(${hueOf(r.name)} 35% var(--thumb-l))` }}>{initials(r.name)}</span>}<b>{r.name}</b></span> } },
+    { k: 'code', l: 'Code', v: r => S(r).code ?? null, cell: r => S(r).code && <span className="pill">{S(r).code}</span> },
+    { k: 'status', l: 'Status', v: r => !r.active ? 'Retired' : S(r).trial ? 'Trial' : S(r).show_on_menu === false ? 'Hidden' : 'On menu',
+      cell: r => !r.active ? <span className="pill">Retired</span> : <>{S(r).trial && <span className="pill s-trial">Trial</span>} {S(r).show_on_menu === false ? <span className="pill">Hidden</span> : <span className="pill p-res">On menu</span>}</> },
+    { k: 'pallets', l: 'Pallets', num: true, v: r => palletsOf(S(r), inv) || null },
+    { k: 'sl', l: 'Solventless %', num: true, v: r => n(P(r)?.set?.solventless_pct) },
+    { k: 'hc', l: 'Hydrocarbon %', num: true, v: r => n(P(r)?.set?.hydrocarbon_pct) },
+    { k: 'y', l: 'Lbs / plant', num: true, v: r => n(eff(P(r), 'yield_lbs_plant'), 2) },
+    { k: 'ro', l: 'Rooting %', num: true, v: r => n(eff(P(r), 'rooting_pct'), 0) },
+    { k: 'cu', l: 'Cuts / plant', num: true, v: r => n(eff(P(r), 'cuts_per_plant'), 0) },
+    { k: 'hv', l: 'Harvest', v: r => (eff(P(r), 'harvest_mmdd') as string | null) ?? null, cell: r => { const h = eff(P(r), 'harvest_mmdd'); return h ? `~${mmdd(h as string)}` : null } },
+    { k: 'aka', l: 'Other names', v: r => S(r).aliases?.join(', ') || null, cell: r => S(r).aliases?.length ? <span className="trunc muted">{S(r).aliases.join(', ')}</span> : null },
+  ]
+  // the stat columns follow the module's order (Nursery: rooting and cuts first, Sales: pallets and yields first, as the cards did)
+  const ord = STAT_ORDER[focus], rank = (x: TCol) => (STAT[x.k] ? ord.indexOf(STAT[x.k]) + 3 : x.k === 'aka' ? 99 : ['name', 'code', 'status'].indexOf(x.k))
+  return all.map((x, i) => ({ x, i })).sort((a, b) => (rank(a.x) < 0 ? 50 + a.i : rank(a.x)) - (rank(b.x) < 0 ? 50 + b.i : rank(b.x))).map(z => z.x)
+}
+function SetTable({ list, rows, terms, profiles, inv, focus, onOpen }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void }) {
+  const cols = setCols(list, terms, profiles, inv, focus)
+  const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: 'name', dir: 1 })
+  const c = cols.find(x => x.k === sort.k) ?? cols[0]
+  const sorted = [...rows].sort((a, b) => {
+    const x = c.v(a), y = c.v(b)
+    if (x == null && y == null) return 0
+    if (x == null) return 1
+    if (y == null) return -1
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })) * sort.dir
+  })
+  if (!rows.length) return <p className="muted">None.</p>
+  return (
+    <div className="cwrap settable-w"><table className="ctable settable">
+      <thead><tr>{cols.map((x, i) => <th key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''}`} aria-sort={sort.k === x.k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+        <button onClick={() => setSort(s => ({ k: x.k, dir: s.k === x.k ? (-s.dir as 1 | -1) : 1 }))}>{x.l}{sort.k === x.k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>)}</tr></thead>
+      <tbody>{sorted.map(r => <tr key={r.id} className={`tap ${r.active ? '' : 'retired'}`} tabIndex={0} onClick={() => onOpen(r)} onKeyDown={e => { if (e.key === 'Enter') onOpen(r) }}>
+        {cols.map((x, i) => { const v = x.cell ? x.cell(r) : x.v(r); return <td key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''}`}>{v == null || v === '' || v === false ? <span className="muted">—</span> : typeof v === 'number' ? v.toLocaleString() : v}</td> })}
+      </tr>)}</tbody>
+    </table></div>
+  )
+}
+
 const r1 = (x: unknown, d = 1) => (x == null ? null : String(Math.round(Number(x) * 10 ** d) / 10 ** d))
 /** the order strain numbers show in, per module (first ones matter most there) */
 const STAT_ORDER: Record<StrainFocus, string[]> = {
@@ -344,35 +421,6 @@ const initials = (n: string) => (n.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/
 const hueOf = (n: string) => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
 
 /** one strain in the Settings list: photo (or initials), name and tags, then the numbers that matter in this module */
-function StrainRow({ s, p, pallets, focus, onOpen }: { s: Strain; p: StrainProfile | undefined; pallets: number; focus: StrainFocus; onOpen: () => void }) {
-  const photo = p?.set?.photo_url
-  const st: Record<string, ReactNode> = {}
-  st.pallets = pallets ? <><b>{pallets}</b> pallet{pallets === 1 ? '' : 's'}</> : <span className="none">none on hand</span>
-  const sl = r1(p?.set?.solventless_pct); if (sl) st.sl = <><b>{sl}%</b> solventless</>
-  const hc = r1(p?.set?.hydrocarbon_pct); if (hc) st.hc = <><b>{hc}%</b> hydrocarbon</>
-  const y = r1(eff(p, 'yield_lbs_plant'), 2); if (y) st.yield = <><b>{y}</b> lbs/plant</>
-  const ro = r1(eff(p, 'rooting_pct'), 0); if (ro) st.rooting = <><b>{ro}%</b> rooting</>
-  const cu = r1(eff(p, 'cuts_per_plant'), 0); if (cu) st.cuts = <><b>{cu}</b> cuts/plant</>
-  const hv = eff(p, 'harvest_mmdd'); if (hv) st.harvest = <>harvest <b>~{mmdd(hv as string)}</b></>
-  const stats = STAT_ORDER[focus].filter(k => st[k] != null)
-  const bg = s.color || `hsl(${hueOf(s.name)} 35% var(--thumb-l))`
-  return (
-    <button className={`strow ${s.active ? '' : 'retired'}`} onClick={onOpen}>
-      {photo ? <img className="sthumb" src={photo} alt="" loading="lazy" /> : <span className="sthumb init" style={{ background: bg }}>{initials(s.name)}</span>}
-      <span className="grow">
-        <span className="stname"><b>{s.name}</b>
-          {s.code && <span className="pill" title="Strain code">{s.code}</span>}
-          {s.trial && <span className="pill s-trial">Trial</span>}
-          {s.show_on_menu === false && s.active && <span className="pill">Hidden</span>}
-          {!s.active && <span className="pill">Retired</span>}
-          {s.aliases?.length ? <span className="muted stalias">also: {s.aliases.join(', ')}</span> : null}
-        </span>
-        <span className="ststats">{stats.map((k, i) => <span key={k}>{i > 0 && <span className="sep"> · </span>}{st[k]}</span>)}</span>
-      </span>
-      <span className="chev" aria-hidden="true">›</span>
-    </button>
-  )
-}
 
 /** the folds a list splits into: [key, title, rows] */
 function groupsOf(list: ListName, rows: ListRow[], inv: Map<string, number>): [string, string, ListRow[]][] {
@@ -389,13 +437,6 @@ function groupsOf(list: ListName, rows: ListRow[], inv: Map<string, number>): [s
   return [['main', TITLES[list], rows.filter(r => r.active)], ['retired', 'Retired', rows.filter(r => !r.active)]]
 }
 
-function summary(list: ListName, r: ListRow, inv: Map<string, number>) {
-  if (list === 'vehicles') { const v = r as Vehicle; return [v.spaces ? `${v.spaces} spaces (${v.across ?? 2} across)` : '', v.owner, v.kind, v.plate].filter(Boolean).join(' · ') }
-  if (list === 'customers') { const c = r as Customer; return [c.kind === 'internal' ? 'Internal' : 'External', c.kind === 'external' ? (c.reserves_enabled ? 'Reserves on' : 'Menu only') : '', c.price_per_lb != null ? `$${Number(c.price_per_lb).toFixed(2)}/lb` : '', c.license, c.contact].filter(Boolean).join(' · ') }
-  const s = r as Strain
-  const n = [s.name, ...(s.aliases ?? [])].reduce((a, x) => a + (inv.get(x) ?? [...inv.entries()].find(([k]) => k.toLowerCase() === x.toLowerCase())?.[1] ?? 0), 0)
-  return [s.trial ? 'Trial strain' : '', s.show_on_menu === false ? 'Hidden from menu' : '', n ? `${n} pallet${n === 1 ? "" : "s"} in inventory` : 'none in inventory', s.aliases?.length ? `also: ${s.aliases.join(', ')}` : ''].filter(Boolean).join(' · ')
-}
 
 export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers }: {
   list: ListName; row: Partial<ListRow>; busy: boolean; onClose: () => void; onSave: (r: Partial<ListRow>) => void; extra?: React.ReactNode
