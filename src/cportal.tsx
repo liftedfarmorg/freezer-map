@@ -301,8 +301,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : null}</span> }
   // phones: the same colored grade chip (SHO teal, BHO gold) and gray type chip as the desktop columns, small and inline
   const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpair')}>{g && <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> : null }
-  // order screens are tight: grade over type in one narrow column
-  const stackCell = (s: string) => { const { g, t } = tagOf(s); return <span className={c('tagcell tagstack')}>{g && <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> }
+  const lastOrd = useMemo(() => { const m: Record<string, string> = {}
+    for (const o of d?.orders ?? []) { if (o.status === 'draft' || o.status === 'cancelled' || !o.order_date) continue
+      for (const l of o.order_lines) { const k = l.strain.toLowerCase().trim(); if (!m[k] || o.order_date > m[k]) m[k] = o.order_date } }
+    return m }, [d])
+  const lastOrdTxt = (s: string) => { const v = lastOrd[s.toLowerCase().trim()]; return v ? `Last ordered ${shortDate(v)}` : 'Not ordered before' }
   const gradeN = (s: string) => ({ SHO: 1, BHO: 2 } as Record<string, number>)[tagOf(s).g ?? ''] ?? 9
   const typeN = (s: string) => TYPE_ORDER[tagOf(s).t ?? ''] ?? 9
 
@@ -1103,7 +1106,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const sub = l.resLeft ? <>{fmt(l.resLeft)} reserve + {fmt(l.open)} open</> : l.hold ? <span style={{ color: 'var(--gold)' }}>incl. {fmt(l.hold)} held for you</span> : null
     const unpick = () => { const o = { ...ord }; delete o[l.k]; setOrd(o); const s = { ...smp }; delete s[l.k]; setSmp(s); const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) }
     const head = <div className={c('mg')}>
-      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s} {tagPill(l.s)}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}</div>
+      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s} {tagPill(l.s)}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}<p className={c('meta')} style={{ margin: '1px 0 0', fontSize: 12 }}>{lastOrdTxt(l.s)}</p></div>
       <b className={c('num mg-a')}>{fmt(sp.max)}</b>
       <div style={{ textAlign: 'right' }}>{picked ? <button className={c('linkish')} style={{ color: 'var(--red)' }} onClick={unpick}>Remove</button>
         : <button className={c('outline-btn')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+ Add</button>}</div></div>
@@ -1165,13 +1168,13 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const setQ0 = (k: string, n: number) => { if (n > 0) setOrd({ ...ord, [k]: n }); else clearLine(k) }
     const money0 = (l: OLine, qv: number) => { const p0 = priceOf(l.y, l.s); return qv > 0 && p0 != null ? money(qv * p0) : '' }
     const label = oTot.bad ? 'Fix the red lines' : editing ? 'Review changes' : 'Review order'
-    const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'g', <>Grade<br />Type</>)}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
+    const head = (last: string) => <div className={c('odt head')}>{sh('ores', 's', 'Strain')}{sh('ores', 'g', 'Grade')}{sh('ores', 't', 'Type')}{sh('ores', 'res', 'Reserved')}{sh('ores', 'ful', 'Fulfilled')}{sh('ores', 'so', 'Open SO')}{sh('ores', 'rem', 'Remaining')}{sh('ores', 'open', <>Open menu<br />available</>)}<span>{last}</span><span>Amount</span></div>
     const line = (l: OLine) => {
       const r = resRow(l.k), qv = ord[l.k] ?? 0, sp = lineSplit(l, qv), isSmp = !!smp[l.k], e = qv && !isSmp ? lineError(l, qv) : ''
       const split = qv > 0 && !e && !not10(qv) ? <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} open menu</span>}</> : null
       return <div key={l.k} className={c(`odt ${qv && !isSmp ? (e ? 'bad' : 'on') : ''}`)}>
-        <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
-        {stackCell(l.s)}
+        <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}<span className={c('lastord')}>{lastOrdTxt(l.s)}</span>{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
+        {gradeCell(l.s)}{typeCell(l.s)}
         {r?.res ? <><span>{fmt(r.res)}</span><span>{fmt(r.ful)}</span><span>{fmt(r.so)}</span><b>{fmt(r.rem)}</b></> : <><span className={c('muted')}>–</span><span className={c('muted')}>–</span><span className={c('muted')}>–</span><span className={c('muted')}>–</span></>}
         <span className={c('muted')}>{fmt(l.open)}</span>
         <span>{isSmp ? <span className={c('muted')} style={{ fontSize: 13 }}>In samples ↓</span>
@@ -1185,8 +1188,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       const e = qv ? lineError(l, qv) || (isSmp ? holdError(l, qv, hq) : '') : ''
       const split = qv > 0 && !e ? <>{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held for you</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} from open menu</span>}</> : null
       return <div key={l.k} className={c(`oom ${qv ? (e ? 'bad' : 'on') : ''}`)}>
-        <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && !qv && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}{isSmp && <span className={c('chip c-wait')}>Sample</span>}{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
-        {stackCell(l.s)}
+        <span className={c('rmname')}>{l.s} {yrTag(l.y)} {l.hold > 0 && !qv && <span className={c('chip c-wait')}>{fmt(l.hold)} held for you</span>}<span className={c('lastord')}>{lastOrdTxt(l.s)}</span>{isSmp && <span className={c('chip c-wait')}>Sample</span>}{e ? <span className={c('rmerr')} title={e}>{e}</span> : split && <span className={c('rowchips')}>{split}</span>}</span>
+        {gradeCell(l.s)}{typeCell(l.s)}
         <span className={c('muted')}>{fmt(l.open)}</span>
         <span><AdjStepper plain what="to order" val={qv} step={isSmp ? 10 : rmStep} min={0} max={sp.max} bad={!!lineError(l, qv) && qv > 0} label={l.s} onChange={n => setQ0(l.k, n)} /></span>
         <span>{canSmp && <input type="checkbox" className={c('smpchk')} checked={isSmp} aria-label={`Order ${l.s} as a sample`}
@@ -1220,7 +1223,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             </section>}
             <section className={c('card')}>
               <div className={c('dcard-h')}><h2>From the open menu</h2><span className={c('meta')} style={{ margin: 0 }}>Tick Sample to try a strain first. If you like it, we hold it for you for {d?.holdDays ?? 10} days after the sample ships.</span></div>
-              <div className={c('oom head')}>{sh('oom', 's', 'Strain')}{sh('oom', 'g', <>Grade<br />Type</>)}{sh('oom', 'open', <>Open menu<br />available</>)}<span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
+              <div className={c('oom head')}>{sh('oom', 's', 'Strain')}{sh('oom', 'g', 'Grade')}{sh('oom', 't', 'Type')}{sh('oom', 'open', <>Open menu<br />available</>)}<span>Order lbs</span><span>Sample</span><span>Hold if you like it</span><span>Amount</span></div>
               {others.length ? others.map(openLine) : <p className={c('meta')} style={{ padding: '12px 18px', margin: 0 }}>{oq ? 'Nothing on the open menu matches.' : 'Nothing open on the menu right now.'}</p>}
             </section>
           </div>

@@ -651,3 +651,21 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-note.cp-ylock svg { vertical-align: -3px; }
 .cp .cp-note.cp-ylock .cp-btn { height: 40px; font-size: 15px; color: var(--teal-dk); border-color: var(--teal-dk); }
 .cp .cp-note.cp-ylock svg { width: 18px; height: 18px; }
+/* desktop New order: Grade and Type as their own columns (like Home and Reserves & Menu), last-order note under each strain */
+.cp-desk .cp-odt { grid-template-columns: minmax(150px, 1fr) 46px 46px 76px 76px 76px 88px 92px 150px 86px; }
+.cp-desk .cp-oom { grid-template-columns: minmax(150px, 1fr) 46px 46px 110px 172px 80px 172px 92px; }
+@media (max-width: 1599px) {
+  .cp-desk .cp-odt { grid-template-columns: minmax(120px, 1fr) 44px 42px 56px 60px 56px 66px 66px 104px 72px; }
+  .cp-desk .cp-oom { grid-template-columns: minmax(120px, 1fr) 44px 42px 76px 104px 56px 104px 72px; }
+}
+.cp-desk .cp-odt > :nth-child(7) { text-align: right; }
+.cp-desk .cp-odt > :nth-child(9) { text-align: center; }
+.cp-desk .cp-oom > :nth-child(3) { text-align: center; }
+.cp-desk .cp-oom > :nth-child(4) { text-align: right; }
+.cp-desk .cp-oom > :nth-child(5), .cp-desk .cp-oom > :nth-child(6), .cp-desk .cp-oom > :nth-child(7) { text-align: center; }
+.cp-desk .cp-odt.cp-head > :nth-child(3), .cp-desk .cp-oom.cp-head > :nth-child(3) { justify-content: center; text-align: center; }
+.cp-desk .cp-oom.cp-head > :nth-child(4) { justify-content: flex-end; }
+.cp-desk .cp-odt > .cp-tagcell, .cp-desk .cp-oom > .cp-tagcell { text-align: center; }
+.cp-desk .cp-odt .cp-gtag, .cp-desk .cp-odt .cp-ttag, .cp-desk .cp-oom .cp-gtag, .cp-desk .cp-oom .cp-ttag { font-size: 10px; padding: 0 6px; line-height: 16px; }
+.cp-desk .cp-odt > .cp-rmname, .cp-desk .cp-oom > .cp-rmname { flex-wrap: wrap; row-gap: 1px; }
+.cp .cp-lastord { flex-basis: 100%; font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
