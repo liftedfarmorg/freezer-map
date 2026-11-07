@@ -1458,8 +1458,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const rows = sortRows('yres', yStrains.filter(x => (!ql || x.s.toLowerCase().includes(ql)) && (menuYear === 'all' || x.y === menuYear) && (gradeF === 'all' || tagOf(x.s).g === gradeF)),
       { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1, g: x => gradeN(x.s) })
     const tot = yAgg(rows.flatMap(x => x.runs))
-    const maxHash = Math.max(1, ...rows.map(x => x.hashPct ?? 0))
-    const bar = (v: number | null) => <span className={c('ybar')}><b>{pct(v)}</b>{v != null && <i style={{ width: Math.max(4, Math.round(v / maxHash * 80)) }} />}</span>
     const runList = (x: YStrain) => <div className={c('yruns')}>
       {desk && <div className={c('yrun head')}><span>Order</span><span>FF run</span><span>Process</span><span>Hash / BHO</span><span>Rosin</span><span>Notes</span></div>}
       {x.runs.map((r, i) => <div key={i} className={c('yrun')}>
@@ -1511,7 +1509,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                 {rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                   return <Fragment key={key}><button className={c(`yres ${open ? 'on' : ''}`)} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
                     <span className={c('rmname')}>{x.s} {tagPill(x.s)} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
-                    {bar(x.hashPct)}<b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b><span className={c('muted')}>{open ? I.up : I.down}</span></button>
+                    <b style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b><span className={c('muted')}>{open ? I.up : I.down}</span></button>
                     {open && runList(x)}</Fragment> })}
               </> : rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
                 return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('li btnrow')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
@@ -1549,6 +1547,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {UNITS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
     }
     const filled = yDraft.filter(yDone).length
+    const overOf = (l: YieldLine) => Math.round((l.parts.reduce((a, p) => a + (p.ff ?? 0), 0) - l.shipped) * 100) / 100
+    const over = yDraft.filter(l => overOf(l) > 0)
     return (
       <div className={c('screen yform')}>
         <header className={c('hdr')}>{back('yields', 'Yields')}<h1>Yields · {x.o.label}</h1>
@@ -1557,10 +1557,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <p className={c('meta yhint')}>Pick <b>Hash</b> (tick <b>Rosin</b> if you pressed it) or <b>BHO</b>. Enter amounts in grams, kg or lbs, or pick <b>%</b>: hash and BHO % are of the fresh frozen, rosin % is of the hash. Ran a strain two ways? Use <b>+ Split this strain</b>.</p>
           {desk && <div className={c('yhead')}><span>Strain</span><span>Process</span><span>Fresh frozen run</span><span>Hash / BHO</span><span>Rosin</span><span /></div>}
           {yDraft.map((l, i) => { const used = l.parts.reduce((a, p) => a + (p.ff ?? 0), 0), left = Math.round((l.shipped - used) * 100) / 100
-            return <section key={l.s + l.y} className={c(`card ycard ${yDone(l) ? 'done' : ''}`)}>
+            return <section key={l.s + l.y} className={c(`card ycard ${left < 0 ? 'bad' : yDone(l) ? 'done' : ''}`)}>
               <div className={c('ybody')}>
                 <div className={c('ystrain')}><p className={c('name')}>{l.s} {tagPill(l.s)} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
-                  {l.parts.length > 1 && <p className={c('meta')} style={{ color: left < 0 ? 'var(--red)' : undefined }}>{left === 0 ? 'All lbs accounted for' : left > 0 ? `${fmt(left)} lbs not in a part yet` : `${fmt(-left)} lbs more than shipped`}</p>}</div>
+                  {left < 0 ? <p className={c('err')} style={{ margin: '4px 0 0' }}>{fmt(-left)} lbs more than shipped. Lower the fresh frozen run{l.parts.length > 1 ? 's' : ''} to {fmt(l.shipped)} lbs or less.</p>
+                    : l.parts.length > 1 && <p className={c('meta')}>{left === 0 ? 'All lbs accounted for' : `${fmt(left)} lbs not in a part yet`}</p>}</div>
                 <div className={c('yparts')}>
                   {l.parts.map((p, pi) => { const k = yCalc(p)
                     return <div key={pi} className={c(`ypart ${l.parts.length > 1 ? 'split' : ''}`)}>
@@ -1579,14 +1580,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                         <span className={c('yout')}>{k.rosinOfHash != null || k.rosinOfFF != null ? <>{k.rosinOfHash != null && <><b>{pct(k.rosinOfHash)}</b> of hash</>}{k.rosinOfHash != null && k.rosinOfFF != null ? ' · ' : ''}{k.rosinOfFF != null && <>{pct(k.rosinOfFF)} of FF</>}</> : ' '}</span></>}</div>
                       <div className={c('ycell yx')}>{l.parts.length > 1 && <button className={c('iconbtn')} aria-label={`Remove part ${pi + 1}`} onClick={() => { setL(i, { parts: l.parts.filter((_, z) => z !== pi) }); setYTxt({}) }}>{I.close}</button>}</div>
                     </div> })}
-                  <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. some to hash, some to BHO)' : ''}</button>
+                  <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. multiple runs, or some to hash, some to BHO)' : ''}</button>
                 </div>
               </div>
               <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => setL(i, { note: e.target.value })} /></label>
             </section> })}
         </main>
         <div className={c('dock white')}><button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>
-          <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || filled === 0} onClick={() => saveYields(true)}>{filled === 0 ? 'Fill in a strain' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>
+          <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || filled === 0 || over.length > 0} title={over.length ? `More lbs than shipped: ${over.map(l => l.s).join(', ')}` : undefined}
+            onClick={() => saveYields(true)}>{over.length ? (desk ? `Fix the red line${over.length > 1 ? 's' : ''} (more than shipped)` : 'Fix the red lines') : filled === 0 ? 'Fill in a strain' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>
       </div>
     )
   }

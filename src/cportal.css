@@ -605,7 +605,7 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-yx { padding-top: 6px; }
 .cp-desk .cp-yx:empty { display: block; }
 .cp-desk .cp-yform .cp-main { max-width: 1120px; }
-.cp-desk .cp-yres { grid-template-columns: minmax(170px, 1fr) 48px 80px 150px 90px 90px 90px 18px; }
+.cp-desk .cp-yres { grid-template-columns: minmax(170px, 1fr) 56px 90px 100px 100px 100px 100px 18px; }
 .cp-desk .cp-yrun { grid-template-columns: 170px 70px 110px 190px 210px minmax(0, 1fr); }
 .cp-desk .cp-yhead { grid-template-columns: 150px 104px 112px minmax(0, 1fr) minmax(0, 1fr) 32px; column-gap: 12px; }
 .cp-desk .cp-ybody { grid-template-columns: 150px minmax(0, 1fr); column-gap: 12px; }
@@ -615,3 +615,4 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-yform .cp-main { max-width: 980px; }
 .cp-desk .cp-yrun { grid-template-columns: 150px 64px 104px 170px 190px minmax(120px, 1fr); }
 .cp .cp-ysplit { text-align: left; }
+.cp .cp-ycard.cp-bad { box-shadow: inset 0 0 0 1.5px var(--red); background: #fffafb; }
