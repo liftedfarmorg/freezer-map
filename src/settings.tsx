@@ -225,6 +225,18 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       setGrow({ moms: new Set(((m.data ?? []) as { strain: string }[]).map(r => lc(r.strain))), field: new Set(pl.map(r => lc(r.strain))) })
     }).catch(() => {})
   }, [])
+  // customer balances: QuickBooks' balance when production is connected, else the app's open invoices
+  const [bal, setBal] = useState<Map<number, number>>(new Map())
+  useEffect(() => {
+    if (!lists.includes('customers') || !sb) return
+    Promise.all([sb.from('acct_customer_balances').select('customer_id,balance').eq('env', 'production'), sb.from('invoices').select('customer_id,total').eq('status', 'open')]).then(([q, i]) => {
+      const m = new Map<number, number>()
+      const qb = (q.data ?? []) as { customer_id: number; balance: number | null }[]
+      if (qb.length) qb.forEach(r => { if (r.balance != null) m.set(r.customer_id, Number(r.balance)) })
+      else ((i.data ?? []) as { customer_id: number; total: number }[]).forEach(r => m.set(r.customer_id, (m.get(r.customer_id) ?? 0) + Number(r.total)))
+      setBal(m)
+    }).catch(() => {})
+  }, [])
   useEffect(() => { if (lists.includes('customers')) backend.paymentTerms().then(t => setTerms(t.filter(x => x.active))).catch(() => {}) }, [])
   const [carriers, setCarriers] = useState<{ id: number; name: string; license_no: string | null }[]>([])
   useEffect(() => { if (lists.includes('customers')) sb?.rpc('pickup_carriers').then(({ data }) => setCarriers((data ?? []) as { id: number; name: string; license_no: string | null }[]), () => {}) }, [])
@@ -352,11 +364,11 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       {groupsOf(tab, shown, inventoryStrains).map(([gk, gl, gr]) => gr.length > 0 && (
         <Fold key={gk} id={`set.${tab}.${gk}`} title={gl} count={gr.length} open={gk === 'main'} force={!!q}>
           <SetTable list={tab} rows={gr.filter(r => tab !== 'customers' || gk !== 'main' || ordF === 'all' || ((r as Customer).reserves_enabled ? 'res' : 'menu') === ordF)}
-            terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} />
+            terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} bal={bal} sel={edit?.id ?? null} />
         </Fold>
       ))}
 
-      {edit && <EditForm list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
+      {edit && <EditForm key={`${tab}-${edit.id ?? 'new'}`} list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
         tabExtra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' ? {
           contract: canTerms ? <TermsByYear backend={backend} c={edit as Customer} /> : null,
           logins: <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} /> } : undefined}
@@ -380,15 +392,16 @@ export type StrainFocus = 'dist' | 'sales' | 'cult' | 'nurs'
 const palletsOf = (s: Strain, inv: Map<string, number>) =>
   [s.name, ...(s.aliases ?? [])].reduce((a, x) => a + (inv.get(x) ?? [...inv.entries()].find(([k]) => k.toLowerCase() === x.toLowerCase())?.[1] ?? 0), 0)
 // ---------- settings lists as sortable tables (restyle, Msg 285) ----------
-type TCol = { k: string; l: string; num?: boolean; v: (r: ListRow) => string | number | null | undefined; cell?: (r: ListRow) => ReactNode }
+type TCol = { k: string; l: string; num?: boolean; slim?: boolean; v: (r: ListRow) => string | number | null | undefined; cell?: (r: ListRow) => ReactNode }
 const money = (v: unknown, d = 2) => (v == null ? null : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`)
 const cityOf = (a: string | null) => { const p = (a ?? '').split(',').map(x => x.trim()); return p.length >= 3 ? p[p.length - 2] : null }
-function setCols(list: ListName, terms: { code: string; label: string }[], profiles: Map<number, StrainProfile>, inv: Map<string, number>, focus: StrainFocus): TCol[] {
+function setCols(list: ListName, terms: { code: string; label: string }[], profiles: Map<number, StrainProfile>, inv: Map<string, number>, focus: StrainFocus, bal?: Map<number, number>): TCol[] {
   if (list === 'customers') {
     const C = (r: ListRow) => r as Customer
     return [
       { k: 'name', l: 'Customer', v: r => r.name, cell: r => <><b>{r.name}</b>{!r.active && <span className="muted"> · retired</span>}</> },
-      { k: 'ord', l: 'Ordering', v: r => C(r).kind === 'internal' ? 'Internal' : C(r).reserves_enabled ? 'Reserves on' : 'Menu only',
+      { k: 'bal', l: 'Balance', num: true, slim: true, v: r => bal?.get(r.id!) ?? null, cell: r => bal?.has(r.id!) ? money(bal.get(r.id!)) : null },
+      { k: 'ord', l: 'Ordering', slim: true, v: r => C(r).kind === 'internal' ? 'Internal' : C(r).reserves_enabled ? 'Reserves on' : 'Menu only',
         cell: r => C(r).kind === 'internal' ? <span className="pill">Internal</span> : <span className={`pill ${C(r).reserves_enabled ? 'p-res' : ''}`}>{C(r).reserves_enabled ? 'Reserves on' : 'Menu only'}</span> },
       { k: 'terms', l: 'Terms', v: r => { const c = C(r).payment_terms; return c ? terms.find(t => t.code === c)?.label ?? c : null } },
       { k: 'price', l: '$ / lb', num: true, v: r => C(r).price_per_lb ?? null, cell: r => money(C(r).price_per_lb) },
@@ -442,10 +455,10 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     nurs: ['ro', 'cu', 'type', 'lin', 'nur'],
   }
   const keep = ['name', 'code', 'status', ...BY[focus]]
-  return keep.map(k => all.find(x => x.k === k)!).filter(Boolean)
+  return keep.map(k => all.find(x => x.k === k)!).filter(Boolean).map(x => (x.k === 'code' || x.k === 'type' ? { ...x, slim: true } : x))
 }
-function SetTable({ list, rows, terms, profiles, inv, focus, onOpen }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void }) {
-  const cols = setCols(list, terms, profiles, inv, focus)
+function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, sel }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; sel?: number | null }) {
+  const cols = setCols(list, terms, profiles, inv, focus, bal)
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: 'name', dir: 1 })
   const c = cols.find(x => x.k === sort.k) ?? cols[0]
   const sorted = [...rows].sort((a, b) => {
@@ -457,11 +470,11 @@ function SetTable({ list, rows, terms, profiles, inv, focus, onOpen }: { list: L
   })
   if (!rows.length) return <p className="muted">None.</p>
   return (
-    <div className="cwrap settable-w"><table className="ctable settable">
-      <thead><tr>{cols.map((x, i) => <th key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''}`} aria-sort={sort.k === x.k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+    <div className="cwrap settable-w"><table className="ctable settable slimmable">
+      <thead><tr>{cols.map((x, i) => <th key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''} ${i === 0 || x.slim ? 'slim' : ''}`} aria-sort={sort.k === x.k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
         <button onClick={() => setSort(s => ({ k: x.k, dir: s.k === x.k ? (-s.dir as 1 | -1) : 1 }))}>{x.l}{sort.k === x.k ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>)}</tr></thead>
-      <tbody>{sorted.map(r => <tr key={r.id} className={`tap ${r.active ? '' : 'retired'}`} tabIndex={0} onClick={() => onOpen(r)} onKeyDown={e => { if (e.key === 'Enter') onOpen(r) }}>
-        {cols.map((x, i) => { const v = x.cell ? x.cell(r) : x.v(r); return <td key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''}`}>{v == null || v === '' || v === false ? <span className="muted">—</span> : typeof v === 'number' ? v.toLocaleString() : v}</td> })}
+      <tbody>{sorted.map(r => <tr key={r.id} className={`tap ${r.active ? '' : 'retired'} ${sel != null && r.id === sel ? 'sel' : ''}`} tabIndex={0} onClick={() => onOpen(r)} onKeyDown={e => { if (e.key === 'Enter') onOpen(r) }}>
+        {cols.map((x, i) => { const v = x.cell ? x.cell(r) : x.v(r); return <td key={x.k} className={`${x.num ? 'num' : ''} ${i === 0 ? 'pin' : ''} ${i === 0 || x.slim ? 'slim' : ''}`}>{v == null || v === '' || v === false ? <span className="muted">—</span> : typeof v === 'number' ? v.toLocaleString() : v}</td> })}
       </tr>)}</tbody>
     </table></div>
   )
@@ -564,7 +577,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
   const tabs = [['overview', 'Overview'], ['billing', 'Billing'], ['shipping', 'Shipping'], ['contract', 'Contract and terms'], ...(tabExtra?.logins ? [['logins', 'Portal logins']] : [])]
   return (
     <div className="scrim" onClick={onClose}>
-      <div className={`sheet form ${isCust || list === 'strains' ? 'big' : ''}`} onClick={e => e.stopPropagation()}>
+      <div className={`sheet form ${isCust || list === 'strains' ? 'big side' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="sheet-h"><h2>{row.id ? (String(row.name ?? '') || `Edit ${SINGULAR[list]}`) : `Add ${SINGULAR[list]}`}</h2><button className="ghost" onClick={onClose}>✕</button></div>
         {isCust ? <>
           <nav className="ftabs">{tabs.map(([k, l]) => <button key={k} className={ctab === k ? 'on' : ''} onClick={() => setCtab(k)}>{l}</button>)}</nav>

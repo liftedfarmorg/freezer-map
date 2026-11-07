@@ -146,7 +146,7 @@ export default function ProcessingView({ backend, flash, tab, go, isAdmin, canEd
       {tab === 'dashboard' && <Dashboard c={c} go={go} />}
       {tab === 'inbound' && <Inbound c={c} />}
       {tab === 'incoming' && <Drying c={c} />}
-      {tab === 'runs' && <Runs c={c} onStart={k => setStartKind({ kind: k })} />}
+      {tab === 'runs' && <Runs c={c} sel={run?.id ?? null} onStart={k => setStartKind({ kind: k })} />}
       {tab === 'crew' && sb && <CrewTab sb={sb} runs={d.runs.filter(r => !simple(r.kind)) as RunLite[]} flash={flash} canEdit={canEdit} isAdmin={isAdmin} onOpenRun={(id, date) => { const r = d.runs.find(x => x.id === id); if (r) c.openRun(r, date) }} />}
       {tab === 'orders' && <Orders c={c} />}
       {tab === 'inventory' && <Inventory c={c} />}
@@ -449,7 +449,7 @@ function PutAwaySheet({ c, p, sb, onClose }: { c: Ctx; p: Pallet; sb: ReturnType
 }
 
 // ---------- Runs ----------
-function Runs({ c, onStart }: { c: Ctx; onStart: (k: Run['kind']) => void }) {
+function Runs({ c, onStart, sel }: { c: Ctx; onStart: (k: Run['kind']) => void; sel?: number | null }) {
   const [f, setF] = useState<'open' | 'done' | 'all'>('open')
   const rows = c.d.runs.filter(r => f === 'all' ? r.status !== 'cancelled' : r.status === f)
   return (
@@ -458,11 +458,11 @@ function Runs({ c, onStart }: { c: Ctx; onStart: (k: Run['kind']) => void }) {
         {c.canEdit && <div className="row"><button className="primary" onClick={() => onStart('buck')}>+ Bucking</button><button className="primary" onClick={() => onStart('sort')}>+ Sorting</button><button className="primary" onClick={() => onStart('trim')}>+ Trimming</button><button className="primary" onClick={() => onStart('machine')}>+ Machine trim</button></div>}</div>
       <div className="seg">{([['open', `Being worked (${c.d.runs.filter(r => r.status === 'open').length})`], ['done', 'Done'], ['all', 'All']] as const).map(([k, l]) =>
         <button key={k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>{l}</button>)}</div>
-      {!rows.length ? <p className="muted">{f === 'open' ? 'Nothing being worked. Start a bucking or trimming run when the crew starts on a lot.' : 'No runs yet.'}</p> : <div className="cwrap"><table className="ctable">
-        <thead><tr><th>Run</th><th>Strain</th><th className="num">In</th><th className="num">Out</th><th className="num hide-s">Mold</th><th className="num">Moisture / diff.</th><th>Dates</th></tr></thead>
-        <tbody>{rows.map(r => <tr key={r.id} className="tap" onClick={() => c.openRun(r)}>
-          <td><b>{r.code}</b> <span className="muted">{KIND[r.kind]}</span></td><td>{r.strain} <span className="muted">{r.crop_year ?? ''}</span></td>
-          <td className="num">{n0(r.input_lbs)}</td><td className="num">{r.status === 'done' ? n0(r.output_lbs) : ''}</td><td className="num hide-s">{r.status === 'done' ? n0(r.mold_lbs) : ''}</td>
+      {!rows.length ? <p className="muted">{f === 'open' ? 'Nothing being worked. Start a bucking or trimming run when the crew starts on a lot.' : 'No runs yet.'}</p> : <div className="cwrap"><table className="ctable slimmable">
+        <thead><tr><th className="slim">Run</th><th className="slim">Strain</th><th className="num slim">In</th><th className="num">Out</th><th className="num hide-s">Mold</th><th className="num">Moisture / diff.</th><th>Dates</th></tr></thead>
+        <tbody>{rows.map(r => <tr key={r.id} className={`tap ${sel === r.id ? 'sel' : ''}`} onClick={() => c.openRun(r)}>
+          <td className="slim"><b>{r.code}</b> <span className="muted">{KIND[r.kind]}</span></td><td className="slim">{r.strain} <span className="muted">{r.crop_year ?? ''}</span></td>
+          <td className="num slim">{n0(r.input_lbs)}</td><td className="num">{r.status === 'done' ? n0(r.output_lbs) : ''}</td><td className="num hide-s">{r.status === 'done' ? n0(r.mold_lbs) : ''}</td>
           <td className="num">{r.status === 'done' ? <>{n0(r.loss_lbs)} <span className="muted">{pct(r.loss_lbs ?? 0, r.input_lbs ?? 0)}</span></> : ''}</td>
           <td className="nowrap small">{fmtD(r.started_on)}{r.finished_on ? ` – ${fmtD(r.finished_on)}` : r.status === 'open' ? ' · working' : ''}</td></tr>)}</tbody>
       </table></div>}
@@ -562,11 +562,11 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
     setBusy(true)
     try { await c.api.cancelRun(run.id); c.flash(`${run.code} cancelled`); await c.reload(); onClose() } catch (e) { c.flash(errText(e), true) } finally { setBusy(false) }
   }
-  if (logDate && c.sb) return <Sheet wide title={`${run.code} · ${KIND[run.kind]} · crew`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''}`} onClose={onClose}>
+  if (logDate && c.sb) return <Sheet wide side title={`${run.code} · ${KIND[run.kind]} · crew`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''}`} onClose={onClose}>
     <button className="ghost small backrun" onClick={() => setLogDate(null)}>← Back to the run</button>
     <RunDayLog sb={c.sb} run={run as RunLite} date0={logDate} flash={c.flash} canEdit={c.canEdit} onSaved={loadCrew} />
   </Sheet>
-  return <Sheet wide title={`${run.code} · ${KIND[run.kind]}`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''} · started ${fmtD(run.started_on)}${run.finished_on ? ` · done ${fmtD(run.finished_on)}` : ''}${run.status === 'cancelled' ? ' · cancelled' : ''}`} onClose={onClose}>
+  return <Sheet wide side title={`${run.code} · ${KIND[run.kind]}`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''} · started ${fmtD(run.started_on)}${run.finished_on ? ` · done ${fmtD(run.finished_on)}` : ''}${run.status === 'cancelled' ? ' · cancelled' : ''}`} onClose={onClose}>
     {req && <div className="infobox">For trim request: {n0(req.lbs)} lbs {REQ_PRODUCT[req.product]}{req.due_on ? ` by ${fmtD(req.due_on)}` : ''}{req.customer_id ? ` · ${d.customers.find(x => x.id === req.customer_id)?.name}` : ''}</div>}
     <h3 className="csec">In <span className="muted">{n0(inp)} lbs{run.kind === 'buck' ? ' wet, on paper' : ''}</span></h3>
     <div className="dlist">{ins.map(({ i, p }) => <button key={i.id} className="drow linkrow" onClick={() => p && c.openPkg(p)}>
