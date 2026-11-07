@@ -1424,8 +1424,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   // ---------- yields (mockup) ----------
   // A strain on an order can be split into parts: some fresh frozen washed to hash (and maybe pressed to rosin), some run to BHO.
   const G_PER: Record<YUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0, '%ff': 0 }
-  const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '% of FF']]
-  const ROSIN_UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kg'], ['lb', 'lbs'], ['%', '% of hash'], ['%ff', '% of FF']]
+  const UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kgs'], ['lb', 'lbs'], ['%', '% of FF']]
+  const ROSIN_UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kgs'], ['lb', 'lbs'], ['%', '% of hash'], ['%ff', '% of FF']]
   const newPart = (ff: number | null): YPart => ({ bho: false, rosin: true, ff, outV: null, outU: 'g', rosinV: null, rosinU: 'g' })
   // shipped orders made in the app, newest first, with their report (if any)
   const yOrders = useMemo(() => (d?.yields ? orows.filter(o => o.status === 'shipped' && o.order && o.order.order_lines.length) : [])
