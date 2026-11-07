@@ -729,6 +729,9 @@ export default function App() {
   const openLoads = (snap.loads ?? []).filter(l => ['planning', 'loading', 'in_transit'].includes(l.status))
   const heldBy = new Map<number, FOrder>()
   for (const o of forders ?? []) if (o.state !== 'shipped') for (const l of o.lines) for (const pk of l.picks) heldBy.set(pk.pallet_id, o)
+  // Msg 327: the customer(s) a pallet is held or loaded for; a mixed pallet goes by the packages on it
+  const custOne = (id: number) => heldBy.get(id)?.customer ?? (ix.loadOf.has(id) ? (snap.customers ?? []).find(c => c.id === ix.loadOf.get(id)!.stop.customer_id)?.name : undefined)
+  const custFor = (id: number) => { const names = [...new Set([custOne(id), ...(ix.contentsOf.get(id) ?? []).map(k => custOne(k.id))].filter(Boolean) as string[])]; return names.length ? names.join(', ') : undefined }
   const toFulfill = (forders ?? []).filter(o => o.state === 'open' || o.state === 'ready').length
   const canonOf = (() => { const m = new Map<string, string>(); for (const st of snap.strains ?? []) for (const n of [st.name, ...(st.aliases ?? [])]) m.set(n.toLowerCase(), st.name.toLowerCase()); return (x: string | null | undefined) => { const k = (x ?? '').trim().toLowerCase(); return m.get(k) ?? k } })()
   const ctx: LoadCtx = {
@@ -1135,7 +1138,7 @@ export default function App() {
         )}
         {view === 'freezer' && freezerId != null && (
           <FreezerView ix={ix} L={L!} plan={plan} freezer={ix.freezer.get(freezerId)!} query={query} placing={!!placing}
-            custFor={id => heldBy.get(id)?.customer ?? (ix.loadOf.has(id) ? (snap.customers ?? []).find(c => c.id === ix.loadOf.get(id)!.stop.customer_id)?.name : undefined)}
+            custFor={custFor}
             selecting={selecting} sel={sel}
             siblings={ix.freezer.get(freezerId)?.kind === 'trailer' ? siteTrailers : siteFreezers}
             onOpen={openFreezer}
@@ -1143,7 +1146,7 @@ export default function App() {
             onSlot={tapSlot}
             onPalletTap={tapPallet}
             onSelect={() => { if (selecting) { setSelecting(false); setSel([]) } else setSelecting(true) }}
-            onOrder={id => heldBy.has(id) || ix.loadOf.has(id)}
+            onOrder={id => heldBy.has(id) || ix.loadOf.has(id) || (ix.contentsOf.get(id) ?? []).some(k => heldBy.has(k.id) || ix.loadOf.has(k.id))}
             onCompact={compact}
             onStatus={(st) => setConfirm({
               text: `Set ${fName(ix.freezer.get(freezerId)!)} to "${st}"?`, ok: 'Update',
