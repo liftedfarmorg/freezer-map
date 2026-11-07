@@ -469,3 +469,40 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .pmp-row .pmp-chg { grid-area: chg; min-width: 0; }
   .pmp-alt .pmp-lbs { min-width: 0; }
 }
+
+/* Msg 296: Settings › Section picker (option C) */
+.setpick-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+.setpick-h h2 { margin: 0; font-size: 22px; }
+.setpick-h h2 .muted { font-weight: 600; }
+.setpick-w { position: relative; }
+.setpick-btn { height: 42px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font: inherit; font-size: 17px; font-weight: 700; color: var(--ink); cursor: pointer; box-shadow: var(--r-shadow); }
+.setpick-btn .muted { font-weight: 500; font-size: 14px; }
+.setpick-menu { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: min(720px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 14px 36px rgb(0 0 0 / .18); padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px 12px; }
+.setpick-g { margin: 6px 8px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.setpick-menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 10px; font: inherit; font-size: 14.5px; color: var(--ink); cursor: pointer; }
+.setpick-menu button:hover { background: var(--bg); }
+.setpick-menu button.on { background: var(--r-teal-bg); color: var(--r-teal-ink); font-weight: 600; }
+.app.shell .modset > .list.settings > .setpick-h, .app.shell .allset .setpick-h { margin-top: 4px; }
+
+/* tick-box chips (a customer's categories, a strain's type and nurseries) */
+.mpick { display: flex; flex-wrap: wrap; gap: 8px; }
+.mpick-b { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.mpick-b i { font-style: normal; width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--muted); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.mpick-b.on { background: var(--r-teal-bg); border-color: var(--r-teal); color: var(--r-teal-ink); }
+.mpick-b.on i { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+
+/* the customer and strain forms: a big centered pop-up on computers, tabs, two columns */
+.ftabs { display: flex; gap: 20px; border-bottom: 1px solid var(--line); margin: 0 0 14px; overflow-x: auto; }
+.ftabs button { flex: none; border: 0; background: none; padding: 10px 2px 12px; font: inherit; font-size: 14.5px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+.ftabs button.on { color: var(--ink); border-bottom-color: var(--r-teal); }
+.fsec { background: var(--bg); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+.sheet.form.big .fgrid { display: grid; gap: 0 18px; }
+@media (min-width: 900px) { .sheet.form.big .fgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sheet.form.big .fgrid > .field:has(textarea) { grid-column: 1 / -1; } }
+.fbar { position: sticky; bottom: -1px; background: var(--panel); padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line); }
+@media (min-width: 1000px) {
+  .app.shell .scrim:has(> .sheet.form.big) { justify-content: center; align-items: center; padding: 24px; background: rgb(0 0 0 / .35); }
+  .app.shell .scrim > .sheet.form.big { width: min(1000px, 100%); max-width: 1000px; height: auto; max-height: calc(100vh - 48px); border-radius: 22px; box-shadow: 0 24px 60px rgb(0 0 0 / .25); padding: 20px 26px; }
+}
+.catlist h3 { margin: 0 0 4px; }
+.catlist .ctable.settable { width: 100%; }

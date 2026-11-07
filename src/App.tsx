@@ -56,6 +56,7 @@ import { LicensesPanel, PURPOSE_LABEL } from './licenses'
 import { TestRows } from './comp/trace'
 import { PackageActions } from './pkgactions'
 import { MetrcWeightRow } from './comp/metrcweight'
+import { CatListPanel, DEFAULT_CATEGORIES, DEFAULT_NURSERIES, NURSERIES_KEY, PRODUCT_CATEGORIES_KEY } from './catlists'
 import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
@@ -845,6 +846,9 @@ export default function App() {
     extra={[{ k: 'locations', l: 'Locations', node: <DistLocations sb={backend.client()} flash={flash} onChanged={() => { reload() }} /> }, { k: 'vehicles', l: 'Vehicles', node: <CompFleet sb={backend.client()} flash={flash} dept="distribution" /> }, { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="distribution" flash={flash} /> }]} />
   const salesSettings = <SettingsView key="sales-set" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Sales settings" focus="sales"
     lists={['customers', 'strains']} canTerms={salesAdmin} extra={[{ k: 'logins', l: 'Customer logins', node: <AllCustomerLogins backend={backend} customers={snap.customers ?? []} flash={flash} /> },
+      { k: 'categories', l: 'Product categories', node: <CatListPanel backend={backend} k={PRODUCT_CATEGORIES_KEY} dflt={DEFAULT_CATEGORIES} title="Product categories" noun="Category" canEdit={salesAdmin} flash={flash}
+        intro="What a customer can be marked as buying (on each customer's Overview). Internal for Sales: used to sort and filter customers. Sales admins add, rename, reorder and remove them."
+        usedBy={c => (snap.customers ?? []).filter(x => (x.product_categories ?? []).includes(c)).length} /> },
       { k: 'terms', l: 'Payment terms', node: <TermsPanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'market', l: 'Market price', node: <MarketPricePanel backend={backend} flash={flash} canEdit={salesAdmin} /> },
       { k: 'contract', l: 'Contract product prices', node: <ContractProductPrices backend={backend} flash={flash} canEdit={salesAdmin} /> },
@@ -853,8 +857,12 @@ export default function App() {
       { k: 'fulfill', l: 'Fulfillment', node: <FillTolerance sb={backend.client()} flash={flash} canEdit={salesAdmin || isAdminOf('dist')} /> },
       { k: 'people', l: 'People', node: <ModulePeople sb={backend.client()} module="sales" flash={flash} /> }]} />
   const cultSettings = <Suspense fallback={<p className="muted">Loading…</p>}><CultView backend={backend} flash={flash} tab="setup" go={setCultTab} onPalletsChanged={() => { reload() }} /></Suspense>
-  const strainSettings = <div className="modset"><SettingsView key="cult-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Strains" lists={['strains']} focus="cult" /></div>
-  const nurStrainSettings = <div className="modset"><SettingsView key="nurs-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Strains" lists={['strains']} focus="nurs" /></div>
+  const strainSettings = <div className="modset"><SettingsView key="cult-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Cultivation" lists={['strains']} focus="cult" extra={[{ k: 'nurseries', l: 'Nurseries', node: <CatListPanel backend={backend} k={NURSERIES_KEY} dflt={DEFAULT_NURSERIES} title="Nurseries" noun="Nursery" canEdit={isAdminOf('cult') || isAdminOf('nurs')} flash={flash}
+    intro="Where our plants come from: our own nursery (1PN) and outside nurseries. Pick them on each strain. Cultivation and Nursery admins edit this list."
+    usedBy={n => (snap.strains ?? []).filter(x => (x.nurseries ?? []).includes(n)).length} /> }]} /></div>
+  const nurStrainSettings = <div className="modset"><SettingsView key="nurs-strains" backend={backend} flash={flash} onChanged={() => { reload() }} inventoryStrains={invStrains} title="Nursery" lists={['strains']} focus="nurs" extra={[{ k: 'nurseries', l: 'Nurseries', node: <CatListPanel backend={backend} k={NURSERIES_KEY} dflt={DEFAULT_NURSERIES} title="Nurseries" noun="Nursery" canEdit={isAdminOf('cult') || isAdminOf('nurs')} flash={flash}
+    intro="Where our plants come from: our own nursery (1PN) and outside nurseries. Pick them on each strain. Cultivation and Nursery admins edit this list."
+    usedBy={n => (snap.strains ?? []).filter(x => (x.nurseries ?? []).includes(n)).length} /> }]} /></div>
   const selWeight = sel.reduce((a, id) => { const p = ix.pallet.get(id); return a + (p ? weightOf(ix, p) : 0) }, 0)
 
   // ---------- navigation: the same shape in every module ----------
