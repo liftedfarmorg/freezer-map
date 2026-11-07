@@ -680,3 +680,24 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 @media (max-width: 999px) {
   .app.shell .scrim { top: var(--vvt, 0px); bottom: auto; height: 100%; height: 100svh; }
 }
+
+/* Msg 323: drag the sidebar's screens into your own order. Dashboard stays first; the 3 under it are your phone bar.
+   The "phone bar" / "More on phone" labels only show while dragging and take no space (no jump). */
+.rail-main { display: flex; flex-direction: column; gap: 2px; }
+.rail-screens .rail-drag { position: relative; display: flex; align-items: center; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.rail-grip { margin-left: auto; color: #7c8780; letter-spacing: -2px; font-size: 13px; opacity: 0; transition: opacity .12s; }
+.rail-screens .rail-drag:hover .rail-grip { opacity: 1; }
+.rail-main.dragging, .rail-main.dragging * { cursor: grabbing !important; user-select: none; }
+.rail-screens .rail-drag.lifted { background: var(--r-teal) !important; color: #10251d !important; box-shadow: 0 8px 22px rgb(0 0 0 / .45); z-index: 2; }
+.rail-screens .rail-drag.lifted .rail-grip { opacity: 1; color: #10251d; }
+.rail-main.dragging .rail-lock { opacity: .55; }
+.rail-main.dragging .zone-bar::before, .rail-main.dragging .zone-more::before {
+  position: absolute; right: 8px; top: -9px; height: 14px; line-height: 14px; padding: 0 6px; border-radius: 7px; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; pointer-events: none; z-index: 3; }
+.rail-main.dragging .zone-bar::before { content: "phone bar"; background: #24352e; color: #7fd1b0; }
+.rail-main.dragging .zone-more::before { content: "more on phone"; background: #3a3436; color: #b9c2bc; }
+.rail-main.dragging .zone-bar::after, .rail-main.dragging .zone-more::after {
+  content: ""; position: absolute; left: 6px; right: 6px; top: -2px; height: 1px; background: #4a4446; pointer-events: none; }
+.rail-main.dragging .zone-bar::after { background: #2f5a49; }
+.rail-screens .rail-reset { margin-top: 4px; font-size: 12.5px !important; color: #7c8780 !important; padding: 4px 12px !important; background: none; }
+.rail-screens .rail-reset:hover { color: #d9dfdb !important; }

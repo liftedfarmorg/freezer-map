@@ -524,6 +524,10 @@ export default function App() {
   const [fErr, setFErr] = useState<string | null>(null)
   const [doc, setDoc] = useState<{ kind: 'invoice' | 'so'; id: number } | null>(null)
   const [newOrder, setNewOrder] = useState(false)
+  // Msg 323: drag the sidebar's screens into your own order (per module, saved to your login). Dashboard stays first; the 3 under
+  // it are the phone bar. menuDrag = the order while a drag is going on; dragRef tracks the press before it becomes a drag.
+  const [menuDrag, setMenuDrag] = useState<{ mod: string; keys: string[]; k: string } | null>(null)
+  const dragRef = useRef<{ k: string; y: number; keys: string[]; mod: string; started: boolean; moved: boolean } | null>(null)
   const [ordersKey, setOrdersKey] = useState(0)
   const refreshF = useCallback(async () => {
     if (!canFulfill) return
@@ -922,7 +926,50 @@ export default function App() {
   // Msg 310: going to another screen closes the app-wide side cards (new order, package) so they don't squeeze the next screen
   const closeSides = () => { setNewOrder(false); setPalletId(null) }
   const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); x.go() } })
-  const nav = { ...NAV[cur], main: NAV[cur].main.map(wrapGo), tail: NAV[cur].tail.map(wrapGo) }
+  const orderMain = (items: NavItem[]): NavItem[] => {
+    if (items.length < 3) return items
+    const [first, ...rest] = items
+    const want = menuDrag && menuDrag.mod === cur ? menuDrag.keys : me?.access?.prefs?.menu_order?.[cur]
+    if (!want?.length) return items
+    const pos = new Map(want.map((k, i) => [k, i]))
+    // screens in the saved order first; screens added since keep their place after them
+    const known = rest.filter(x => pos.has(x.k)).sort((a, b) => pos.get(a.k)! - pos.get(b.k)!), fresh = rest.filter(x => !pos.has(x.k))
+    return [first, ...known, ...fresh]
+  }
+  const nav = { ...NAV[cur], main: orderMain(NAV[cur].main).map(wrapGo), tail: NAV[cur].tail.map(wrapGo) }
+  const saveMenuOrder = (mod: string, keys: string[]) => {
+    const prefs = { ...(me?.access?.prefs ?? {}), menu_order: { ...(me?.access?.prefs?.menu_order ?? {}), [mod]: keys } }
+    setMe(m => m && ({ ...m, access: { ...m.access, prefs } }))
+    backend.setMyPrefs({ menu_order: prefs.menu_order }).catch(e => flash(`Menu order not saved: ${(e as Error).message}`, true))
+  }
+  const resetMenuOrder = () => {
+    const mo = { ...(me?.access?.prefs?.menu_order ?? {}) }; delete mo[cur]
+    setMe(m => m && ({ ...m, access: { ...m.access, prefs: { ...m.access.prefs, menu_order: mo } } }))
+    backend.setMyPrefs({ menu_order: mo }).then(() => flash('Menu back to the standard order')).catch(e => flash((e as Error).message, true))
+  }
+  const railPress = (x: NavItem, e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    const keys = nav.main.slice(1).map(n => n.k)
+    dragRef.current = { k: x.k, y: e.clientY, keys, mod: cur, started: false, moved: false }
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current; if (!d) return
+      if (!d.started && Math.abs(ev.clientY - d.y) > 5) { d.started = true; setMenuDrag({ mod: d.mod, keys: d.keys, k: d.k }) }
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
+      const d = dragRef.current
+      if (d?.started) { setMenuDrag(null); if (d.moved) saveMenuOrder(d.mod, d.keys); setTimeout(() => { dragRef.current = null }, 0) }
+      else dragRef.current = null
+    }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+  }
+  const railEnter = (x: NavItem, i: number) => {
+    const d = dragRef.current
+    if (!d?.started || x.k === d.k || i === 0) return
+    const keys = d.keys.filter(k => k !== d.k); keys.splice(i - 1, 0, d.k)
+    d.keys = keys; d.moved = true; setMenuDrag({ mod: d.mod, keys, k: d.k })
+  }
+  const railClick = (x: NavItem) => { if (dragRef.current?.started) return; x.go() }
   const all = [...nav.main, ...nav.tail]
   // phone bottom bar: module button, the module's first four screens (Scan in the middle in Distribution and Processing)
   const bottomFit = all.slice(0, 4)
@@ -983,7 +1030,13 @@ export default function App() {
           <nav className="rail-screens" aria-label={`${ML(cur)} screens`}>
             <div className="rail-h">{ML(cur).toUpperCase()}</div>
             {canScan && <button className="rail-scan" onClick={() => setScanning(true)}>{SCAN_ICON}<span>{t('Scan a tag')}</span></button>}
-            {nav.main.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
+            <div className={`rail-main ${menuDrag ? 'dragging' : ''}`}>{nav.main.map((x, i) => i === 0
+              ? <button key={x.k} className={`${x.on ? 'on' : ''} rail-lock`} onClick={x.go}>{x.l}</button>
+              : <button key={x.k} className={`${x.on && !menuDrag ? 'on' : ''} rail-drag ${menuDrag?.k === x.k ? 'lifted' : ''} ${i === 1 ? 'zone-bar' : ''} ${i === 4 ? 'zone-more' : ''}`}
+                  title={t('Drag to change your order. The top 3 are your phone bar.')}
+                  onPointerDown={e => railPress(x, e)} onPointerEnter={() => railEnter(x, i)} onClick={() => railClick(x)}>{x.l}<span className="rail-grip" aria-hidden="true">⋮⋮</span></button>)}
+              {me?.access?.prefs?.menu_order?.[cur] && !menuDrag && <button className="rail-reset" onClick={resetMenuOrder}>{t('Reset menu order')}</button>}
+            </div>
             {nav.tail.length > 0 && <div className="rail-sep" />}
             {nav.tail.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={x.go}>{x.l}</button>)}
           </nav>}
