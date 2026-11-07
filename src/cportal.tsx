@@ -612,10 +612,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           {contract ? <section className={c('card')}>
             <div className={c('dcard-h')}><h2>Contract Reserves</h2><button className={c('pillbtn')} style={{ border: 0 }} onClick={() => go('resmenu')}>Open Reserves &amp; Menu</button></div>
             {reserves.length === 0 ? <p className={c('meta')} style={{ padding: 18, margin: 0 }}>No reserves yet. Add strains from the open menu.</p> : <div className={c('hscroll')}>
-              <div className={c('htb head gt')}>{sh('home', 's', 'Strain')}{sh('home', 'g', <>Grade<br />Type</>)}{sh('home', 'res', 'Reserved')}{sh('home', 'ful', 'Fulfilled')}{sh('home', 'so', 'Open SO')}{sh('home', 'rem', 'Remaining')}{sh('home', 'open', <>Open menu<br />available</>)}</div>
-              {sortRows('home', reserves, { g: r => gradeN(r.s), t: r => typeN(r.s), res: r => r.res, ful: r => r.ful, so: r => r.so, rem: r => r.rem, open: r => menuRow(r.k)?.open ?? 0 }).map(r => <div key={r.k} className={c('htb gt')}><span className={c('rmname')}>{r.s} {yrTag(r.y)} {r.asked != null && <span className={c('chip c-wait')}>{r.res ? `Asked ${fmt(r.asked)}` : `New · asked ${fmt(r.asked)}`} · waiting</span>}</span>{stackCell(r.s)}
+              <div className={c('htb head gt')}>{sh('home', 's', 'Strain')}{sh('home', 'g', 'Grade')}{sh('home', 't', 'Type')}{sh('home', 'res', 'Reserved')}{sh('home', 'ful', 'Fulfilled')}{sh('home', 'so', 'Open SO')}{sh('home', 'rem', 'Remaining')}{sh('home', 'open', <>Open menu<br />available</>)}</div>
+              {sortRows('home', reserves, { g: r => gradeN(r.s), t: r => typeN(r.s), res: r => r.res, ful: r => r.ful, so: r => r.so, rem: r => r.rem, open: r => menuRow(r.k)?.open ?? 0 }).map(r => <div key={r.k} className={c('htb gt')}><span className={c('rmname')}>{r.s} {yrTag(r.y)} {r.asked != null && <span className={c('chip c-wait')}>{r.res ? `Asked ${fmt(r.asked)}` : `New · asked ${fmt(r.asked)}`} · waiting</span>}</span>{gradeCell(r.s)}{typeCell(r.s)}
                 <span>{r.res ? fmt(r.res) : '–'}</span><span className={c('dim')}>{fmt(r.ful)}</span><span className={c('dim')}>{fmt(r.so)}</span><b>{fmt(r.rem)}</b><span className={c('dim')}>{fmt(menuRow(r.k)?.open ?? 0)}</span></div>)}
-              <div className={c('htb total gt')}><b>Total · {plural(reserves.length, 'strain')}</b><span /><b>{fmt(totals.res)}</b><span className={c('dim')}>{fmt(dt.ful)}</span><span className={c('dim')}>{fmt(dt.so)}</span><b style={{ color: 'var(--teal-ink)' }}>{fmt(dt.rem)}</b><span /></div>
+              <div className={c('htb total gt')}><b>Total · {plural(reserves.length, 'strain')}</b><span /><span /><b>{fmt(totals.res)}</b><span className={c('dim')}>{fmt(dt.ful)}</span><span className={c('dim')}>{fmt(dt.so)}</span><b style={{ color: 'var(--teal-ink)' }}>{fmt(dt.rem)}</b><span /></div>
             </div>}
             {gap > 0 && <p className={c('meta')} style={{ padding: '10px 18px 14px', margin: 0 }}>{fmt(gap)} lbs of your {fmt(contracted)} lb contract aren't reserved to a strain yet. <button className={c('linkish')} style={{ minWidth: 0, textAlign: 'left', display: 'inline' }} onClick={() => go('menu')}>Add to Reserves</button></p>}
           </section> : <section className={c('card')}>
@@ -758,7 +758,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   function sidebar() {
-    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0], ['yields', 'Yields', !!d?.yields]]
+    const nav: [Screen, string, boolean][] = [['home', 'Home', true], ['resmenu', 'Reserves & Menu', contract], ['yields', 'Yields', !!d?.yields], ['orders', 'Orders & Statement', true], ['contract', 'My Contract', contract], ['activity', 'Reserve History', contract && !!d?.acts.length], ['holds', 'Sample Holds', liveHolds.length > 0]]
     const group: Partial<Record<Screen, Screen>> = { edit: 'resmenu', reserves: 'resmenu', reqReview: 'resmenu', sent: 'resmenu', order: 'order', review: 'order', ordered: 'order', yield: 'yields' }
     const on = group[screen] ?? screen
     return (
