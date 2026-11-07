@@ -360,3 +360,6 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .list.archived table.arch td:last-child .row { flex-wrap: nowrap; gap: 6px; }
 .list.archived table.arch tr:hover td { background: color-mix(in srgb, var(--brand) 4%, var(--panel)); }
 .list.archived .search { flex: 1 1 260px; max-width: 420px; }
+
+/* any screen with a table gets the full width instead of the 720px reading column (Msg 289) */
+.app.shell .list:has(table) { max-width: none; }
