@@ -1,5 +1,6 @@
 -- 296 (restyle-preview, Msg 296): customer product categories, strain lineage and nurseries, and the two pick lists.
--- NOT RUN YET. Run in Supabase before the restyle branch is merged to main.
+-- RUN LIVE 11/6 by Claude in the SQL Editor (Aziz OK, Msg 297). Safe to re-run.
+begin;
 alter table customers add column if not exists product_categories text[] not null default '{}';
 alter table strains add column if not exists lineage text;
 alter table strains add column if not exists nurseries text[] not null default '{}';
@@ -29,3 +30,5 @@ begin
 end $$;
 revoke all on function set_list_setting(text, jsonb) from public, anon;
 grant execute on function set_list_setting(text, jsonb) to authenticated;
+
+commit;

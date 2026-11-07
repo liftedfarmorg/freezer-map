@@ -214,16 +214,15 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const [pickOpen, setPickOpen] = useState(false)
   const [catF, setCatF] = useState('')
   const [where, setWhere] = useState<'all' | 'inv' | 'nurs' | 'field' | 'out'>('all')
-  // strains in the nursery (active mothers) and in the field (this crop year's plantings, with their nursery)
-  const [grow, setGrow] = useState<{ moms: Set<string>; field: Set<string>; outside: Set<string> } | null>(null)
+  // strains in the nursery (active mothers) and in the field (this crop year's plantings). Outside nurseries = the strain card's Nurseries.
+  const [grow, setGrow] = useState<{ moms: Set<string>; field: Set<string> } | null>(null)
   useEffect(() => {
     if (!lists.includes('strains') || !sb) return
     const y = new Date().getFullYear()
-    Promise.all([sb.from('nursery_mothers').select('strain').eq('status', 'active'), sb.from('cult_plantings').select('strain,nursery').gte('crop_year', y)]).then(([m, p]) => {
+    Promise.all([sb.from('nursery_mothers').select('strain').eq('status', 'active'), sb.from('cult_plantings').select('strain').gte('crop_year', y)]).then(([m, p]) => {
       const lc = (x: string) => x.trim().toLowerCase()
-      const pl = (p.data ?? []) as { strain: string; nursery: string | null }[]
-      setGrow({ moms: new Set(((m.data ?? []) as { strain: string }[]).map(r => lc(r.strain))), field: new Set(pl.map(r => lc(r.strain))),
-        outside: new Set(pl.filter(r => r.nursery && !/^1PN$/i.test(r.nursery.trim())).map(r => lc(r.strain))) })
+      const pl = (p.data ?? []) as { strain: string }[]
+      setGrow({ moms: new Set(((m.data ?? []) as { strain: string }[]).map(r => lc(r.strain))), field: new Set(pl.map(r => lc(r.strain))) })
     }).catch(() => {})
   }, [])
   useEffect(() => { if (lists.includes('customers')) backend.paymentTerms().then(t => setTerms(t.filter(x => x.active))).catch(() => {}) }, [])
@@ -242,7 +241,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
     : where === 'inv' ? palletsOf(r as Strain, inventoryStrains) > 0
     : where === 'nurs' ? names(r).some(n => grow?.moms.has(n))
     : where === 'field' ? names(r).some(n => grow?.field.has(n))
-    : ((r as Strain).nurseries ?? []).some(x => !/^1PN$/i.test(x)) || names(r).some(n => grow?.outside.has(n))
+    : ((r as Strain).nurseries ?? []).some(x => !/^1PN$/i.test(x.trim()))
   const shown = rows.filter(r => (showRetired || r.active) && inWhere(r) && (tab !== 'customers' || !catF || ((r as Customer).product_categories ?? []).includes(catF))
     && (!q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())))
 
