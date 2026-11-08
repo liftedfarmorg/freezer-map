@@ -334,7 +334,9 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .loadview .tpos.empty { border-style: dashed; background: transparent; }
 .loadview .row.actions { position: sticky; bottom: 0; z-index: 3; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
   padding: 10px 0; border-top: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
-@media (max-width: 767px) { .loadview .row.actions { bottom: calc(64px + env(safe-area-inset-bottom)); } .lv-title h2 { font-size: 22px; } }
+/* PICK-11: on phones the page scrolls inside .app.shell, whose bottom padding (80px + safe area) already clears the 65px bottom menu,
+   so the bar sits 15px below that edge to land right on the menu (it used to float ~110px up, over the stop card) */
+@media (max-width: 767px) { .loadview .row.actions { bottom: -15px; } .lv-title h2 { font-size: 22px; } }
 
 /* Msg 288: stops keep their own color, but only on the number and a soft tint; no thick colored edges. Status pills in the brand family. */
 .loadview .stopcard { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--sc) 4%, var(--panel)); }
