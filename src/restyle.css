@@ -720,3 +720,11 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .app.shell .scrim > .sheet.form:has(> .fbar) > * { flex: none; }
 .app.shell .scrim > .sheet.form > .fbar { margin-top: auto; }
 @media (min-width: 1000px) { .app.shell .scrim > .sheet.form.side:has(> .fbar) { padding-bottom: 0; } }
+
+/* Msg 334: on iPhones a swipe on an open card (pallet card, etc.) sometimes went to the page behind it, so the card would not
+   scroll. On phones and tablets the page behind a card is now locked while the card is open, and reaching the end of a card
+   no longer carries on into the page. Computers (side cards with the page usable on the left) are unchanged. */
+@media (max-width: 999px) {
+  .app.shell:has(.scrim) { overflow: hidden; }
+}
+.scrim > .sheet { overscroll-behavior: contain; }
