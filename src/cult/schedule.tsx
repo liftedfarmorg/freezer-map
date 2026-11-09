@@ -29,7 +29,8 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
   // drag a planned harvest to reorder (desktop): it takes the date of the row it's dropped next to, and its place in that day
   const drag = useRef<number | null>(null)
   const [drop, setDrop] = useState<{ id: number; after: boolean } | null>(null)
-  const canDrag = mode === 'upcoming' && !sel.on
+  const canDrag = mode !== 'done' && !sel.on   // HS-1: drag and the row date picker work in All and Coming up (they only touch planned harvests)
+  const [bulkDate, setBulkDate] = useState<{ ids: number[]; v: string | null } | null>(null)
   // phones / tablets: drag by the ⠿ handle (pointer events), with the page scrolling near the top or bottom edge
   const [dragging, setDragging] = useState<number | null>(null)
   const scrollTimer = useRef<number | null>(null)
@@ -43,7 +44,10 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
     }
     stopScroll()
     const edge = 70, v = y < edge ? -14 : y > window.innerHeight - edge ? 14 : 0
-    if (v) scrollTimer.current = window.setInterval(() => window.scrollBy(0, v), 30)
+    // HS-1: scroll whatever actually scrolls (on phones and tablets that's the app frame, not the window)
+    const sc = (() => { let e: HTMLElement | null = (document.querySelector('tr[data-hid]') as HTMLElement | null)?.parentElement ?? null
+      while (e) { const o = getComputedStyle(e).overflowY; if (/auto|scroll/.test(o) && e.scrollHeight > e.clientHeight) return e; e = e.parentElement } return null })()
+    if (v) scrollTimer.current = window.setInterval(() => { if (sc) sc.scrollTop += v; else window.scrollBy(0, v) }, 30)
   }
   async function move(id: number, target: Harvest, after: boolean) {
     const h = rows.find(x => x.id === id)
@@ -122,7 +126,7 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
                           onPointerMove={e => { if (drag.current !== h.id) return; touchOver(e.clientX, e.clientY) }}
                           onPointerUp={() => { const t = drop, id = drag.current; drag.current = null; setDragging(null); setDrop(null); stopScroll(); const tgt = t && rows.find(x => x.id === t.id); if (id != null && tgt) move(id, tgt, t!.after) }}
                           onPointerCancel={() => { drag.current = null; setDragging(null); setDrop(null); stopScroll() }}>⠿</span>}</td>}
-                        <td className="nowrap">{mode === 'upcoming' && h.status === 'planned'
+                        <td className="nowrap">{h.status === 'planned' && !sel.on
                           ? <span className="cdatew" onClick={e => e.stopPropagation()}><b className="cdow">{h.planned_on ? new Date(`${h.planned_on}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' }) : ''}</b><input type="date" className="cdate" value={h.planned_on ?? ''} aria-label={`${h.strain} harvest date`}
                               onChange={e => { const v = e.target.value || null; if (v !== h.planned_on) bulk(() => api.save<Harvest>('cult_harvests', { id: h.id, planned_on: v }), `${h.strain} moved to ${fmtD(v, true)}`)() }} /></span>
                           : fmtD(h.planned_on, true)}{h.status === 'done' && h.harvested_on && h.harvested_on !== h.planned_on && <div className="muted small">cut {fmtD(h.harvested_on)}</div>}</td>
@@ -147,10 +151,18 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
         </div>
       )}
       <SelBar sel={sel} noun="harvest" actions={[
+        { label: 'Change date', run: async ids => setBulkDate({ ids, v: null }) },
         { label: 'Cancel harvests', run: async ids => bulk(() => api.updateMany('cult_harvests', ids, { status: 'cancelled' }), `${ids.length} cancelled`)() },
         { label: 'Back to planned', run: async ids => bulk(() => api.updateMany('cult_harvests', ids, { status: 'planned' }), `${ids.length} back to planned`)() },
         { label: 'Delete', danger: true, run: async ids => bulk(() => api.removeMany('cult_harvests', ids), `Deleted ${ids.length} harvests`)() }]} />
-      <p className="cnote">Drag a planned harvest up or down to reorder it (on a phone, by its ⠿ handle); dropped next to another day's harvest, it takes that day. Lbs are fresh frozen estimates (plants × lbs/plant) until a harvest is logged, then what came in (✓). People = man-hours ÷ the site's work day. Dry ice is for fresh frozen, ordered the Wednesday the week before.</p>
+      {bulkDate && <Sheet title={`Change date · ${bulkDate.ids.length} harvest${bulkDate.ids.length === 1 ? '' : 's'}`} onClose={() => setBulkDate(null)}>
+        <F label="New harvest date"><DateIn value={bulkDate.v} onChange={v => setBulkDate({ ...bulkDate, v })} /></F>
+        <p className="cnote">Moves every selected harvest to this day. Harvests already logged keep their date.</p>
+        <div className="row"><button className="ghost" onClick={() => setBulkDate(null)}>Cancel</button>
+          <button className="primary" disabled={!bulkDate.v} onClick={async () => { const ids = bulkDate.ids.filter(id => d.harvests.find(x => x.id === id)?.status !== 'done'); const v = bulkDate.v; setBulkDate(null); sel.stop()
+            await bulk(() => api.updateMany('cult_harvests', ids, { planned_on: v }), `${ids.length} moved to ${fmtD(v, true)}`)() }}>Move</button></div>
+      </Sheet>}
+      <p className="cnote">Drag a planned harvest up or down to reorder it (on a phone or tablet, by its ⠿ handle); dropped next to another day's harvest, it takes that day. To pick any date, use the date in its row, or select several and Change date. Lbs are fresh frozen estimates (plants × lbs/plant) until a harvest is logged, then what came in (✓). People = man-hours ÷ the site's work day. Dry ice is for fresh frozen, ordered the Wednesday the week before.</p>
     </>
   )
 }
