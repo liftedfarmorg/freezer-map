@@ -138,7 +138,7 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
                 {(['all', 'res', 'not'] as const).map(f => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f === 'res' ? 'Reserved' : 'Not reserved'}</button>)}</div>
               <input className="search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
               {loading ? <p className="muted">Loading reserves and the open menu…</p> : !shown.length ? <p className="muted">Nothing here{q ? ` for "${q}"` : ''}.</p> :
-                <div className="no-twrap"><table className="ctable no-table ar-table"><thead><tr><th>Strain</th><th className="num">Reserved</th><th className="num">Fulfilled</th><th className="num">Open SO</th><th className="num">Remaining</th><th className="num">Open menu</th><th className="num">New total</th></tr></thead>
+                <div className="no-twrap"><table className="ctable no-table ar-table"><thead><tr><th>Strain</th><th className="num">Reserved</th><th className="num">Fulfilled</th><th className="num">Open SO</th><th className="num">Remaining</th><th className="num">Open menu</th><th className="num">New<br />total</th></tr></thead>
                   <tbody>{shown.map(r => { const v = ed[r.key] ?? '', x = changes.find(z => z.r.key === r.key)
                     return <tr key={r.key} className={x ? (x.err ? 'bad' : 'on') : ''}>
                       <td className="c-n"><b>{r.strain}</b>{!r.has && x && <> <span className="pill">New</span></>}{x?.err && <div className="warn-t small">{x.err}</div>}</td>
