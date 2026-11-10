@@ -30,14 +30,14 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
   const [group, setGroup] = useState<Group>('ff')
   const [year, setYear] = useState<number | 'all'>('all')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<{ col: 's' | 'y' | 'p' | 'open' | 'price' | 'g' | 't'; dir: number }>({ col: 's', dir: 1 })
+  const [sort, setSort] = useState<{ col: 's' | 'y' | 'p' | 'open' | 'price' | 'g' | 't' | 'sho' | 'bho'; dir: number }>({ col: 's', dir: 1 })
   const [open, setOpen] = useState<MenuLine | null>(null)
   const inGroup = rows.filter(r => (group === 'ff' ? r.product === 'FF' : r.product !== 'FF') && r.open_lbs > 0)
   const years = useMemo(() => [...new Set(inGroup.map(r => r.crop_year))].sort((a, b) => b - a), [rows, group])
   const ql = q.trim().toLowerCase()
   const list = inGroup.filter(r => (year === 'all' || r.crop_year === year) && (!ql || r.strain.toLowerCase().includes(ql)))
   const byName = (a: MenuLine, b: MenuLine) => a.strain.localeCompare(b.strain) || b.crop_year - a.crop_year || a.product.localeCompare(b.product)
-  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : sort.col === 'g' ? ({ SHO: 1, BHO: 2 } as Record<string, number>)[r.grade ?? ''] ?? 9 : sort.col === 't' ? TORDER[tShort(r) ?? ''] ?? 9 : 0
+  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : sort.col === 'g' ? ({ SHO: 1, BHO: 2 } as Record<string, number>)[r.grade ?? ''] ?? 9 : sort.col === 't' ? TORDER[tShort(r) ?? ''] ?? 9 : sort.col === 'sho' ? Number(r.sho ?? r.sho_high ?? -1) : sort.col === 'bho' ? Number(r.bho ?? r.bho_high ?? -1) : 0
   const sorted = [...list].sort((a, b) => sort.col === 's' ? sort.dir * byName(a, b) : sort.col === 'p' ? sort.dir * a.product.localeCompare(b.product) || byName(a, b) : sort.dir * (val(a) - val(b)) || byName(a, b))
   const total = list.reduce((t, r) => t + r.open_lbs, 0)
   const allTotal = inGroup.reduce((t, r) => t + r.open_lbs, 0)
@@ -48,6 +48,9 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
       onClick={() => setSort({ col, dir: on ? -sort.dir : col === 's' || col === 'p' ? 1 : -1 })}>{label}<i aria-hidden="true">{on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button>
   }
   const dry = group === 'df'
+  // YLD-11: SHO / BHO yield columns on fresh frozen, only once at least one strain on it has a yield entered
+  const hasY = (r: MenuLine) => r.sho != null || r.sho_high != null || r.bho != null || r.bho_high != null
+  const showY = !dry && inGroup.some(hasY), yl = showY ? ' yl' : ''
   const price = (r: MenuLine) => r.price != null ? `$${Number(r.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : <a className="om-call" href={`mailto:${SALES}`} onClick={e => e.stopPropagation()}>Call/Email</a>
   return <div className={`om om-${variant}`}>
     <div className="om-kpis">
@@ -64,16 +67,18 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
         <input className="om-search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
       </div>
       <div className="om-scroll">
-        <div className={`om-row om-head ${dry ? 'dry' : ''}`}>{sh('s', 'Strain')}{!dry && <span className="om-tc">{sh('g', 'Grade')}</span>}<span className="om-tc">{sh('t', 'Type')}</span>{dry && sh('p', 'Product')}{sh('y', 'Crop year')}{sh('open', 'Available (lbs)')}{sh('price', 'Price / lb')}</div>
+        <div className={`om-row om-head ${dry ? 'dry' : ''}${yl}`}>{sh('s', 'Strain')}{!dry && <span className="om-tc">{sh('g', 'Grade')}</span>}<span className="om-tc">{sh('t', 'Type')}</span>{showY && <><span className="om-tc">{sh('sho', 'SHO yield')}</span><span className="om-tc">{sh('bho', 'BHO yield')}</span></>}{dry && sh('p', 'Product')}{sh('y', 'Crop year')}{sh('open', 'Available (lbs)')}{sh('price', 'Price / lb')}</div>
         {!sorted.length && <p className="om-empty">{inGroup.length ? 'No strains match.' : `No ${GROUP[group].toLowerCase()} on the menu right now.`}</p>}
-        {sorted.map(r => <div key={`${r.product}|${r.strain}|${r.crop_year}`} className={`om-row ${dry ? 'dry' : ''}`}>
-          <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button>{(() => { const t = tShort(r), g = dry ? null : r.grade; return g || t ? <span className="om-tagpill">{[g, t].filter(Boolean).join(' · ')}</span> : null })()}</span>
+        {sorted.map(r => <div key={`${r.product}|${r.strain}|${r.crop_year}`} className={`om-row ${dry ? 'dry' : ''}${yl}`}>
+          <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button>{(() => { const t = tShort(r), g = dry ? null : r.grade; return g || t ? <span className="om-tagpill">{[g, t].filter(Boolean).join(' · ')}</span> : null })()}
+            {showY && hasY(r) && <span className="om-ymob">{[r.sho != null || r.sho_high != null ? `SHO ${yld(r.sho, r.sho_high)}` : '', r.bho != null || r.bho_high != null ? `BHO ${yld(r.bho, r.bho_high)}` : ''].filter(Boolean).join(' · ')}</span>}</span>
           {!dry && <span className="om-tc">{r.grade ? <span className={`om-gtag g-${r.grade.toLowerCase()}`}>{r.grade}</span> : null}</span>}
           <span className="om-tc">{tShort(r) ? <span className="om-ttag" title={r.strain_type ?? ''}>{tShort(r)}</span> : null}</span>
+          {showY && <><span className="om-tc om-dim">{yld(r.sho, r.sho_high)}</span><span className="om-tc om-dim">{yld(r.bho, r.bho_high)}</span></>}
           {dry && <span className="om-dim">{PROD[r.product]}</span>}
           <span className="om-dim">{r.crop_year}</span><b>{fmt(r.open_lbs)}</b><span className="om-price">{price(r)}</span>
         </div>)}
-        {sorted.length > 0 && <div className={`om-row om-total ${dry ? 'dry' : ''}`}><b>Total · {sorted.length} line{sorted.length === 1 ? '' : 's'}</b>{!dry && <span className="om-tc" />}<span className="om-tc" />{dry && <span />}<span /><b className="om-green">{fmt(total)}</b><span /></div>}
+        {sorted.length > 0 && <div className={`om-row om-total ${dry ? 'dry' : ''}${yl}`}><b>Total · {sorted.length} line{sorted.length === 1 ? '' : 's'}</b>{!dry && <span className="om-tc" />}<span className="om-tc" />{showY && <><span className="om-tc" /><span className="om-tc" /></>}{dry && <span />}<span /><b className="om-green">{fmt(total)}</b><span /></div>}
       </div>
     </section>
     <p className="om-note">Available = lbs on hand that aren't reserved or already on a confirmed order. Numbers change as orders and reserves are confirmed.{group === 'ff' ? ' Fresh frozen is sold in 10 lb boxes.' : ''} Prices are per lb and can change.</p>

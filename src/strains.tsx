@@ -1,5 +1,5 @@
 import { ListInput } from './combo'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Fold, isAdminOf } from './fold'
 import { STRAIN_PHOTOS } from './strainPhotos'
@@ -81,32 +81,45 @@ const GROUPS: { m: 'nursery' | 'cultivation' | 'sales'; l: string; fields: Field
 ]
 
 /** the strain sheet's profile: one fold per module; only that module's Admins can override */
-export function StrainProfileEdit({ sb, p, flash, onSaved }: { sb: SupabaseClient | null; p: StrainProfile; flash: (t: string, bad?: boolean) => void; onSaved: () => void }) {
+export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: SupabaseClient | null; p: StrainProfile; flash: (t: string, bad?: boolean) => void; onSaved: () => void
+  /** YLD-12: lets the strain sheet's main Save also save any changed profile fields (they used to be dropped) */
+  saveRef?: { current: null | (() => Promise<boolean>) } }) {
   const [v, setV] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(p.set ?? {}).map(([k, x]) => [k, x == null ? '' : String(x)])))
   const [busy, setBusy] = useState(false)
-  async function save(m: string, fields: Field[]) {
-    if (!sb) return
+  async function save(m: string, fields: Field[], quiet = false): Promise<boolean> {
+    if (!sb) return false
     const vals: Record<string, string | number | null> = {}
     for (const f of fields) {
       const s = (v[f.k] ?? '').trim()
       if (s === String(p.set?.[f.k] ?? '')) continue
-      if (f.k === 'harvest_mmdd' && s && !/^\d{2}-\d{2}$/.test(s)) { flash('Harvest date looks like 10-08 (month-day)', true); return }
-      if (!f.text && s !== '' && !Number.isFinite(Number(s))) { flash(`${f.l}: that's not a number`, true); return }
+      if (f.k === 'harvest_mmdd' && s && !/^\d{2}-\d{2}$/.test(s)) { flash('Harvest date looks like 10-08 (month-day)', true); return false }
+      if (!f.text && s !== '' && !Number.isFinite(Number(s))) { flash(`${f.l}: that's not a number`, true); return false }
       vals[f.k] = s === '' ? null : f.text ? s : Number(s)
     }
     // 325: a low can't be above its high (the database checks too)
     for (const [lo, hi, nm] of [['solventless_pct', 'solventless_high_pct', 'Solventless'], ['hydrocarbon_pct', 'hydrocarbon_high_pct', 'Hydrocarbon']] as const) {
       const a = (v[lo] ?? '').trim(), b = (v[hi] ?? '').trim()
-      if (fields.some(f => f.k === lo) && a !== '' && b !== '' && Number(a) > Number(b)) { flash(`${nm} yield: the low (${a}%) is above the high (${b}%)`, true); return }
+      if (fields.some(f => f.k === lo) && a !== '' && b !== '' && Number(a) > Number(b)) { flash(`${nm} yield: the low (${a}%) is above the high (${b}%)`, true); return false }
     }
-    if (!Object.keys(vals).length) return
+    if (!Object.keys(vals).length) return true
     setBusy(true)
     const { error } = await sb.rpc('set_strain_info', { p_strain: p.id, p_vals: vals })
     setBusy(false)
     if (error) flash(/set_strain_info/.test(error.message) ? 'Run 040_strains_access_pallets.sql in Supabase first'
       : /Unknown strain field \w+_high_pct/.test(error.message) ? 'Run 325_strain_yield_ranges.sql in Supabase first' : error.message, true)
-    else { flash(`${p.name}: ${m} saved`); onSaved() }
+    else { if (!quiet) flash(`${p.name}: ${m} saved`); onSaved() }
+    return !error
   }
+  // YLD-12: every fold this person can change, that has unsaved edits
+  async function saveAll() {
+    for (const g of GROUPS) {
+      if (!isAdminOf(g.m) || !g.fields.some(f => (v[f.k] ?? '').trim() !== String(p.set?.[f.k] ?? ''))) continue
+      if (!(await save(g.l, g.fields, true))) return false
+    }
+    return true
+  }
+  if (saveRef) saveRef.current = saveAll
+  useEffect(() => () => { if (saveRef) saveRef.current = null }, [])
   return <div className="sprofile">
     {GROUPS.map(g => {
       const can = isAdminOf(g.m), dirty = g.fields.some(f => (v[f.k] ?? '') !== String(p.set?.[f.k] ?? ''))

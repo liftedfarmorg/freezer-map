@@ -3,7 +3,7 @@ import { Fold } from './fold'
 import { DEFAULT_CATEGORIES, DEFAULT_NURSERIES, MultiPick, NURSERIES_KEY, PRODUCT_CATEGORIES_KEY, useCatList } from './catlists'
 import { StrainProfileEdit, eff, loadProfiles, mmdd, yieldRange } from './strains'
 import type { StrainProfile } from './strains'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { readSheet } from 'read-excel-file/browser'
 import type { Backend } from './api'
@@ -203,6 +203,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const [q, setQ] = useState('')
   const [showRetired, setShowRetired] = useState(false)
   const [edit, setEdit] = useState<Partial<ListRow> | null>(null)
+  const profSave = useRef<null | (() => Promise<boolean>)>(null)   // YLD-12: StrainProfileEdit's save-all, for the sheet's Save
   const [plan, setPlan] = useState<{ rows: PlanRow[]; found: string[]; file: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [other, setOther] = useState<string | null>(startOn ?? (lists.length ? null : extra?.[0]?.k ?? null))
@@ -287,6 +288,9 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   async function save(row: Partial<ListRow>) {
     setBusy(true)
     try {
+      // YLD-12: the sheet's Save also saves the strain profile folds (yields, spot price, photo, note...); Retire / Restore doesn't
+      const retireOnly = Object.keys(row).every(k => k === 'id' || k === 'active')
+      if (tab === 'strains' && row.id && !retireOnly && profSave.current && !(await profSave.current())) return
       // strain type goes through set_strain_type (it also sets METRC's indica / sativa %), not a plain update
       const st = tab === 'strains' && 'strain_type' in row ? (row as Strain).strain_type ?? null : undefined
       const was = tab === 'strains' ? ((data?.strains ?? []).find(x => x.id === row.id)?.strain_type ?? null) : null
@@ -399,7 +403,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
         extra={tab === 'customers' ? null
           : tab === 'strains' && edit.id != null ? <>
               {sb && <div className="row" style={{ margin: '6px 0 10px' }}><button className="ghost small" onClick={() => { const id = edit.id!; setEdit(null); setMetrcFor({ id, isNew: false }) }}>METRC: strain and items on every license</button></div>}
-              {profiles.get(edit.id) && <StrainProfileEdit sb={backend.client()} p={profiles.get(edit.id)!} flash={flash} onSaved={loadProfilesNow} />}
+              {profiles.get(edit.id) && <StrainProfileEdit sb={backend.client()} p={profiles.get(edit.id)!} flash={flash} onSaved={loadProfilesNow} saveRef={profSave} />}
             </> : null} />}
       {metrcFor && sb && <StrainMetrcSheet sb={sb} strainId={metrcFor.id} isNew={metrcFor.isNew} flash={flash} onClose={() => { setMetrcFor(null); load() }} />}
       {codes && sb && <StrainCodesSheet sb={sb} onClose={() => setCodes(false)} />}

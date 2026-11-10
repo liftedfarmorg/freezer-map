@@ -96,3 +96,11 @@
   .om-row > .om-tc { display: none; }
   .om-tagpill { display: inline-block; margin-left: 6px; vertical-align: 1px; font-size: 10px; font-weight: 700; letter-spacing: .02em; padding: 0 6px; border-radius: 99px; background: var(--om-tint); color: var(--om-muted); white-space: nowrap; }
 }
+
+/* YLD-11: SHO / BHO yield columns (fresh frozen, once any strain has a yield); phones get one small line under the name */
+.om-row.yl { grid-template-columns: minmax(0, 1fr) 64px 54px 92px 92px 84px 130px 100px; }
+.om-ymob { display: none; }
+@media (max-width: 640px) {
+  .om-row.yl { grid-template-columns: minmax(0, 1fr) 54px 84px 70px; }
+  .om-ymob { display: block; font-size: 11px; color: var(--om-muted); font-weight: 500; margin-top: 1px; }
+}
