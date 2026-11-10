@@ -811,7 +811,7 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .rstepset button.on { background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .rstepset input { width: 60px; height: 28px; border-radius: 8px; border: 1px solid var(--line); text-align: center; font: inherit; }
 .rscroll { max-height: 62vh; overflow: auto; border-top: 1px solid var(--line); }
-.rtable { width: 100%; min-width: 900px; }
+.rtable { width: 100%; min-width: 900px; overflow: visible !important; }
 .rtable thead th { position: sticky; top: 0; z-index: 2; background: var(--empty, #f6f8f5); }
 .rtable tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--empty, #f6f8f5); border-top: 2px solid var(--line); font-weight: 600; }
 .rtable th.sortth .linkbtn { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; padding: 0; text-align: inherit; }
