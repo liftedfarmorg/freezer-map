@@ -59,6 +59,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
   const [q, setQ] = useState('')
   const [drafts, setDrafts] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  const [openSub, setOpenSub] = useState<string | null>(null)   // a strain opened inside a customer
   const [sort, setSort] = useState<{ k: SortK; asc: boolean }>({ k: 'lbs', asc: false })
   const [menuNow, setMenuNow] = useState(menu)
 
@@ -105,14 +106,29 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
     flash(`${s}: menu yields updated to the customer average (mockup, nothing saved)`)
   }
 
-  const runTable = (rs: Run[], who: 'customer' | 'strain') => <table className="restable ry-runs"><thead><tr>
-      <th>{who === 'customer' ? 'Customer' : 'Strain'}</th><th>Order</th><th>Process</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th>Notes</th></tr></thead>
+  const runTable = (rs: Run[], who: 'customer' | 'strain' | 'none') => <table className="restable ry-runs"><thead><tr>
+      {who !== 'none' && <th>{who === 'customer' ? 'Customer' : 'Strain'}</th>}<th>Order</th><th>Process</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th>Notes</th></tr></thead>
     <tbody>{[...rs].sort((a, b) => b.r.shippedOn.localeCompare(a.r.shippedOn)).map((x, i) => <tr key={i} className={x.draft ? 'ry-draft' : ''}>
-      <td>{who === 'customer' ? x.r.customer : <>{x.l.s} <span className="ry-yr">{x.l.y}</span></>}{x.draft && <> <span className="pill m-mute">Draft</span></>}</td>
-      <td>{x.r.label}<span className="muted"> · {day(x.r.shippedOn)}</span></td><td>{proc(x.p)}</td><td className="num">{lbs(x.p.ff ?? 0)}</td>
+      {who !== 'none' && <td>{who === 'customer' ? x.r.customer : <>{x.l.s} <span className="ry-yr">{x.l.y}</span></>}{x.draft && <> <span className="pill m-mute">Draft</span></>}</td>}
+      <td>{x.r.label}<span className="muted"> · {day(x.r.shippedOn)}</span>{who === 'none' && x.draft && <> <span className="pill m-mute">Draft</span></>}</td><td>{proc(x.p)}</td><td className="num">{lbs(x.p.ff ?? 0)}</td>
       <td className="num">{x.hashG != null ? pct(x.hashG / x.ffG * 100) : '–'}</td><td className="num">{x.rosinG != null ? pct(x.rosinG / x.ffG * 100) : '–'}</td>
       <td className="num">{x.rosinG != null && x.hashG ? pct1(x.rosinG / x.hashG * 100) : '–'}</td><td className="num">{x.bhoG != null ? pct(x.bhoG / x.ffG * 100) : '–'}</td>
       <td className="ry-note">{x.l.issue && <span className="pill m-warn" title={x.l.issue.text}>{x.l.issue.kinds.join(', ') || 'Issue'}</span>} {x.l.note}</td></tr>)}</tbody></table>
+
+  // inside a customer: one row per strain + crop year (their averages); tap a strain for its runs
+  const custStrains = (ck: string, rs: Run[]) => {
+    const m = new Map<string, Run[]>()
+    for (const x of rs) { const k = x.l.s + '|' + x.l.y; m.set(k, [...(m.get(k) ?? []), x]) }
+    const rows = [...m.entries()].map(([k, xs]) => ({ k: ck + '|' + k, s: xs[0].l.s, y: xs[0].l.y, rs: xs, a: agg(xs), issues: xs.filter(x => x.l.issue).length, draft: xs.every(x => x.draft) }))
+      .sort((a, b) => b.y - a.y || a.s.localeCompare(b.s))
+    return <table className="restable ry-runs ry-cs"><thead><tr><th>Strain</th><th className="num">Runs</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th /></tr></thead>
+      <tbody>{rows.map(x => { const on = openSub === x.k
+        return <Fragment key={x.k}><tr className={`tap ${on ? 'ry-on' : ''} ${x.draft ? 'ry-draft' : ''}`} onClick={e => { e.stopPropagation(); setOpenSub(on ? null : x.k) }}>
+          <td><b>{x.s}</b> <span className="ry-yr">{x.y}</span>{x.draft && <> <span className="pill m-mute">Draft</span></>}{x.issues > 0 && <> <span className="pill m-warn">{x.rs.find(r => r.l.issue)?.l.issue?.kinds.join(', ') || 'Issue'}</span></>}</td>
+          <td className="num">{x.rs.length}</td><td className="num">{lbs(x.a.lbs)}</td><td className="num"><b className="ry-hash">{pct(x.a.hash)}</b></td><td className="num">{pct(x.a.rosinFF)}</td>
+          <td className="num">{pct1(x.a.rosinHash)}</td><td className="num"><b className="ry-bho">{pct(x.a.bho)}</b></td><td className="muted">{on ? '▴' : '▾'}</td></tr>
+          {on && <tr className="ry-sub"><td colSpan={8}>{runTable(x.rs, 'none')}</td></tr>}</Fragment> })}</tbody></table>
+  }
 
   return <div className="ry">
     <div className="row between wrap ry-top"><div><h2>Reported Yields</h2>
@@ -131,7 +147,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
     <div className="row between wrap ry-bar">
       <div className="seg" role="tablist">
         <button className={tab === 'strain' ? 'on' : ''} onClick={() => { setTab('strain'); setOpen(null) }}>By strain</button>
-        <button className={tab === 'customer' ? 'on' : ''} onClick={() => { setTab('customer'); setOpen(null) }}>By customer</button>
+        <button className={tab === 'customer' ? 'on' : ''} onClick={() => { setTab('customer'); setOpen(null); setOpenSub(null) }}>By customer</button>
         <button className={tab === 'issues' ? 'on' : ''} onClick={() => { setTab('issues'); setOpen(null) }}>Issues{issues.length ? ` (${issues.length})` : ''}</button></div>
       <div className="row">
         <select value={String(year)} onChange={e => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))} aria-label="Crop year"><option value="all">All crop years</option>{years.map(y => <option key={y} value={y}>{y} crop</option>)}</select>
@@ -176,7 +192,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
           <td className="num">{x.a.lbs ? lbs(x.a.lbs) : '–'}</td><td className="num"><b className="ry-hash">{pct(x.a.hash)}</b></td><td className="num">{pct(x.a.rosinFF)}</td><td className="num"><b className="ry-bho">{pct(x.a.bho)}</b></td>
           <td className="num">{x.issues || '–'}</td><td className="muted">{x.last ? day(x.last) : 'Never'}</td><td className="muted">{on ? '▴' : '▾'}</td></tr>
           {on && <tr className="ry-detail"><td colSpan={10}>
-            {x.rs.length ? runTable(x.rs, 'strain') : <p className="muted">No runs reported{drafts ? '' : ' (drafts hidden)'}.</p>}
+            {x.rs.length ? custStrains(x.k, x.rs) : <p className="muted">No runs reported{drafts ? '' : ' (drafts hidden)'}.</p>}
             {x.owed.length > 0 && <p className="muted ry-owed">Shipped, not reported yet: {x.owed.map(o => `${o.label} (shipped ${day(o.shippedOn)}, ${o.strains} strain${o.strains > 1 ? 's' : ''})`).join(' · ')}</p>}
           </td></tr>}</Fragment> })}</tbody></table></div>}
 
