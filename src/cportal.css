@@ -718,3 +718,11 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-rvt .cp-meta { margin: 0; font-size: 13px; }
 .cp .cp-rvt.cp-head { border-top: 0; padding-block: 9px; background: #f7f9f6; font-size: 12px; font-weight: 600; color: var(--muted); }
 .cp .cp-rvt.cp-total { background: #f7f9f6; }
+/* phone lists: the lbs stepper sits in the row where the + Add / + Reserve button was */
+.cp .cp-stepper.cp-sm { border-radius: 10px; }
+.cp .cp-stepper.cp-sm button { width: 30px; height: 38px; font-size: 18px; }
+.cp .cp-stepper.cp-sm input { width: 42px; height: 38px; font-size: 15px; }
+.cp .cp-smpck { display: flex; justify-content: flex-end; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.cp .cp-stepnote { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.cp .cp-smpck input { width: 16px; height: 16px; margin: 0; accent-color: var(--teal-dk); }
+.cp .cp-linkish.cp-inl { display: inline; min-width: 0; height: auto; padding: 0; font-size: 12px; font-weight: 600; }
