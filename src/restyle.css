@@ -791,7 +791,10 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 
 /* RES-10: one customer's reserves as an editable table */
 .rescust { width: 100%; }
+.rescust td { vertical-align: middle; }
+.rescust td.c-r { width: 150px; white-space: nowrap; }
 .rescust td.c-r .qty { width: 96px; text-align: right; }
+.rescust td.c-r .rdel { display: inline-block; min-width: 40px; margin-right: 6px; font-size: 12.5px; }
 .rescust tr.on td { background: var(--r-teal-bg); }
 .rescust tr.bad td { background: #fdecea; }
 .rescsave { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 10px 0 0; padding: 10px 14px;

@@ -615,7 +615,7 @@ function CustReserves({ backend, cid, name, rs, nums, year, cur, isAdmin, flash,
   const v = (x: typeof rows[number]) => srt.k === 'name' ? x.r.strain.toLowerCase() : x[srt.k]
   rows.sort((a, b) => { const p = v(a), q = v(b); const d = typeof p === 'string' ? p.localeCompare(q as string) : (p as number) - (q as number); return srt.up ? d : -d })
   const tot = rows.reduce((t, x) => ({ res: t.res + x.res, ship: t.ship + x.ship, so: t.so + x.so, left: t.left + x.left }), { res: 0, ship: 0, so: 0, left: 0 })
-  const dTot = changes.reduce((a, c) => a + c.d, 0)
+  const dTot = changes.filter(c => !c.err).reduce((a, c) => a + c.d, 0)
   const th = (k: K, label: string, num = true, title?: string) => <th className={`${num ? 'num ' : ''}sortth${srt.k === k ? ' on' : ''}`} title={title} aria-sort={srt.k === k ? (srt.up ? 'ascending' : 'descending') : 'none'}>
     <button className="linkbtn" onClick={() => setSrt(o => ({ k, up: o.k === k ? !o.up : k === 'name' }))}>{label}{srt.k === k ? (srt.up ? ' ▲' : ' ▼') : ''}</button></th>
   async function save() {
@@ -634,10 +634,10 @@ function CustReserves({ backend, cid, name, rs, nums, year, cur, isAdmin, flash,
         return <tr key={x.r.id} className={c ? (c.err ? 'bad' : 'on') : ''}>
           <td className="c-n"><StrainLink name={x.r.strain} />{c?.err && <div className="warn-t small">{c.err}</div>}
             {Number(x.r.rejected ?? 0) > 0 && <div className="small warn-t" title="Rejected at delivery and back on this reserve. Lower the reserve if they shouldn't get these lbs back.">{n0(Number(x.r.rejected))} rejected, back on reserve</div>}</td>
-          <td className="num c-r" data-l="reserved ">{isAdmin
+          <td className="num c-r" data-l="reserved ">{isAdmin && <span className={`rdel ${c && !c.err ? (c.d > 0 ? 'ok-t' : 'warn-t') : ''}`}>{c && !c.err ? `${c.d > 0 ? '+' : ''}${n0(c.d)}` : ''}</span>}{isAdmin
             ? <input className={`qty ${c?.err ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" aria-label={`Reserve total for ${x.r.strain}`}
                 value={ed[x.key] ?? String(x.res)} onChange={e => setEd(m => ({ ...m, [x.key]: e.target.value }))} onFocus={e => e.target.select()} />
-            : n0(x.res)}{c && !c.err && <div className={`small ${c.d > 0 ? 'ok-t' : 'warn-t'}`}>{c.d > 0 ? '+' : ''}{n0(c.d)}</div>}</td>
+            : n0(x.res)}</td>
           <td className="num" data-l="shipped ">{n0(x.ship)}</td>
           <td className="num" data-l="open SO ">{x.so > 0 ? n0(x.so) : <span className="muted">0</span>}</td>
           <td className="num c-lf" data-l="left "><b>{c && !c.err ? n0(Math.max(0, c.to - x.ship - x.so)) : n0(x.left)}</b></td>
