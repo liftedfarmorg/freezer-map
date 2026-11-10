@@ -12,9 +12,13 @@ export interface StrainAuto {
 export interface StrainSet {
   rooting_pct?: number | null; cuts_per_plant?: number | null; yield_lbs_plant?: number | null; harvest_mmdd?: string | null
   solventless_pct?: number | null; hydrocarbon_pct?: number | null; spot_price?: number | null; photo_url?: string | null; menu_note?: string | null; updated_by?: string | null; updated_at?: string | null
+  /** 324: the high end of the yield; solventless_pct / hydrocarbon_pct are the low */
+  solventless_high_pct?: number | null; hydrocarbon_high_pct?: number | null
 }
 export interface StrainProfile { id: number; name: string; auto: StrainAuto; set: StrainSet }
-export interface MenuInfo { name: string; solventless_pct: number | null; hydrocarbon_pct: number | null; spot_price: number | null; photo_url: string | null; menu_note: string | null; lineage: string | null }
+export interface MenuInfo { name: string; solventless_pct: number | null; hydrocarbon_pct: number | null; spot_price: number | null; photo_url: string | null; menu_note: string | null; lineage: string | null
+  /** 324: high end of the yield (missing until 324 is run) */
+  solventless_high_pct?: number | null; hydrocarbon_high_pct?: number | null }
 
 export async function loadProfiles(sb: SupabaseClient | null): Promise<Map<number, StrainProfile>> {
   if (!sb) return new Map()
@@ -33,13 +37,20 @@ export async function loadMenuInfo(sb: SupabaseClient | null): Promise<Map<strin
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const mmdd = (s: string | null | undefined) => { if (!s) return ''; const [m, d] = s.split('-').map(Number); return m ? `${MON[m - 1]} ${d}` : s }
 const f1 = (x: number | null | undefined, d = 1) => (x == null ? '' : String(Math.round(Number(x) * 10 ** d) / 10 ** d))
+/** 324: a yield as a range, low–high ("4.5–6%"); one number when only one is set or they match; '' when neither */
+export function yieldRange(lo: number | null | undefined, hi: number | null | undefined, sep = '–') {
+  const a = lo == null ? null : Number(lo), b = hi == null ? null : Number(hi)
+  if (a == null && b == null) return ''
+  if (a == null || b == null || a === b) return `${f1(a ?? b)}%`
+  return `${f1(a)}${sep}${f1(b)}%`
+}
 /** effective value: override, else auto */
 export const eff = <K extends keyof StrainAuto & keyof StrainSet>(p: StrainProfile | undefined, k: K) => (p?.set?.[k] ?? p?.auto?.[k] ?? null) as StrainAuto[K] | null
 export function profileLine(p: StrainProfile | undefined) {
   if (!p) return ''
   const s = p.set, bits = [
-    s.solventless_pct != null ? `${f1(s.solventless_pct)}% solventless` : '',
-    s.hydrocarbon_pct != null ? `${f1(s.hydrocarbon_pct)}% hydrocarbon` : '',
+    yieldRange(s.solventless_pct, s.solventless_high_pct) ? `${yieldRange(s.solventless_pct, s.solventless_high_pct)} solventless` : '',
+    yieldRange(s.hydrocarbon_pct, s.hydrocarbon_high_pct) ? `${yieldRange(s.hydrocarbon_pct, s.hydrocarbon_high_pct)} hydrocarbon` : '',
     eff(p, 'yield_lbs_plant') != null ? `${f1(eff(p, 'yield_lbs_plant'), 2)} lbs/plant` : '',
     eff(p, 'rooting_pct') != null ? `${f1(eff(p, 'rooting_pct'), 0)}% rooting` : '',
     eff(p, 'harvest_mmdd') ? `harvest ~${mmdd(eff(p, 'harvest_mmdd') as string)}` : '',
@@ -47,7 +58,7 @@ export function profileLine(p: StrainProfile | undefined) {
   return bits.filter(Boolean).join(' · ')
 }
 
-type Field = { k: keyof StrainSet; l: string; unit?: string; auto?: (a: StrainAuto) => string; text?: boolean; hint?: string }
+type Field = { k: keyof StrainSet; l: string; unit?: string; auto?: (a: StrainAuto) => string; text?: boolean; hint?: string; half?: boolean }
 const GROUPS: { m: 'nursery' | 'cultivation' | 'sales'; l: string; fields: Field[] }[] = [
   { m: 'nursery', l: 'Nursery', fields: [
     { k: 'rooting_pct', l: 'Rooting rate', unit: '%', auto: a => a.rooting_pct != null ? `${f1(a.rooting_pct)}% from ${a.rooting_n} sorted batch${a.rooting_n === 1 ? '' : 'es'}` : '' },
@@ -58,8 +69,11 @@ const GROUPS: { m: 'nursery' | 'cultivation' | 'sales'; l: string; fields: Field
     { k: 'harvest_mmdd', l: 'Typical harvest date', text: true, hint: 'MM-DD', auto: a => a.harvest_mmdd ? `${mmdd(a.harvest_mmdd)} (average of ${a.harvest_n})` : '' },
   ] },
   { m: 'sales', l: 'Sales and extraction', fields: [
-    { k: 'solventless_pct', l: 'Yield to solventless', unit: '%', hint: 'shows on menus' },
-    { k: 'hydrocarbon_pct', l: 'Yield to hydrocarbon', unit: '%', hint: 'shows on the catalog' },
+    // 324: each yield is a low and a high, side by side; blank high = just the low
+    { k: 'solventless_pct', l: 'SHO yield, low', unit: '%', half: true },
+    { k: 'solventless_high_pct', l: 'high', unit: '%', hint: 'blank = one number', half: true },
+    { k: 'hydrocarbon_pct', l: 'BHO yield, low', unit: '%', half: true },
+    { k: 'hydrocarbon_high_pct', l: 'high', unit: '%', hint: 'blank = one number', half: true },
     { k: 'spot_price', l: 'Spot price', unit: '$/lb', hint: 'blank = the catalog\'s price' },
     { k: 'photo_url', l: 'Photo', text: true, hint: 'pick one of ours, or paste a link' },
     { k: 'menu_note', l: 'Menu note', text: true, hint: 'a line for the menu and catalog' },
@@ -77,13 +91,20 @@ export function StrainProfileEdit({ sb, p, flash, onSaved }: { sb: SupabaseClien
       const s = (v[f.k] ?? '').trim()
       if (s === String(p.set?.[f.k] ?? '')) continue
       if (f.k === 'harvest_mmdd' && s && !/^\d{2}-\d{2}$/.test(s)) { flash('Harvest date looks like 10-08 (month-day)', true); return }
+      if (!f.text && s !== '' && !Number.isFinite(Number(s))) { flash(`${f.l}: that's not a number`, true); return }
       vals[f.k] = s === '' ? null : f.text ? s : Number(s)
+    }
+    // 324: a low can't be above its high (the database checks too)
+    for (const [lo, hi, nm] of [['solventless_pct', 'solventless_high_pct', 'Solventless'], ['hydrocarbon_pct', 'hydrocarbon_high_pct', 'Hydrocarbon']] as const) {
+      const a = (v[lo] ?? '').trim(), b = (v[hi] ?? '').trim()
+      if (fields.some(f => f.k === lo) && a !== '' && b !== '' && Number(a) > Number(b)) { flash(`${nm} yield: the low (${a}%) is above the high (${b}%)`, true); return }
     }
     if (!Object.keys(vals).length) return
     setBusy(true)
     const { error } = await sb.rpc('set_strain_info', { p_strain: p.id, p_vals: vals })
     setBusy(false)
-    if (error) flash(/set_strain_info/.test(error.message) ? 'Run 040_strains_access_pallets.sql in Supabase first' : error.message, true)
+    if (error) flash(/set_strain_info/.test(error.message) ? 'Run 040_strains_access_pallets.sql in Supabase first'
+      : /Unknown strain field \w+_high_pct/.test(error.message) ? 'Run 324_strain_yield_ranges.sql in Supabase first' : error.message, true)
     else { flash(`${p.name}: ${m} saved`); onSaved() }
   }
   return <div className="sprofile">
@@ -92,7 +113,7 @@ export function StrainProfileEdit({ sb, p, flash, onSaved }: { sb: SupabaseClien
       return <Fold key={g.m} id={`strain.${g.m}`} title={g.l} open={g.m === 'sales'} count={can ? '' : '· view only'}>
         {g.fields.map(f => {
           const a = f.auto?.(p.auto) ?? '', over = p.set?.[f.k] != null
-          return <div key={f.k} className="field sfield">
+          return <div key={f.k} className={`field sfield${f.half ? ' half' : ''}`}>
             <label>{f.l}{f.unit ? ` (${f.unit})` : ''}{f.hint && <span className="muted"> · {f.hint}</span>}</label>
             <div className="row">
               <ListInput value={v[f.k] ?? ''} disabled={!can} list={f.k === 'photo_url' ? 'strain-photos' : undefined} inputMode={f.text ? undefined : 'decimal'} placeholder={f.auto ? (a ? 'auto' : 'no data yet') : ''}

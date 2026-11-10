@@ -1,4 +1,4 @@
-import { loadMenuInfo } from './strains'
+import { loadMenuInfo, yieldRange } from './strains'
 import type { MenuInfo } from './strains'
 import { useEffect, useState } from 'react'
 import type { Backend } from './api'
@@ -47,7 +47,7 @@ export function OpenMenu({ backend, reserves }: { backend: Backend; reserves: bo
         <tbody>
           {shown.map(r => (
             <tr key={r.strain}>
-              <td>{r.strain}{(() => { const m = info.get(r.strain.toLowerCase()); const bits = [m?.solventless_pct != null ? `${Number(m.solventless_pct)}% solventless` : '', m?.hydrocarbon_pct != null ? `${Number(m.hydrocarbon_pct)}% hydrocarbon` : ''].filter(Boolean)
+              <td>{r.strain}{(() => { const m = info.get(r.strain.toLowerCase()); const sl = yieldRange(m?.solventless_pct, m?.solventless_high_pct), hc = yieldRange(m?.hydrocarbon_pct, m?.hydrocarbon_high_pct); const bits = [sl ? `${sl} solventless` : '', hc ? `${hc} hydrocarbon` : ''].filter(Boolean)
                 return bits.length ? <div className="muted small">{bits.join(' · ')}</div> : null })()}
                 {r.request_id != null && <div className="reqnote">Requested {n0(r.requested_lbs)} lbs · waiting</div>}
                 {Number(r.my_hold ?? 0) > 0 && <div className="reqnote">Held for you: {n0(r.my_hold)} lbs{r.my_hold_until ? ` until ${new Date(r.my_hold_until + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ' (from your sample)'}</div>}</td>
