@@ -4,7 +4,7 @@
 // for that crop year. Type the new total on any row; the summary lists the changes; Save runs set_reserve for each one.
 import { useEffect, useMemo, useState } from 'react'
 import type { Backend } from './api'
-import type { Balance, Customer, CustomerTerms, ReserveRequest, ReserveYears } from './types'
+import type { Balance, Customer, CustomerTerms, Order, ReserveRequest, ReserveYears } from './types'
 
 type Flash = (t: string, bad?: boolean) => void
 const n0 = (v: number) => Math.round(v).toLocaleString()
@@ -21,6 +21,7 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
   const [open, setOpen] = useState<{ strain: string; crop_year: number; open_lbs: number }[] | null>(null)
   const [terms, setTerms] = useState<CustomerTerms[]>([])
   const [reqs, setReqs] = useState<ReserveRequest[]>([])
+  const [orders, setOrders] = useState<Order[] | null>(null)   // RES-7: their orders on strains with no reserve yet
   const [ed, setEd] = useState<Record<string, string>>({})   // strain key -> new total typed
   const [filter, setFilter] = useState<'all' | 'res' | 'not'>('all')
   const [q, setQ] = useState('')
@@ -32,6 +33,7 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
     backend.listBalances().then(setBal).catch(() => setBal([]))
     backend.listTerms().then(setTerms).catch(() => {})
     backend.listRequests().then(setReqs).catch(() => {})
+    backend.listOrders().then(setOrders).catch(() => setOrders([]))
     backend.client()?.rpc('staff_ff_open').then(({ data, error }) => setOpen(error ? [] : (data ?? []) as { strain: string; crop_year: number; open_lbs: number }[]), () => setOpen([]))
   }, [])
   const cur = ys?.current ?? new Date().getFullYear()
@@ -50,19 +52,28 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
     const m = new Map<string, { key: string; strain: string; res: number; ful: number; so: number; rem: number; open: number; has: boolean }>()
     for (const b of bal) if (b.customer_id === cust && (b.crop_year ?? cur) === yr && (Number(b.reserved) > 0 || Number(b.shipped) > 0 || Number(b.pending) > 0))
       m.set(k(b.strain), { key: k(b.strain), strain: b.strain, res: Number(b.reserved), ful: Number(b.shipped), so: Number(b.pending), rem: Math.max(0, Number(b.remaining)), open: 0, has: true })
+    // RES-7: strains on their confirmed or shipped orders with no reserve yet: once a reserve exists those lbs count against it
+    for (const o of orders ?? []) if (o.customer_id === cust && (o.status === 'pending' || o.status === 'shipped')) for (const l of o.order_lines) {
+      if ((l.product ?? 'fresh_frozen') !== 'fresh_frozen' || (l.crop_year ?? cur) !== yr || m.get(k(l.strain))?.has) continue
+      const x = m.get(k(l.strain)) ?? { key: k(l.strain), strain: l.strain, res: 0, ful: 0, so: 0, rem: 0, open: 0, has: false }
+      if (o.status === 'pending') x.so += Number(l.lbs); else x.ful += Number(l.lbs)
+      m.set(x.key, x)
+    }
     for (const o of open) if (o.crop_year === yr && Number(o.open_lbs) > 0) {
       const x = m.get(k(o.strain))
       if (x) x.open = Number(o.open_lbs)
       else m.set(k(o.strain), { key: k(o.strain), strain: o.strain, res: 0, ful: 0, so: 0, rem: 0, open: Number(o.open_lbs), has: false })
     }
-    return [...m.values()].sort((a, b) => Number(b.has) - Number(a.has) || a.strain.localeCompare(b.strain))
-  }, [cust, bal, open, yr, cur])
+    const used = (r: { ful: number; so: number }) => r.ful + r.so > 0 ? 1 : 0
+    return [...m.values()].sort((a, b) => Number(b.has) - Number(a.has) || used(b) - used(a) || a.strain.localeCompare(b.strain))
+  }, [cust, bal, open, orders, yr, cur])
 
   // new total: at least what's shipped + on open SOs, at most what they have + what's open on the menu
   const minOf = (r: typeof rows[number]) => r.ful + r.so
-  const maxOf = (r: typeof rows[number]) => r.res + r.open
+  // what's already shipped / on their open orders came out of the menu, so it counts toward the room (RES-7)
+  const maxOf = (r: typeof rows[number]) => Math.max(r.res, r.ful + r.so) + r.open
   const changes = rows.filter(r => ed[r.key] !== undefined && ed[r.key] !== '' && Number(ed[r.key]) !== r.res)
-    .map(r => { const to = Number(ed[r.key]); const err = to < minOf(r) ? `can't go under ${n0(minOf(r))} (shipped + open SOs)` : to > maxOf(r) ? `only ${n0(r.open)} more open` : ''
+    .map(r => { const to = Number(ed[r.key]); const err = to < minOf(r) ? `can't go under ${n0(minOf(r))} (shipped + open SOs)` : to > maxOf(r) ? `${n0(maxOf(r))} is the most (${n0(r.ful + r.so > r.res ? r.ful + r.so : r.res)} theirs + ${n0(r.open)} open)` : ''
       return { r, to, d: to - r.res, err } })
   const bad = changes.some(x => x.err)
   const tot = { res: rows.reduce((a, r) => a + r.res, 0), ful: rows.reduce((a, r) => a + r.ful, 0), so: rows.reduce((a, r) => a + r.so, 0), rem: rows.reduce((a, r) => a + r.rem, 0) }
@@ -82,7 +93,7 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
 
   const cql = cq.trim().toLowerCase()
   const custOpts = customers.filter(x => x.active && x.kind === 'external' && (!cql || x.name.toLowerCase().includes(cql))).sort((a, b) => Number(!!b.reserves_enabled) - Number(!!a.reserves_enabled) || a.name.localeCompare(b.name)).slice(0, 12)
-  const loading = !bal || !open
+  const loading = !bal || !open || !orders
   const sign = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${n0(Math.abs(v))}`
   const summary = <>
     <div className="no-sum-lines">{!changes.length ? <p className="muted small" style={{ margin: 14 }}>Type a new total next to a strain. Changes show up here.</p>
@@ -141,16 +152,16 @@ export function AddReservesSheet({ backend, customers, flash, onClose, onDone, p
                 <div className="no-twrap"><table className="ctable no-table ar-table"><thead><tr><th>Strain</th><th className="num" title="Reserved">Reserved</th><th className="num" title="Fulfilled (shipped)">Shipped</th><th className="num" title="On open sales orders">Open SO</th><th className="num" title="Remaining">Left</th><th className="num" title="Open menu available">Open menu</th><th className="num">New total</th></tr></thead>
                   <tbody>{shown.map(r => { const v = ed[r.key] ?? '', x = changes.find(z => z.r.key === r.key)
                     return <tr key={r.key} className={x ? (x.err ? 'bad' : 'on') : ''}>
-                      <td className="c-n"><b>{r.strain}</b>{!r.has && x && <> <span className="pill">New</span></>}{x?.err && <div className="warn-t small">{x.err}</div>}</td>
+                      <td className="c-n"><b>{r.strain}</b>{!r.has && x && <> <span className="pill">New</span></>}{!r.has && r.so > 0 && <div className="muted small">{n0(r.so)} on their open order, no reserve yet</div>}{x?.err && <div className="warn-t small">{x.err}</div>}</td>
                       <td className="num" data-l="reserved ">{r.has ? n0(r.res) : '—'}</td>
-                      <td className="num" data-l="fulfilled ">{r.has ? n0(r.ful) : '—'}</td>
-                      <td className="num" data-l="open SO ">{r.has ? n0(r.so) : '—'}</td>
+                      <td className="num" data-l="fulfilled ">{r.has || r.ful ? n0(r.ful) : '—'}</td>
+                      <td className="num" data-l="open SO ">{r.has || r.so ? n0(r.so) : '—'}</td>
                       <td className="num" data-l="remaining "><b>{x && !x.err ? n0(Math.max(0, x.to - r.ful - r.so)) : r.has ? n0(r.rem) : '—'}</b></td>
                       <td className="num muted" data-l="open ">{n0(r.open)}</td>
                       <td className="num c-l"><input className={`qty ${x?.err ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" aria-label={`New reserve total for ${r.strain}`}
                         placeholder={r.has ? n0(r.res).replace(/,/g, '') : '0'} value={v} onChange={e => setEd(m => ({ ...m, [r.key]: e.target.value }))} /></td>
                     </tr> })}</tbody></table></div>}
-              <p className="muted small">New total is the whole reserve for that strain, including what's shipped. It can't go under shipped + open SOs, and can only go up by what's open on the menu. Saving changes the reserve right away (no request), the same as Edit reserve.</p>
+              <p className="muted small">New total is the whole reserve for that strain, including what's shipped and what's on their open orders (those lbs count against it, even on an order placed before the reserve). It can't go under shipped + open SOs, and can only go up by what's open on the menu. Saving changes the reserve right away (no request), the same as Edit reserve.</p>
             </section>}
           </div>
           <aside className="no-sum">
