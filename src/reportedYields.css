@@ -1,0 +1,41 @@
+/* Sales > Reported Yields */
+.ry { max-width: 1240px; }
+.ry-top { margin-bottom: 14px; align-items: flex-start; }
+.ry-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ry-kpis > div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ry-kpis span { font-size: 12px; color: var(--muted); }
+.ry-kpis b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.ry-kpis small { font-size: 12px; color: var(--muted); }
+.ry-kpis > div.warn { background: color-mix(in srgb, var(--warn) 8%, var(--panel)); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.ry-bar { margin-bottom: 10px; gap: 10px; }
+.ry-bar select, .ry-bar input[type=search] { padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; }
+.ry-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+.ry .restable { margin: 0; font-variant-numeric: tabular-nums; }
+.ry .ry-main th { background: color-mix(in srgb, var(--empty) 60%, var(--panel)); vertical-align: bottom; }
+.ry .ry-main > thead th:first-child, .ry .ry-main > tbody > tr > td:first-child, .ry .ry-main > tfoot td:first-child { padding-left: 14px; }
+.ry .restable th span { display: block; font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.ry .ry-main > tbody > tr > td { vertical-align: middle; padding-top: 9px; padding-bottom: 9px; }
+.ry .ry-main tfoot td { background: color-mix(in srgb, var(--empty) 60%, var(--panel)); border-bottom: 0; }
+.ry-sort { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; text-align: inherit; }
+.ry-sort.on { color: var(--ink); }
+.ry-yr { font-size: 12px; color: var(--muted); font-weight: 500; }
+.ry-hash { color: var(--brand); }
+.ry-bho { color: #8a5a00; }
+.ry-range { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.ry-menu { white-space: nowrap; }
+.ry-menu small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
+.ry tr.ry-on > td { background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }
+.ry tr.ry-detail > td { background: color-mix(in srgb, var(--empty) 45%, var(--panel)); padding: 4px 14px 12px 28px; }
+.ry .ry-runs { font-size: 13px; }
+.ry .ry-runs th { font-size: 11px; background: none; }
+.ry .ry-runs td { padding-top: 6px; padding-bottom: 6px; }
+.ry tr.ry-draft td { color: var(--muted); }
+.ry-note { max-width: 300px; font-size: 12px; color: var(--muted); }
+.ry-detail-f { margin-top: 8px; }
+.ry-owed { margin: 8px 0 0; }
+.ry-foot { margin: 10px 2px 0; max-width: 900px; }
+.ry-issues { display: grid; gap: 10px; max-width: 900px; }
+.ry-issue { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.ry-issue-t { margin: 0; white-space: pre-wrap; }
+@media (max-width: 1100px) { .ry-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ry-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ry-kpis b { font-size: 18px; } }
