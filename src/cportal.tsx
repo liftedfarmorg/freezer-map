@@ -1472,7 +1472,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     toast('Saved. You can finish later.'); await reload(); go('yields')
   }
   // "Report an issue" on a strain: what was wrong with the flower, as tick boxes plus a description
-  const ISSUE_KINDS = ['Mold', 'Bud rot', 'Foreign matter', 'Too wet', 'Pests', 'Off smell', 'Other']
+  const ISSUE_KINDS = ['Mold', 'Bud rot', 'Foreign matter', 'Other']
   const issueTxt = (x: YIssue) => [x.kinds.join(', '), x.text.trim()].filter(Boolean).join(' · ')
   const [yIssue, setYIssue] = useState<{ i: number; kinds: string[]; text: string } | null>(null)
   function issueSheet() {
@@ -1486,7 +1486,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       <div className={c('sheet')} role="dialog" aria-modal="true" aria-labelledby="cp-yi-t">
         <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 id="cp-yi-t" style={{ margin: 0, fontSize: 22 }}>Issue with {l.s}</h2>
           <button className={c('iconbtn')} style={{ color: 'var(--ink)', borderColor: 'var(--line)' }} onClick={close} aria-label="Close">{I.close}</button></div>
-        <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>Something wrong with this flower? Tell us what you found. It goes to Lifted with your yields.</p>
+        <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>Something wrong with this strain? Tell us what you found.</p>
         <div className={c('filters')} role="group" aria-label="What was wrong">{ISSUE_KINDS.map(k => <button key={k} aria-pressed={yIssue.kinds.includes(k)} onClick={() => tog(k)}>{k}</button>)}</div>
         <label className={c('field')}>What did you find?
           <textarea className={c('fbtext')} rows={4} maxLength={2000} value={yIssue.text} onChange={e => setYIssue({ ...yIssue, text: e.target.value })}
