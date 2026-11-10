@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-// 233: Sales > Customer feedback. Notes customers send from the portal's "Help & feedback" button.
+// 324: Sales > Customer feedback. Notes customers send from the portal's "Help & feedback" button.
 // Not a ticket queue: nothing to open, assign or close. Newest first; "New" marks what came in since you last looked here.
 
 interface FB { id: number; created_at: string; customer_id: number | null; customer: string | null; user_email: string | null; user_name: string | null
@@ -24,7 +24,7 @@ export function FeedbackView({ sb, flash }: { sb: SupabaseClient | null; flash: 
   async function load() {
     if (!sb) { setRows([]); return }
     const { data, error } = await sb.rpc('list_portal_feedback', { p_limit: 1000 })
-    if (error) { flash(/list_portal_feedback/.test(error.message) ? 'Customer feedback needs SQL 233 run first.' : error.message, true); setRows([]); return }
+    if (error) { flash(/list_portal_feedback/.test(error.message) ? 'Customer feedback needs SQL 324 run first.' : error.message, true); setRows([]); return }
     setRows((data ?? []) as FB[])
     try { localStorage.setItem(SEEN_KEY, new Date().toISOString()) } catch { /* private mode */ }
   }

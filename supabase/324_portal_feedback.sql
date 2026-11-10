@@ -1,4 +1,4 @@
--- 233: Customer portal "Help & feedback": customers send a note (something not working, a question, an idea) and
+-- 324: Customer portal "Help & feedback": customers send a note (something not working, a question, an idea) and
 -- Sales sees them in Sales > Customer feedback. Not a ticket system: no status to open or close, just a running list.
 -- Safe to re-run.
 
