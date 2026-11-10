@@ -70,7 +70,10 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
   // RES-4: Reserves by customer as a sortable table (computers and tablets; phones keep the cards)
-  const [csort, setCsort] = useState<{ k: 'name' | 'strains' | 'res' | 'ship' | 'so' | 'left' | 'pct' | 'contract'; up: boolean }>({ k: 'res', up: false })
+  const [csort, setCsort] = useState<{ k: 'name' | 'strains' | 'res' | 'ship' | 'so' | 'left' | 'pct' | 'contract' | 'mmin' | 'price'; up: boolean }>({ k: 'res', up: false })
+  // RES-5: By strain table sort + which strain is open
+  const [ssort, setSsort] = useState<{ k: 'name' | 'cust' | 'have' | 'pend' | 'left' | 'free'; up: boolean }>({ k: 'name', up: true })
+  const [sOpen, setSOpen] = useState<string | null>(null)
   const [cterms, setCterms] = useState<CustomerTerms[]>([])
   useEffect(() => { backend.listTerms().then(setCterms).catch(() => {}) }, [])
   const [adding, setAdding] = useState<{ preset: number | null } | null>(null)   // RES-1
@@ -228,27 +231,32 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
         )
       })()}
       {mode === 'customer' && !focus && byCust.length > 0 && (() => {
-        const contractOf = (id: number) => { const t = cterms.find(x => x.customer_id === id && x.crop_year === rYear); return t?.contract_lbs ?? (rYear === cur ? cust.get(id)?.contract_lbs ?? null : null) }
+        const termOf = (id: number) => cterms.find(x => x.customer_id === id && x.crop_year === rYear)
+        const contractOf = (id: number) => termOf(id)?.contract_lbs ?? (rYear === cur ? cust.get(id)?.contract_lbs ?? null : null)
+        const mminOf = (id: number) => termOf(id)?.monthly_min_lbs ?? (rYear === cur ? cust.get(id)?.monthly_min_lbs ?? null : null)
+        const priceOf = (id: number) => { const v = termOf(id)?.price_per_lb ?? (rYear === cur ? cust.get(id)?.price_per_lb ?? null : null); return v == null ? null : Number(v) }
         const rows = byCust.map(c => { const res = sum(c.rs, 'reserved'), ship = sum(c.rs, 'shipped'), so = sum(c.rs, 'pending'), left = sum(c.rs, 'remaining')
-          return { ...c, strains: c.rs.length, res, ship, so, left, pct: res > 0 ? ship / res : 0, contract: contractOf(c.id) } })
-        const val = (r: typeof rows[number]) => csort.k === 'name' ? r.name.toLowerCase() : csort.k === 'contract' ? (r.contract ?? -1) : r[csort.k]
+          return { ...c, strains: c.rs.length, res, ship, so, left, pct: res > 0 ? ship / res : 0, contract: contractOf(c.id), mmin: mminOf(c.id), price: priceOf(c.id) } })
+        const val = (r: typeof rows[number]) => csort.k === 'name' ? r.name.toLowerCase() : csort.k === 'contract' || csort.k === 'mmin' || csort.k === 'price' ? (r[csort.k] ?? -1) : r[csort.k]
         rows.sort((a, b) => { const x = val(a), y = val(b); const d = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number); return csort.up ? d : -d })
         const tot = rows.reduce((t, r) => ({ res: t.res + r.res, ship: t.ship + r.ship, so: t.so + r.so, left: t.left + r.left, strains: t.strains + r.strains }), { res: 0, ship: 0, so: 0, left: 0, strains: 0 })
         const th = (k: typeof csort.k, label: string, num = true) => <th className={`${num ? 'num ' : ''}sortth${csort.k === k ? ' on' : ''}`} aria-sort={csort.k === k ? (csort.up ? 'ascending' : 'descending') : 'none'}>
           <button className="linkbtn" onClick={() => setCsort(s => ({ k, up: s.k === k ? !s.up : k === 'name' }))}>{label}{csort.k === k ? (csort.up ? ' ▲' : ' ▼') : ''}</button></th>
         return <div className="cwrap rescwrap"><table className="ctable restbl">
-          <thead><tr>{th('name', 'Customer', false)}{th('strains', 'Strains')}{th('contract', 'Contract')}{th('res', 'Reserved')}{th('ship', 'Shipped')}{th('so', 'Open SO')}{th('left', 'Left')}{th('pct', 'Shipped %')}</tr></thead>
+          <thead><tr>{th('name', 'Customer', false)}{th('strains', 'Strains')}{th('contract', 'Contract')}{th('mmin', 'Monthly min')}{th('price', '$/lb')}{th('res', 'Reserved')}{th('ship', 'Shipped')}{th('so', 'Open SO')}{th('left', 'Left')}{th('pct', 'Shipped %')}</tr></thead>
           <tbody>{rows.map(r => <tr key={r.id} className="tap" onClick={() => openCust(r.id)}>
             <td><b>{r.name}</b></td>
             <td className="num">{r.strains}</td>
             <td className={`num ${r.contract != null && r.res > r.contract ? 'warn-t' : 'muted'}`} title={r.contract != null && r.res > r.contract ? `${n0(r.res - r.contract)} lbs over contract` : undefined}>{r.contract != null ? n0(r.contract) : '—'}</td>
+            <td className="num muted">{r.mmin != null ? n0(r.mmin) : '—'}</td>
+            <td className="num muted">{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
             <td className="num">{n0(r.res)}</td>
             <td className="num">{n0(r.ship)}</td>
             <td className="num">{r.so > 0 ? n0(r.so) : <span className="muted">0</span>}</td>
             <td className="num"><b>{n0(r.left)}</b></td>
             <td className="num"><span className="respct"><i style={{ width: `${Math.min(100, Math.round(r.pct * 100))}%` }} /></span> {Math.round(r.pct * 100)}%</td>
           </tr>)}</tbody>
-          <tfoot><tr><td><b>{rows.length} customer{rows.length === 1 ? '' : 's'}</b></td><td className="num">{tot.strains}</td><td /><td className="num"><b>{n0(tot.res)}</b></td><td className="num">{n0(tot.ship)}</td><td className="num">{n0(tot.so)}</td><td className="num"><b>{n0(tot.left)}</b></td>
+          <tfoot><tr><td><b>{rows.length} customer{rows.length === 1 ? '' : 's'}</b></td><td className="num">{tot.strains}</td><td /><td /><td /><td className="num"><b>{n0(tot.res)}</b></td><td className="num">{n0(tot.ship)}</td><td className="num">{n0(tot.so)}</td><td className="num"><b>{n0(tot.left)}</b></td>
             <td className="num">{tot.res > 0 ? Math.round(tot.ship / tot.res * 100) : 0}%</td></tr></tfoot>
         </table></div>
       })()}
@@ -276,18 +284,31 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
       })()}
       {mode === 'strain' && !future && (
         <>
-                    <table className="restable wide">
-            <thead><tr><th>Strain</th><th className="num">On hand</th><th className="num">Pending</th><th className="num">Res. left</th><th className="num">Free</th></tr></thead>
-            <tbody>
-              {byStrain.map(x => (
-                <tr key={x.s} title={x.rs.map(r => `${cname(r.customer_id)}: ${n0(Number(r.remaining))} left`).join('\n')}>
-                  <td><StrainLink name={x.s} />{x.hidden && <span className="pill old">hidden</span>}{x.rs.length > 0 && <div className="muted small">{x.rs.length} customer{x.rs.length === 1 ? '' : 's'}</div>}</td>
-                  <td className="num">{n0(x.have)}</td><td className="num">{n0(x.pend)}</td><td className="num">{n0(x.left)}</td>
+          {(() => {
+            const rows = byStrain.map(x => ({ ...x, cust: x.rs.filter(r => Number(r.remaining) > 0 || Number(r.reserved) > 0).length }))
+            const v = (x: typeof rows[number]) => ssort.k === 'name' ? x.s.toLowerCase() : ssort.k === 'cust' ? x.cust : x[ssort.k]
+            rows.sort((a, b) => { const p = v(a), q2 = v(b); const d = typeof p === 'string' ? p.localeCompare(q2 as string) : (p as number) - (q2 as number); return ssort.up ? d : -d })
+            const tot = rows.reduce((t, x) => ({ have: t.have + x.have, pend: t.pend + x.pend, left: t.left + x.left, free: t.free + x.free }), { have: 0, pend: 0, left: 0, free: 0 })
+            const th = (k: typeof ssort.k, label: string, num = true) => <th className={`${num ? 'num ' : ''}sortth${ssort.k === k ? ' on' : ''}`} aria-sort={ssort.k === k ? (ssort.up ? 'ascending' : 'descending') : 'none'}>
+              <button className="linkbtn" onClick={() => setSsort(o => ({ k, up: o.k === k ? !o.up : k === 'name' }))}>{label}{ssort.k === k ? (ssort.up ? ' ▲' : ' ▼') : ''}</button></th>
+            return <div className="cwrap"><table className="ctable restbl resstr">
+              <thead><tr>{th('name', 'Strain', false)}{th('cust', 'Customers')}{th('have', 'On hand')}{th('pend', 'Pending')}{th('left', 'Res. left')}{th('free', 'Free')}</tr></thead>
+              <tbody>{rows.map(x => [
+                <tr key={x.s} className={`tap ${sOpen === x.s ? 'open' : ''}`} onClick={() => setSOpen(sOpen === x.s ? null : x.s)}>
+                  <td><span onClick={e => e.stopPropagation()}><StrainLink name={x.s} /></span>{x.hidden && <> <span className="pill old">hidden</span></>}</td>
+                  <td className="num">{x.cust || <span className="muted">0</span>}{x.cust > 0 && <span className="muted"> {sOpen === x.s ? '▴' : '▾'}</span>}</td>
+                  <td className="num">{n0(x.have)}</td><td className="num">{x.pend ? n0(x.pend) : <span className="muted">0</span>}</td><td className="num">{n0(x.left)}</td>
                   <td className={`num ${x.free < 0 ? 'warn-t' : ''}`}><b>{n0(x.free)}</b>{x.held > 0 && <div className="muted small">{n0(x.held)} held</div>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </tr>,
+                sOpen === x.s && x.rs.length > 0 ? <tr key={`${x.s}-c`} className="resx"><td colSpan={6}>
+                  {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => <div key={r.id} className="resxr">
+                    <b>{cname(r.customer_id)}</b>
+                    <span className="muted small">{n0(Number(r.reserved))} reserved · {n0(Number(r.shipped))} shipped{Number(r.pending) > 0 ? ` · ${n0(Number(r.pending))} open SO` : ''}</span>
+                    <b className="nw">{n0(Number(r.remaining))} left</b></div>)}
+                </td></tr> : null])}</tbody>
+              <tfoot><tr><td><b>{rows.length} strain{rows.length === 1 ? '' : 's'}</b></td><td /><td className="num"><b>{n0(tot.have)}</b></td><td className="num">{n0(tot.pend)}</td><td className="num">{n0(tot.left)}</td><td className="num"><b>{n0(tot.free)}</b></td></tr></tfoot>
+            </table></div>
+          })()}
           <p className="muted">Free = on hand − confirmed orders − approved reserves not yet shipped − sample holds on confirmed orders. Orders waiting for confirmation and reserve requests don't take anything until they're approved. Customers see Free rounded down to 10 lbs. On hand is what's in the freezers in this app. Negative means more is promised than is in the freezers.</p>
         </>
       )}

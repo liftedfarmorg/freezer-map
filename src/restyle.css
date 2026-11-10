@@ -766,3 +766,9 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .respct { display: inline-block; width: 56px; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; vertical-align: middle; margin-right: 6px; }
 .respct i { display: block; height: 6px; background: var(--brand); }
 @media (max-width: 640px) { .rescwrap { display: none; } .rescard-ph { display: block; } }
+/* RES-5: By strain: customers under a strain */
+.resstr tr.open td { background: var(--r-teal-bg); }
+.resstr tr.resx td { background: var(--empty); padding: 6px 12px 10px; }
+.resxr { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.resxr:last-child { border-bottom: 0; }
+.resxr .muted { flex: 1 1 200px; }
