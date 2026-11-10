@@ -755,3 +755,14 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .no2 .no-table.ar-table td.num:not(.c-l)::before { content: attr(data-l); }
   .no2 .no-table.ar-table td.num:not(.c-l) b { color: var(--ink); }
 }
+/* RES-4: Reserves by customer table (phones keep the cards) */
+.rescard-ph { display: none; }
+.restbl { width: 100%; }
+.restbl th.sortth .linkbtn { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; padding: 0; white-space: nowrap; }
+.restbl th.sortth.on .linkbtn { color: var(--ink); }
+.restbl tbody tr.tap { cursor: pointer; }
+.restbl tbody tr.tap:hover td { background: var(--r-teal-bg); }
+.restbl tfoot td { border-top: 2px solid var(--line); font-weight: 600; }
+.respct { display: inline-block; width: 56px; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.respct i { display: block; height: 6px; background: var(--brand); }
+@media (max-width: 640px) { .rescwrap { display: none; } .rescard-ph { display: block; } }

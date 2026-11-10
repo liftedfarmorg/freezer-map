@@ -13,7 +13,7 @@ import { OpenMenu } from './menu'
 import { CatalogButton } from './catalog'
 import { RequestsPanel } from './requests'
 import { STATE_LABEL } from './fulfill'
-import type { FOrder, MenuNumbers, ReserveRequest, ReserveYears, Balance, Customer, ImportResult, Order, RoshiRow, Strain } from './types'
+import type { CustomerTerms, FOrder, MenuNumbers, ReserveRequest, ReserveYears, Balance, Customer, ImportResult, Order, RoshiRow, Strain } from './types'
 
 const n0 = (x: number) => Math.round(x).toLocaleString()
 
@@ -69,6 +69,10 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [orders, setOrders] = useState<Order[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
+  // RES-4: Reserves by customer as a sortable table (computers and tablets; phones keep the cards)
+  const [csort, setCsort] = useState<{ k: 'name' | 'strains' | 'res' | 'ship' | 'so' | 'left' | 'pct' | 'contract'; up: boolean }>({ k: 'res', up: false })
+  const [cterms, setCterms] = useState<CustomerTerms[]>([])
+  useEffect(() => { backend.listTerms().then(setCterms).catch(() => {}) }, [])
   const [adding, setAdding] = useState<{ preset: number | null } | null>(null)   // RES-1
   const [edit, setEdit] = useState<{ customer_id: number | null; strain: string; lbs: string; isNew: boolean; note?: string } | null>(null)
   const [q, setQ] = useState('')
@@ -223,8 +227,33 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
           </div>
         )
       })()}
+      {mode === 'customer' && !focus && byCust.length > 0 && (() => {
+        const contractOf = (id: number) => { const t = cterms.find(x => x.customer_id === id && x.crop_year === rYear); return t?.contract_lbs ?? (rYear === cur ? cust.get(id)?.contract_lbs ?? null : null) }
+        const rows = byCust.map(c => { const res = sum(c.rs, 'reserved'), ship = sum(c.rs, 'shipped'), so = sum(c.rs, 'pending'), left = sum(c.rs, 'remaining')
+          return { ...c, strains: c.rs.length, res, ship, so, left, pct: res > 0 ? ship / res : 0, contract: contractOf(c.id) } })
+        const val = (r: typeof rows[number]) => csort.k === 'name' ? r.name.toLowerCase() : csort.k === 'contract' ? (r.contract ?? -1) : r[csort.k]
+        rows.sort((a, b) => { const x = val(a), y = val(b); const d = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number); return csort.up ? d : -d })
+        const tot = rows.reduce((t, r) => ({ res: t.res + r.res, ship: t.ship + r.ship, so: t.so + r.so, left: t.left + r.left, strains: t.strains + r.strains }), { res: 0, ship: 0, so: 0, left: 0, strains: 0 })
+        const th = (k: typeof csort.k, label: string, num = true) => <th className={`${num ? 'num ' : ''}sortth${csort.k === k ? ' on' : ''}`} aria-sort={csort.k === k ? (csort.up ? 'ascending' : 'descending') : 'none'}>
+          <button className="linkbtn" onClick={() => setCsort(s => ({ k, up: s.k === k ? !s.up : k === 'name' }))}>{label}{csort.k === k ? (csort.up ? ' ▲' : ' ▼') : ''}</button></th>
+        return <div className="cwrap rescwrap"><table className="ctable restbl">
+          <thead><tr>{th('name', 'Customer', false)}{th('strains', 'Strains')}{th('contract', 'Contract')}{th('res', 'Reserved')}{th('ship', 'Shipped')}{th('so', 'Open SO')}{th('left', 'Left')}{th('pct', 'Shipped %')}</tr></thead>
+          <tbody>{rows.map(r => <tr key={r.id} className="tap" onClick={() => openCust(r.id)}>
+            <td><b>{r.name}</b></td>
+            <td className="num">{r.strains}</td>
+            <td className={`num ${r.contract != null && r.res > r.contract ? 'warn-t' : 'muted'}`} title={r.contract != null && r.res > r.contract ? `${n0(r.res - r.contract)} lbs over contract` : undefined}>{r.contract != null ? n0(r.contract) : '—'}</td>
+            <td className="num">{n0(r.res)}</td>
+            <td className="num">{n0(r.ship)}</td>
+            <td className="num">{r.so > 0 ? n0(r.so) : <span className="muted">0</span>}</td>
+            <td className="num"><b>{n0(r.left)}</b></td>
+            <td className="num"><span className="respct"><i style={{ width: `${Math.min(100, Math.round(r.pct * 100))}%` }} /></span> {Math.round(r.pct * 100)}%</td>
+          </tr>)}</tbody>
+          <tfoot><tr><td><b>{rows.length} customer{rows.length === 1 ? '' : 's'}</b></td><td className="num">{tot.strains}</td><td /><td className="num"><b>{n0(tot.res)}</b></td><td className="num">{n0(tot.ship)}</td><td className="num">{n0(tot.so)}</td><td className="num"><b>{n0(tot.left)}</b></td>
+            <td className="num">{tot.res > 0 ? Math.round(tot.ship / tot.res * 100) : 0}%</td></tr></tfoot>
+        </table></div>
+      })()}
       {mode === 'customer' && !focus && byCust.map(c => (
-        <div key={c.id} className="rescard">
+        <div key={c.id} className="rescard rescard-ph">
           <button className="li setrow" onClick={() => openCust(c.id)}>
             <div className="grow"><b>{c.name}</b>
               <div className="muted">{c.rs.length} strain{c.rs.length === 1 ? '' : 's'} · {n0(sum(c.rs, 'shipped'))} shipped{sum(c.rs, 'pending') > 0 ? ` · ${n0(sum(c.rs, 'pending'))} pending` : ''}</div></div>
