@@ -1562,9 +1562,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <span className={c('muted')}>{shortDate(r.date)}</span>{proc(r)}{r.draft && <span className={c('chip c-wait')}>Draft</span>}</span>
           <span>{fmt(r.p.ff ?? 0)} lbs</span>
           <span>{pct(r.k.hashPct)}</span><span>{pct(r.k.rosinOfHash)}</span><span>{pct(r.k.rosinOfFF)}</span><span>{pct(r.k.bhoPct)}</span><span /></div>)}</div>
-      : <div className={c('yruns')}>{x.runs.map((r, i) => <div key={i} className={c('yrunm')}>
-          <p className={c('name')} style={{ fontSize: 14 }}><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button> <span className={c('muted')} style={{ fontWeight: 400 }}>{shortDate(r.date)} · {fmt(r.p.ff ?? 0)} lbs</span> {proc(r)}{r.draft && <> <span className={c('chip c-wait')}>Draft</span></>}</p>
-          <p className={c('meta')}>{r.p.bho ? <>BHO <b>{pct(r.k.bhoPct)}</b> of FF</> : <>Hash <b>{pct(r.k.hashPct)}</b> of FF{r.k.rosinG != null && <> · Rosin <b>{pct(r.k.rosinOfHash)}</b> of hash · {pct(r.k.rosinOfFF)} of FF</>}</>}</p></div>)}</div>
+      : <div className={c('yruns')}>{x.runs.map((r, i) => <div key={i} className={c('ymres sub')}>
+          <span><button className={c('linkish')} style={{ minWidth: 0, display: 'inline', textAlign: 'left' }} onClick={() => openYield(r.orderId)}>{r.label}</button>
+            <span className={c('meta')}>{shortDate(r.date)} · {fmt(r.p.ff ?? 0)} lbs{r.draft ? ' · Draft' : ''}</span></span>
+          <span>{pct(r.k.hashPct)}</span><span>{pct(r.k.rosinOfFF)}</span><span>{pct(r.k.bhoPct)}</span><span /></div>)}</div>
     return (
       <div className={c('screen ylist')}>
         <header className={c('hdr')}>{back('home', 'Home')}<h1>Yields</h1>
