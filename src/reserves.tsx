@@ -1,3 +1,4 @@
+import { AddReservesSheet } from './addreserves'
 import { ListInput, Select } from './combo'
 import { SampleHolds, SampleSheet } from './samples'
 import { CustomerDashboard } from './statement'
@@ -68,6 +69,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const [orders, setOrders] = useState<Order[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
+  const [adding, setAdding] = useState<{ preset: number | null } | null>(null)   // RES-1
   const [edit, setEdit] = useState<{ customer_id: number | null; strain: string; lbs: string; isNew: boolean; note?: string } | null>(null)
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
@@ -161,7 +163,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
           ? <>{onNewOrder && <button className="primary" onClick={onNewOrder}>+ New order</button>}
             <label className={`ghost filebtn ${busy ? 'disabled' : ''}`}>{busy ? 'Importing…' : 'Import Roshi orders'}
               <input type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile(f) }} /></label></>
-          : isAdmin && mode !== 'requests' && mode !== 'menu' && <button className="primary" onClick={() => setEdit({ customer_id: null, strain: '', lbs: '', isNew: true })}>+ Add reserve</button>}
+          : isAdmin && mode !== 'requests' && mode !== 'menu' && <button className="primary" onClick={() => setAdding({ preset: focus?.id ?? null })}>+ Add reserves</button>}
       </div>
       {result && (
         <div className="okbox">
@@ -309,6 +311,8 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 
       {sampleOf && <SampleSheet backend={backend} o={sampleOf} days={cust.get(sampleOf.customer_id)?.sample_hold_days ?? null} flash={flash} onClose={() => setSampleOf(null)}
         onDone={async () => { setSampleOf(null); setHoldRev(r => r + 1); await load() }} />}
+      {adding && <AddReservesSheet backend={backend} customers={customers} flash={flash} preset={adding.preset} onClose={() => setAdding(null)}
+        onDone={async id => { setAdding(null); await load(); if (mode === 'customer') setOpen(id) }} />}
       {edit && (
         <div className="scrim" onClick={() => setEdit(null)}>
           <div className="sheet form" onClick={e => e.stopPropagation()}>
