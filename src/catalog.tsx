@@ -3,6 +3,7 @@ import type { Backend } from './api'
 import type { MenuRow } from './types'
 import { loadMenuInfo } from './strains'
 import type { MenuInfo } from './strains'
+import { yieldRange } from './strains'
 
 // Sales > Open menu > Catalog PDF: what's open on the menu, as a photo catalog to send customers.
 // Each strain: photo, name, lineage, spot price, yield to solventless and hydrocarbon (from the strain's Sales settings).
@@ -30,7 +31,7 @@ function CatalogSheet({ backend, flash, onClose }: { backend: Backend; flash: (t
   const cy = rows ? Math.max(...rows.map(r => r.crop_year), 0) : 0
   const pick = (rows ?? []).filter(r => r.crop_year === cy && (o.only === 'all' || Number(r.available) > 0)).sort((a, b) => a.strain.localeCompare(b.strain))
   const withPhoto = pick.filter(r => info.get(r.strain.toLowerCase())?.photo_url).length
-  const noYield = pick.filter(r => info.get(r.strain.toLowerCase())?.solventless_pct == null).length
+  const noYield = pick.filter(r => info.get(r.strain.toLowerCase())?.solventless_pct == null && info.get(r.strain.toLowerCase())?.solventless_high_pct == null).length
   async function make() {
     setBusy(true)
     try {
@@ -129,8 +130,9 @@ export async function catalogPdf(rows: MenuRow[], info: Map<string, MenuInfo>, o
     if (sub) { pdf.text(pdf.splitTextToSize(sub, cw)[0], x, ty); ty += 13 }
     pdf.setFillColor(...pale); pdf.roundedRect(x, ty - 2, cw, 22, 4, 4, 'F')
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(...ink)
-    pdf.text(`Solventless ${pct(m?.solventless_pct)}`, x + 8, ty + 12)
-    pdf.text(`Hydrocarbon ${pct(m?.hydrocarbon_pct)}`, x + cw - 8, ty + 12, { align: 'right' })
+    // 324: low-high range when a high is set (plain hyphen: the PDF's built-in font)
+    pdf.text(`Solventless ${yieldRange(m?.solventless_pct, m?.solventless_high_pct, '-') || pct(null)}`, x + 8, ty + 12)
+    pdf.text(`Hydrocarbon ${yieldRange(m?.hydrocarbon_pct, m?.hydrocarbon_high_pct, '-') || pct(null)}`, x + cw - 8, ty + 12, { align: 'right' })
     if (m?.menu_note) { pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8.5); pdf.setTextColor(...mute); pdf.text(pdf.splitTextToSize(m.menu_note, cw)[0], x, ty + 34) }
     col++
     if (col === 2) { col = 0; y += ch + G }

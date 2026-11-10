@@ -9,7 +9,9 @@ import './openmenu.css'
 export interface MenuLine { product: 'FF' | 'ST' | 'SM'; strain: string; crop_year: number; open_lbs: number; price: number | null; strain_type: string | null
   lineage: string | null; sho: number | null; bho: number | null; thc: number | null; photo_url: string | null; note: string | null
   /** 196: strain's default grade (SHO / BHO); missing until 196 is run */
-  grade?: string | null }
+  grade?: string | null
+  /** 324: high end of the SHO / BHO yield (sho / bho are the low); missing until 324 is run */
+  sho_high?: number | null; bho_high?: number | null }
 type Group = 'ff' | 'df'
 const GROUP: Record<Group, string> = { ff: 'Fresh Frozen', df: 'Dry Flower' }
 const PROD: Record<MenuLine['product'], string> = { FF: 'Fresh Frozen', ST: 'Standards', SM: 'Smalls' }
@@ -20,6 +22,9 @@ const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hy
 const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
 const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null
 const pct = (v: number | null) => (v == null ? '–' : `${Number(v).toFixed(1)}%`)
+// 324: low–high when both are set and differ, else the one number
+const isRange = (lo: number | null, hi: number | null | undefined) => lo != null && hi != null && Number(hi) !== Number(lo)
+const yld = (lo: number | null, hi: number | null | undefined) => isRange(lo, hi) ? `${Number(lo).toFixed(1)}–${Number(hi).toFixed(1)}%` : pct(lo ?? hi ?? null)
 
 export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff' | 'public' }) {
   const [group, setGroup] = useState<Group>('ff')
@@ -88,10 +93,10 @@ function StrainPop({ line, onClose }: { line: MenuLine; onClose: () => void }) {
         <h2>{line.strain}</h2>
         <p className="om-lin">{ty && <span className={`om-type t-${ty.split(' ')[0].toLowerCase()}`}>{ty}</span>}{line.lineage ?? 'Lineage coming soon'}</p>
         {line.product === 'FF'
-          ? <div className="om-yl"><div><p>SHO · solventless</p><b>{pct(line.sho)}</b><small>avg yield</small></div><div><p>BHO · hydrocarbon</p><b>{pct(line.bho)}</b><small>avg yield</small></div></div>
+          ? <div className="om-yl"><div><p>SHO · solventless</p><b>{yld(line.sho, line.sho_high)}</b><small>{isRange(line.sho, line.sho_high) ? 'yield range' : 'avg yield'}</small></div><div><p>BHO · hydrocarbon</p><b>{yld(line.bho, line.bho_high)}</b><small>{isRange(line.bho, line.bho_high) ? 'yield range' : 'avg yield'}</small></div></div>
           : <div className="om-yl one"><div><p>THC</p><b>{pct(line.thc)}</b><small>latest lab test</small></div></div>}
         {line.note && <p className="om-snote">{line.note}</p>}
-        <p className="om-lin">{line.product === 'FF' ? 'Yields are averages from our washes. Your results can vary. ' : ''}Questions: <a className="om-call" href={`mailto:${SALES}`}>{SALES}</a></p>
+        <p className="om-lin">{line.product === 'FF' ? (isRange(line.sho, line.sho_high) || isRange(line.bho, line.bho_high) ? 'Yields are from our washes. Your results can vary. ' : 'Yields are averages from our washes. Your results can vary. ') : ''}Questions: <a className="om-call" href={`mailto:${SALES}`}>{SALES}</a></p>
       </div>
     </div>
   </div>
