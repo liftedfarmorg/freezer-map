@@ -1555,11 +1555,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       { runs: x => x.runs.length, lbs: x => x.lbs, hash: x => x.hashPct ?? -1, roh: x => x.rosinOfHash ?? -1, rof: x => x.rosinOfFF ?? -1, bho: x => x.bhoPct ?? -1 })
     const tot = yAgg(rows.flatMap(x => x.runs))
     // each run under its strain: on desktop the same columns as the strain row above, so every % lines up
-    const proc = (r: YRun) => r.p.bho ? <span className={c('ptag bho')}>BHO</span> : <span className={c('ptag')}>{r.p.rosin ? 'Hash + rosin' : 'Hash'}</span>
     const runList = (x: YStrain) => desk
       ? <div className={c('yruns2')}>{x.runs.map((r, i) => <div key={i} className={c('yres sub')}>
           <span className={c('yrunname')}><button className={c('linkish')} style={{ minWidth: 0, display: 'inline' }} onClick={() => openYield(r.orderId)}>{r.label}</button>
-            <span className={c('muted')}>{shortDate(r.date)}</span>{proc(r)}{r.draft && <span className={c('chip c-wait')}>Draft</span>}</span>
+            <span className={c('muted')}>{shortDate(r.date)}</span>{r.draft && <span className={c('chip c-wait')}>Draft</span>}</span>
           <span>{fmt(r.p.ff ?? 0)} lbs</span>
           <span>{pct(r.k.hashPct)}</span><span>{pct(r.k.rosinOfHash)}</span><span>{pct(r.k.rosinOfFF)}</span><span>{pct(r.k.bhoPct)}</span><span /></div>)}</div>
       : <div className={c('yruns')}>{x.runs.map((r, i) => <div key={i} className={c('ymres sub')}>
