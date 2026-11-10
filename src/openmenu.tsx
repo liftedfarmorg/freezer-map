@@ -10,7 +10,7 @@ export interface MenuLine { product: 'FF' | 'ST' | 'SM'; strain: string; crop_ye
   lineage: string | null; sho: number | null; bho: number | null; thc: number | null; photo_url: string | null; note: string | null
   /** 196: strain's default grade (SHO / BHO); missing until 196 is run */
   grade?: string | null
-  /** 324: high end of the SHO / BHO yield (sho / bho are the low); missing until 324 is run */
+  /** 325: high end of the SHO / BHO yield (sho / bho are the low); missing until 325 is run */
   sho_high?: number | null; bho_high?: number | null }
 type Group = 'ff' | 'df'
 const GROUP: Record<Group, string> = { ff: 'Fresh Frozen', df: 'Dry Flower' }
@@ -22,7 +22,7 @@ const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hy
 const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
 const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null
 const pct = (v: number | null) => (v == null ? '–' : `${Number(v).toFixed(1)}%`)
-// 324: low–high when both are set and differ, else the one number
+// 325: low–high when both are set and differ, else the one number
 const isRange = (lo: number | null, hi: number | null | undefined) => lo != null && hi != null && Number(hi) !== Number(lo)
 const yld = (lo: number | null, hi: number | null | undefined) => isRange(lo, hi) ? `${Number(lo).toFixed(1)}–${Number(hi).toFixed(1)}%` : pct(lo ?? hi ?? null)
 

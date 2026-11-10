@@ -461,7 +461,7 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     { k: 'status', l: 'Status', v: r => !r.active ? 'Retired' : S(r).trial ? 'Trial' : S(r).show_on_menu === false ? 'Hidden' : 'On menu',
       cell: r => !r.active ? <span className="pill">Retired</span> : <>{S(r).trial && <span className="pill s-trial">Trial</span>} {S(r).show_on_menu === false ? <span className="pill">Hidden</span> : <span className="pill p-res">On menu</span>}</> },
     { k: 'pallets', l: 'Pallets', num: true, v: r => palletsOf(S(r), inv) || null },
-    // 324: shows the low–high range; sorts by the low
+    // 325: shows the low–high range; sorts by the low
     { k: 'sl', l: 'Yield to SHO %', num: true, v: r => n(P(r)?.set?.solventless_pct ?? P(r)?.set?.solventless_high_pct), cell: r => yieldRange(P(r)?.set?.solventless_pct, P(r)?.set?.solventless_high_pct).replace('%', '') || null },
     { k: 'hc', l: 'Yield to BHO %', num: true, v: r => n(P(r)?.set?.hydrocarbon_pct ?? P(r)?.set?.hydrocarbon_high_pct), cell: r => yieldRange(P(r)?.set?.hydrocarbon_pct, P(r)?.set?.hydrocarbon_high_pct).replace('%', '') || null },
     { k: 'y', l: 'Lbs / plant', num: true, v: r => n(eff(P(r), 'yield_lbs_plant'), 2) },

@@ -742,7 +742,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; color:
 .sprofile { margin: 10px 0; }
 .sprofile .fold { margin: 6px 0; }
 .sfield .row input { flex: 1; min-width: 0; }
-/* 324: yield low + high side by side (inputs line up at the bottom) */
+/* 325: yield low + high side by side (inputs line up at the bottom) */
 .sfield.half { display: inline-grid; width: calc(50% - 6px); vertical-align: bottom; }
 .sfield.half:nth-child(odd) { margin-right: 12px; }
 .sphoto { max-width: 100%; max-height: 260px; border-radius: 10px; margin-top: 6px; object-fit: contain; background: #fff; }

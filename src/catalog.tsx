@@ -130,7 +130,7 @@ export async function catalogPdf(rows: MenuRow[], info: Map<string, MenuInfo>, o
     if (sub) { pdf.text(pdf.splitTextToSize(sub, cw)[0], x, ty); ty += 13 }
     pdf.setFillColor(...pale); pdf.roundedRect(x, ty - 2, cw, 22, 4, 4, 'F')
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(...ink)
-    // 324: low-high range when a high is set (plain hyphen: the PDF's built-in font)
+    // 325: low-high range when a high is set (plain hyphen: the PDF's built-in font)
     pdf.text(`Solventless ${yieldRange(m?.solventless_pct, m?.solventless_high_pct, '-') || pct(null)}`, x + 8, ty + 12)
     pdf.text(`Hydrocarbon ${yieldRange(m?.hydrocarbon_pct, m?.hydrocarbon_high_pct, '-') || pct(null)}`, x + cw - 8, ty + 12, { align: 'right' })
     if (m?.menu_note) { pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8.5); pdf.setTextColor(...mute); pdf.text(pdf.splitTextToSize(m.menu_note, cw)[0], x, ty + 34) }
