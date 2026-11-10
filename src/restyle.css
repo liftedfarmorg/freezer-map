@@ -861,4 +861,6 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .rdock { bottom: calc(72px + env(safe-area-inset-bottom)); }
   .addres .rdock { bottom: 0; }
   .rdock input[type=text] { flex-basis: 100%; order: 3; }
+  .rtable tbody td.e { display: none; }
+  .rstepset > span { white-space: nowrap; }
 }

@@ -169,10 +169,10 @@ export function ReserveEditor({ backend, cid, cname, year, cur, flash, onSaved, 
                 {e && <div className="warn-t small">{e}</div>}
                 <span className="rtags-ph">{gradeCell(r.strain)}{typeCell(r.strain)}</span></td>
               <td className="c-g">{gradeCell(r.strain)}</td><td className="c-t">{typeCell(r.strain)}</td>
-              <td className="num" data-l="reserved ">{d ? <><span className="muted">{n0(r.res)} →</span> <b>{n0(to)}</b></> : r.has ? n0(r.res) : <span className="muted">–</span>}</td>
-              <td className="num" data-l="fulfilled ">{r.has || r.ful ? n0(r.ful) : <span className="muted">–</span>}</td>
-              <td className="num" data-l="open SO ">{r.has || r.so ? n0(r.so) : <span className="muted">–</span>}</td>
-              <td className="num c-rem" data-l="remaining "><b className={d ? (e ? 'warn-t' : 'ok-t') : ''}>{d ? (e ? '–' : n0(remNow(r))) : r.has ? n0(r.rem) : <span className="muted">–</span>}</b></td>
+              <td className={`num ${!d && !r.has ? 'e' : ''}`} data-l="reserved ">{d ? <><span className="muted">{n0(r.res)} →</span> <b>{n0(to)}</b></> : r.has ? n0(r.res) : <span className="muted">–</span>}</td>
+              <td className={`num ${r.has || r.ful ? '' : 'e'}`} data-l="fulfilled ">{r.has || r.ful ? n0(r.ful) : <span className="muted">–</span>}</td>
+              <td className={`num ${r.has || r.so ? '' : 'e'}`} data-l="open SO ">{r.has || r.so ? n0(r.so) : <span className="muted">–</span>}</td>
+              <td className={`num c-rem ${!d && !r.has ? 'e' : ''}`} data-l="remaining "><b className={d ? (e ? 'warn-t' : 'ok-t') : ''}>{d ? (e ? '–' : n0(remNow(r))) : r.has ? n0(r.rem) : <span className="muted">–</span>}</b></td>
               <td className="num muted" data-l="open ">{n0(r.open)}</td>
               {canEdit && <td className="num c-st"><Stepper val={d} step={step} min={r.has ? minOf(r) - r.res : 0} max={maxOf(r) - r.res} bad={!!e} label={r.strain}
                 onChange={n => setEd(m => { const x = { ...m }; if (n) x[r.key] = n; else delete x[r.key]; return x })} /></td>}
