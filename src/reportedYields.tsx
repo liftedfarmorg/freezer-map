@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { loadMenuInfo, loadProfiles } from './strains'
+import { loadMenuInfo, loadProfiles, yieldRange } from './strains'
 import { isAdminOf } from './fold'
 import './reportedYields.css'
 
@@ -17,7 +17,7 @@ export interface RYReport { orderId: number; label: string; shippedOn: string; c
 /** shipped orders that could be reported but haven't been */
 export interface RYOwed { orderId: number; label: string; shippedOn: string; customerId: number; customer: string; strains: number }
 /** what the strain profile shows on the sales menu today (Strains > Yield to solventless / hydrocarbon) */
-export interface RYMenu { solventless_pct: number | null; hydrocarbon_pct: number | null }
+export interface RYMenu { solventless_pct: number | null; hydrocarbon_pct: number | null; solventless_high_pct?: number | null; hydrocarbon_high_pct?: number | null }   // 325 (Aziz): the menu yield is a low-high range
 
 const G: Record<RYUnit, number> = { g: 1, kg: 1000, lb: 453.592, '%': 0, '%ff': 0 }
 // a strain's average is "menu-ready" once enough customers have reported enough lbs that one odd run can't swing it
@@ -52,19 +52,30 @@ const lbs = (n: number) => `${Math.round(n).toLocaleString()} lbs`
 const day = (s: string | null) => s ? new Date(s.length === 10 ? s + 'T12:00' : s).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) : ''
 const proc = (p: RYPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + rosin' : 'Hash'
 
+// what "Put on the menu" writes to the strain profile: the customers' low-high range (one number when there's only one run)
+const r1 = (n: number) => Math.round(n * 10) / 10
+const menuVals = (a: Agg, sho: boolean, bho: boolean): Partial<RYMenu> => {
+  const v: Partial<RYMenu> = {}
+  if (sho && a.hash != null) { v.solventless_pct = r1(a.hashLo ?? a.hash); v.solventless_high_pct = r1(a.hashHi ?? a.hash) }
+  if (bho && a.bho != null) { v.hydrocarbon_pct = r1(a.bhoLo ?? a.bho); v.hydrocarbon_high_pct = r1(a.bhoHi ?? a.bho) }
+  return v
+}
+const menuText = (a: Agg, sho: boolean, bho: boolean) => { const v = menuVals(a, sho, bho)
+  return [v.solventless_pct != null ? `${yieldRange(v.solventless_pct, v.solventless_high_pct)} SHO` : '', v.hydrocarbon_pct != null ? `${yieldRange(v.hydrocarbon_pct, v.hydrocarbon_high_pct)} BHO` : ''].filter(Boolean).join(' and ') }
+
 type Tab = 'strain' | 'customer' | 'issues'
 type SortK = 's' | 'cust' | 'runs' | 'lbs' | 'hash' | 'rosin' | 'roh' | 'bho'
 
-/** the live page: loads the reports (SQL 325) and the strain menu yields, and saves "put on the menu" to the strain profile */
+/** the live page: loads the reports (SQL 326) and the strain menu yields, and saves "put on the menu" to the strain profile */
 export function ReportedYieldsPage({ sb, flash }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void }) {
   const [d, setD] = useState<{ reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; ids: Record<string, number> } | null>(null)
   const [err, setErr] = useState('')
   async function load() {
     if (!sb) { setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
     const [r, o, mi, pr] = await Promise.all([sb.rpc('list_yield_reports'), sb.rpc('list_yield_owed'), loadMenuInfo(sb), loadProfiles(sb)])
-    if (r.error || o.error) { const m = (r.error ?? o.error)!.message; setErr(/list_yield/.test(m) ? 'Reported Yields needs SQL 325 run first.' : m); setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
+    if (r.error || o.error) { const m = (r.error ?? o.error)!.message; setErr(/list_yield/.test(m) ? 'Reported Yields needs SQL 326 run first.' : m); setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
     const menu: Record<string, RYMenu> = {}
-    for (const [k, v] of mi) menu[k] = { solventless_pct: v.solventless_pct, hydrocarbon_pct: v.hydrocarbon_pct }
+    for (const [k, v] of mi) menu[k] = { solventless_pct: v.solventless_pct, hydrocarbon_pct: v.hydrocarbon_pct, solventless_high_pct: v.solventless_high_pct ?? null, hydrocarbon_high_pct: v.hydrocarbon_high_pct ?? null }
     const ids: Record<string, number> = {}
     for (const p of pr.values()) ids[p.name.toLowerCase()] = p.id
     setD({ reports: (r.data ?? []) as RYReport[], owed: (o.data ?? []) as RYOwed[], menu, ids })
@@ -132,11 +143,10 @@ export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { r
   }, [runs, reports, owed, cust, ql])
 
   const useOnMenu = async (s: string, a: Agg, sho: boolean, bho: boolean) => {
-    const vals: Partial<RYMenu> = {}
-    if (sho && a.hash != null) vals.solventless_pct = Math.round(a.hash * 10) / 10
-    if (bho && a.bho != null) vals.hydrocarbon_pct = Math.round(a.bho * 10) / 10
+    const vals = menuVals(a, sho, bho)
     if (onMenu && !(await onMenu(s, vals))) return
-    setMenuNow({ ...menuNow, [s.toLowerCase()]: { solventless_pct: menuNow[s.toLowerCase()]?.solventless_pct ?? null, hydrocarbon_pct: menuNow[s.toLowerCase()]?.hydrocarbon_pct ?? null, ...vals } })
+    const cur = menuNow[s.toLowerCase()]
+    setMenuNow({ ...menuNow, [s.toLowerCase()]: { solventless_pct: cur?.solventless_pct ?? null, hydrocarbon_pct: cur?.hydrocarbon_pct ?? null, solventless_high_pct: cur?.solventless_high_pct ?? null, hydrocarbon_high_pct: cur?.hydrocarbon_high_pct ?? null, ...vals } })
     flash(live ? `${s}: menu now shows the customer average` : `${s}: menu yields updated to the customer average (mockup, nothing saved)`)
   }
 
@@ -207,18 +217,18 @@ export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { r
             <td className="num"><b className="ry-bho">{pct(x.a.bho)}</b>{x.a.bhoLo != null && <small className="ry-range">{pct(x.a.bhoLo)}–{pct(x.a.bhoHi)}</small>}</td>
             <td className="ry-menu">{x.ready ? <>{x.sho && <span className="pill m-ok">SHO {pct1(x.a.hash)}</span>} {x.bho && <span className="pill m-ok">BHO {pct1(x.a.bho)}</span>}</>
               : <span className="pill m-mute" title={`Needs reports from ${READY_CUSTOMERS}+ customers and ${READY_LBS}+ lbs`}>Needs more reports</span>}
-              <small>Menu shows {m?.solventless_pct != null || m?.hydrocarbon_pct != null ? [m?.solventless_pct != null ? `${m.solventless_pct}% SHO` : '', m?.hydrocarbon_pct != null ? `${m.hydrocarbon_pct}% BHO` : ''].filter(Boolean).join(' · ') : 'no yield'}</small></td>
+              <small>Menu shows {[yieldRange(m?.solventless_pct, m?.solventless_high_pct) && `${yieldRange(m?.solventless_pct, m?.solventless_high_pct)} SHO`, yieldRange(m?.hydrocarbon_pct, m?.hydrocarbon_high_pct) && `${yieldRange(m?.hydrocarbon_pct, m?.hydrocarbon_high_pct)} BHO`].filter(Boolean).join(' · ') || 'no yield'}</small></td>
             <td className="muted">{on ? '▴' : '▾'}</td></tr>
             {on && <tr className="ry-detail"><td colSpan={10}>
               {runTable(x.rs, 'customer')}
               <div className="row between wrap ry-detail-f"><span className="muted">Average of {x.rs.length} run{x.rs.length > 1 ? 's' : ''} from {x.nc} customer{x.nc > 1 ? 's' : ''}. {!x.sho && x.a.hash != null ? 'Hash needs more reports before it can go on the menu. ' : ''}{!x.bho && x.a.bho != null ? 'BHO needs more reports before it can go on the menu.' : ''}</span>
-                {x.ready && (onMenu || !live) && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {[x.sho ? `${pct1(x.a.hash)} SHO` : '', x.bho ? `${pct1(x.a.bho)} BHO` : ''].filter(Boolean).join(' and ')} on the menu</button>}</div>
+                {x.ready && (onMenu || !live) && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {menuText(x.a, x.sho, x.bho)} on the menu</button>}</div>
             </td></tr>}</Fragment> })}
           {!strains.length && <tr><td colSpan={10} className="muted">No reported runs match.</td></tr>}</tbody>
         {strains.length > 0 && <tfoot><tr><td><b>All strains</b></td><td className="num">{new Set(runs.map(x => x.r.customerId)).size}</td><td className="num">{runs.length}</td><td className="num">{lbs(tot.lbs)}</td>
           <td className="num"><b>{pct(tot.hash)}</b></td><td className="num"><b>{pct(tot.rosinFF)}</b></td><td className="num"><b>{pct1(tot.rosinHash)}</b></td><td className="num"><b>{pct(tot.bho)}</b></td><td colSpan={2} /></tr></tfoot>}
       </table></div>
-      <p className="muted ry-foot">Tap a strain to see every run behind its average. <b>For the menu</b>: a hash (SHO) or BHO average turns green once {READY_CUSTOMERS}+ customers and {READY_LBS}+ lbs are behind it, so one odd run can't swing it; those are the numbers we'd show on the sales menu. "Menu shows" is what the strain profile has today (Strains › Yield to solventless / hydrocarbon).</p>
+      <p className="muted ry-foot">Tap a strain to see every run behind its average. <b>For the menu</b>: a hash (SHO) or BHO average turns green once {READY_CUSTOMERS}+ customers and {READY_LBS}+ lbs are behind it, so one odd run can't swing it; those are the numbers we'd show on the sales menu. "Menu shows" is what the strain profile has today (Strains › Yield to solventless / hydrocarbon, low–high). Putting a strain on the menu sets that range to the low and high of the customers’ runs.</p>
     </>}
 
     {tab === 'customer' && <div className="ry-card"><table className="restable ry-main"><thead><tr>

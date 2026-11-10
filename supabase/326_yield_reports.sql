@@ -1,4 +1,5 @@
--- 325: Yield reports. Customers report how the fresh frozen they bought ran (hash, rosin, BHO) from the portal's Yields
+-- 326: Yield reports. Customers report how the fresh frozen they bought ran (hash, rosin, BHO) from the portal's Yields
+-- RUN LIVE 11/9 by Claude in the SQL Editor (Matt asked); tested as a LEEF Labs login: save + send + my_yields work (test rolled back).
 -- screens; Sales sees every report in Sales > Reported Yields.
 --   * one report per shipped order; `lines` is the report as the portal sends it:
 --       [{ s: strain, y: crop year, shipped: lbs, note, issue: { kinds: [...], text } | null,

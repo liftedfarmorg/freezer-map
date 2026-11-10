@@ -98,7 +98,7 @@ const STEPS: [number, string][] = [[10, '10 lbs'], [50, '50 lbs'], [100, '100 lb
 const StepErr = ({ msg }: { msg: string }) => <p className={c('err')} style={{ margin: '2px 0 0' }}>{msg}</p>
 
 /* ---------- data ---------- */
-const YIELDS_FROM = '2026-09-01'   // same date as yield_reports_from() in SQL 325
+const YIELDS_FROM = '2026-09-01'   // same date as yield_reports_from() in SQL 326
 type Screen = 'yields' | 'yield' | 'ysent' | 'activity' | 'resmenu' | 'home' | 'contract' | 'reserves' | 'edit' | 'reqReview' | 'sent' | 'menu' | 'order' | 'review' | 'ordered' | 'orders' | 'holds'
 /** reserve history (mockup): one entry per request (with Lifted's decision) or per change Lifted made */
 export interface ActLine { s: string; y: number; from: number; to: number; ok?: number | null
@@ -1425,7 +1425,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const ROSIN_UNITS: [YUnit, string][] = [['g', 'grams'], ['kg', 'kgs'], ['lb', 'lbs'], ['%', '% of hash'], ['%ff', '% of FF']]
   const newPart = (ff: number | null): YPart => ({ bho: false, rosin: true, ff, outV: null, outU: 'g', rosinV: null, rosinU: 'g' })
   // shipped orders made in the app, newest first, with their report (if any)
-  // orders shipped since yields started (SQL 325 yield_reports_from) can be reported; older ones would swamp customers
+  // orders shipped since yields started (SQL 326 yield_reports_from) can be reported; older ones would swamp customers
   const yOrders = useMemo(() => (d?.yields ? orows.filter(o => o.status === 'shipped' && o.order && o.order.order_lines.length && (o.order.shipped_date ?? o.date ?? '') >= YIELDS_FROM) : [])
     .map(o => ({ o, rep: d?.yields?.find(r => r.orderId === o.order!.id) ?? null })), [orows, d])
   const yToDo = yOrders.filter(x => !x.rep?.sentAt)
