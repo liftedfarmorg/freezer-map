@@ -778,7 +778,8 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .resstr thead { display: none; }
   .resstr tbody tr.tap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
   .resstr tbody tr.tap td { border: 0; padding: 0; text-align: left; }
-  .resstr tbody tr.tap td:first-child { flex: 1 1 55%; order: 1; font-weight: 600; }
+  .resstr tbody tr.tap td:first-child { flex: 1 0 calc(100% - 130px); min-width: 0; order: 1; font-weight: 600; }
+  .resstr tbody tr.tap td.c-cu { order: 4; }
   .resstr tbody tr.tap td.c-fr { order: 2; font-size: 16px; }
   .resstr tbody tr.tap td.c-fr::before { content: attr(data-l); font-size: 12px; font-weight: 400; color: var(--muted); }
   .resstr tbody tr.tap td.c-st, .resstr tbody tr.tap td.c-cu { order: 3; font-size: 12.5px; color: var(--muted); }
