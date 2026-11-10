@@ -48,9 +48,9 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
       onClick={() => setSort({ col, dir: on ? -sort.dir : col === 's' || col === 'p' ? 1 : -1 })}>{label}<i aria-hidden="true">{on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button>
   }
   const dry = group === 'df'
-  // YLD-11: SHO / BHO yield columns on fresh frozen, only once at least one strain on it has a yield entered
+  // YLD-11/13: SHO / BHO yield columns on fresh frozen: always on the staff Open menu; on the public link only once a strain has a yield
   const hasY = (r: MenuLine) => r.sho != null || r.sho_high != null || r.bho != null || r.bho_high != null
-  const showY = !dry && inGroup.some(hasY), yl = showY ? ' yl' : ''
+  const showY = !dry && (variant === 'staff' || inGroup.some(hasY)), yl = showY ? ' yl' : ''
   const price = (r: MenuLine) => r.price != null ? `$${Number(r.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : <a className="om-call" href={`mailto:${SALES}`} onClick={e => e.stopPropagation()}>Call/Email</a>
   return <div className={`om om-${variant}`}>
     <div className="om-kpis">
