@@ -502,7 +502,6 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp-desk .cp-rmcard .cp-rmbar { flex-wrap: wrap; }
 .cp-desk .cp-rmcard .cp-rmbar .cp-search { margin-left: auto; }
 /* yields (mockup): one card per strain; phones stack the fields, desktop lays them out in columns */
-.cp .cp-ytile { background: var(--teal-tint); border: 1px solid var(--teal); }
 .cp .cp-yhint { margin: 0 4px; font-size: 13px; line-height: 1.45; }
 .cp .cp-ycard { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .cp .cp-ycard.cp-done { box-shadow: inset 0 0 0 1.5px var(--teal); }

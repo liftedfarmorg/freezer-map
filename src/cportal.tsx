@@ -561,6 +561,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           <button className={c('tile')} onClick={() => go('menu')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Open Menu</p><p className={c('big')}>{fmt(menuTotal)} lbs open</p></div><span className={c('pillbtn')}>{contract ? 'Add to Reserves' : 'View Menu'}</span></div>
             <p className={c('foot')}>{plural(menuN, 'strain')} · updates live as orders and reserves change</p></button>
+          {d?.yields && yOrders.length > 0 && <button className={c('tile')} onClick={() => go('yields')}>
+            <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Yields</p><p className={c('big')}>{yToDo.length ? `${plural(yToDo.length, 'order')} to report` : 'All reported'}</p></div><span className={c('pillbtn')}>View / Report</span></div></button>}
           <div className={contract ? c('grid2') : ''}>
             <button className={c('tile small')} onClick={() => { setFilter('all'); go('orders') }}><p className={c('lbl')}>Orders &amp; Statement</p><p className={c('big')}>{open.length} in progress</p>
               {open.length > 0 && <p className={c('foot')} style={{ color: 'var(--blue)', marginTop: 4 }}>{[nSub ? `${nSub} submitted` : '', nApp ? `${nApp} approved` : '', nFul ? `${nFul} in fulfillment` : ''].filter(Boolean).join(' · ')}</p>}</button>
@@ -568,9 +570,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <p className={c('big')}>{fmt(thisMonth)} lbs <span style={{ fontSize: 13, fontWeight: 500 }}>picked up</span></p>
               <p className={c('foot')} style={{ marginTop: 4 }}>{min == null ? 'No monthly minimum' : leftMin ? <><b style={{ color: 'var(--blue)' }}>{fmt(leftMin)} to go</b> · {fmt(min)} lb min</> : <b>✓ {fmt(min)} lb min met</b>}</p></button>}
           </div>
-          {yToDo.length > 0 && <button className={c('tile ytile')} onClick={() => yToDo.length === 1 ? openYield(yToDo[0].o.order!.id) : go('yields')}>
-            <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Report Yields</p><p className={c('big')}>{plural(yToDo.length, 'order')} to report</p></div><span className={c('pillbtn')}>Report</span></div>
-            <p className={c('foot')}>{yToDo.slice(0, 3).map(x => x.o.label).join(', ')}{yToDo.length > 3 ? ` +${yToDo.length - 3} more` : ''} · how did your hash and rosin come out?</p></button>}
           {hs.length > 0 && <button className={c('tile')} style={{ background: 'var(--gold-bg)' }} onClick={() => go('holds')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')} style={{ color: 'var(--gold)' }}>Sample Holds for You</p><p className={c('big')}>{plural(hs.length, 'strain')} · {fmt(hs.reduce((a, h) => a + holdLbs(h), 0))} lbs</p></div><span className={c('pillbtn')} style={{ background: '#fff', color: 'var(--gold)' }}>Review</span></div>
             <p className={c('foot')} style={{ color: 'var(--ink)', fontWeight: 500 }}>{shown}</p>
