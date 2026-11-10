@@ -11,7 +11,9 @@ export interface MenuLine { product: 'FF' | 'ST' | 'SM'; strain: string; crop_ye
   /** 196: strain's default grade (SHO / BHO); missing until 196 is run */
   grade?: string | null
   /** 325: high end of the SHO / BHO yield (sho / bho are the low); missing until 325 is run */
-  sho_high?: number | null; bho_high?: number | null }
+  sho_high?: number | null; bho_high?: number | null
+  /** 327: customers' reported lowest / highest and how many runs (any sent report, ready or not); missing until 327 is run */
+  rep_sho_lo?: number | null; rep_sho_hi?: number | null; rep_sho_runs?: number | null; rep_bho_lo?: number | null; rep_bho_hi?: number | null; rep_bho_runs?: number | null }
 type Group = 'ff' | 'df'
 const GROUP: Record<Group, string> = { ff: 'Fresh Frozen', df: 'Dry Flower' }
 const PROD: Record<MenuLine['product'], string> = { FF: 'Fresh Frozen', ST: 'Standards', SM: 'Smalls' }
@@ -86,6 +88,10 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
   </div>
 }
 
+// 327 (YLD-15): the customers' reported lowest–highest under each yield, from the first sent report
+const rep = (lo: number | null | undefined, hi: number | null | undefined, n: number | null | undefined) =>
+  Number(n ?? 0) > 0 && (lo != null || hi != null) ? <span className="om-rep">Customer reports: {yld(lo ?? null, hi)} · {n} run{Number(n) === 1 ? '' : 's'}</span> : null
+
 function StrainPop({ line, onClose }: { line: MenuLine; onClose: () => void }) {
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   const ty = line.strain_type ?? null
@@ -98,10 +104,12 @@ function StrainPop({ line, onClose }: { line: MenuLine; onClose: () => void }) {
         <h2>{line.strain}</h2>
         <p className="om-lin">{ty && <span className={`om-type t-${ty.split(' ')[0].toLowerCase()}`}>{ty}</span>}{line.lineage ?? 'Lineage coming soon'}</p>
         {line.product === 'FF'
-          ? <div className="om-yl"><div><p>SHO · solventless</p><b>{yld(line.sho, line.sho_high)}</b><small>{isRange(line.sho, line.sho_high) ? 'yield range' : 'avg yield'}</small></div><div><p>BHO · hydrocarbon</p><b>{yld(line.bho, line.bho_high)}</b><small>{isRange(line.bho, line.bho_high) ? 'yield range' : 'avg yield'}</small></div></div>
+          ? <div className="om-yl"><div><p>SHO · solventless</p><b>{yld(line.sho, line.sho_high)}</b><small>{isRange(line.sho, line.sho_high) ? 'yield range' : 'avg yield'}</small>{rep(line.rep_sho_lo, line.rep_sho_hi, line.rep_sho_runs)}</div>
+            <div><p>BHO · hydrocarbon</p><b>{yld(line.bho, line.bho_high)}</b><small>{isRange(line.bho, line.bho_high) ? 'yield range' : 'avg yield'}</small>{rep(line.rep_bho_lo, line.rep_bho_hi, line.rep_bho_runs)}</div></div>
           : <div className="om-yl one"><div><p>THC</p><b>{pct(line.thc)}</b><small>latest lab test</small></div></div>}
         {line.note && <p className="om-snote">{line.note}</p>}
-        <p className="om-lin">{line.product === 'FF' ? (isRange(line.sho, line.sho_high) || isRange(line.bho, line.bho_high) ? 'Yields are from our washes. Your results can vary. ' : 'Yields are averages from our washes. Your results can vary. ') : ''}Questions: <a className="om-call" href={`mailto:${SALES}`}>{SALES}</a></p>
+        <p className="om-lin">{line.product === 'FF' ? (Number(line.rep_sho_runs ?? 0) + Number(line.rep_bho_runs ?? 0) > 0 ? 'Yields combine our washes and customer reports. Your results can vary. '
+          : isRange(line.sho, line.sho_high) || isRange(line.bho, line.bho_high) ? 'Yields are from our washes. Your results can vary. ' : 'Yields are averages from our washes. Your results can vary. ') : ''}Questions: <a className="om-call" href={`mailto:${SALES}`}>{SALES}</a></p>
       </div>
     </div>
   </div>
@@ -111,10 +119,11 @@ function StrainPop({ line, onClose }: { line: MenuLine; onClose: () => void }) {
 export function StaffOpenMenu({ sb, flash, isAdmin, tools }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void; isAdmin: boolean; tools?: React.ReactNode }) {
   const [rows, setRows] = useState<MenuLine[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  useEffect(() => {
+  const load = () => {
     if (!sb) { setRows([]); return }
     sb.rpc('staff_menu').then(({ data, error }) => { if (error) setErr(/does not exist|schema cache/i.test(error.message) ? 'Run 174_open_menu.sql in Supabase first' : error.message); else setRows((data ?? []) as MenuLine[]) })
-  }, [])
+  }
+  useEffect(load, [])
   async function copyText() {
     const r = rows ?? [], keys = [...new Set(r.map(x => `${x.crop_year}|${x.product}`))].sort((a, b) => b.localeCompare(a))
     const text = keys.map(k => { const [y, p] = k.split('|') as [string, MenuLine['product']]
@@ -124,7 +133,31 @@ export function StaffOpenMenu({ sb, flash, isAdmin, tools }: { sb: SupabaseClien
   return <div className="list inv">
     <div className="row between wrap toolbar"><h2>Open menu</h2><div className="row">{rows && rows.length > 0 && <button className="ghost small" onClick={copyText}>Copy as text</button>}{tools}</div></div>
     <PublicLinkBox sb={sb} flash={flash} isAdmin={isAdmin} />
+    <MenuYieldSource sb={sb} flash={flash} isAdmin={isAdmin} onChanged={load} />
     {err ? <p className="warn-t">{err}</p> : !rows ? <p className="muted">Loading…</p> : <MenuBoard rows={rows} variant="staff" />}
+  </div>
+}
+
+/** 327 (YLD-15): where menu yields come from. Sales Admins switch it; the cut-over to customer reports only. */
+export function MenuYieldSource({ sb, flash, isAdmin, onChanged }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void; isAdmin: boolean; onChanged?: () => void }) {
+  const [v, setV] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { sb?.rpc('menu_yield_settings').then(({ data, error }) => setV(error ? null : (data as string | null) ?? null)) }, [])
+  if (!v) return null
+  const LBL: Record<string, string> = { higher: 'Higher of ours and customer reports', reported: 'Customer reports only' }
+  async function pick(n: string) {
+    if (n === v || !sb) return
+    setBusy(true)
+    const { data, error } = await sb.rpc('set_menu_yield_source', { p_source: n })
+    setBusy(false)
+    if (error) { flash(error.message, true); return }
+    setV(data as string); flash(`Menu yields: ${LBL[n].toLowerCase()}`); onChanged?.()
+  }
+  return <div className="om-link">
+    <span><b>Menu yields</b> <span className="muted small">{v === 'reported' ? "customers' lowest–highest only; blank where nobody has reported"
+      : 'our strain numbers; once 2+ customers and 100+ lbs have reported a strain, each end shows the higher of ours vs theirs'}</span></span>
+    {isAdmin ? <select value={v} disabled={busy} onChange={e => pick(e.target.value)} aria-label="Menu yields">{Object.entries(LBL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+      : <span className="muted small">{LBL[v] ?? v}</span>}
   </div>
 }
 

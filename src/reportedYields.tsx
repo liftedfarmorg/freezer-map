@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { loadMenuInfo, loadProfiles, yieldRange } from './strains'
-import { isAdminOf } from './fold'
+import { loadMenuInfo, yieldRange } from './strains'
 import './reportedYields.css'
 
 // Sales > Reported Yields (MOCKUP). Every yield report customers send from the portal, in one place:
@@ -52,48 +51,30 @@ const lbs = (n: number) => `${Math.round(n).toLocaleString()} lbs`
 const day = (s: string | null) => s ? new Date(s.length === 10 ? s + 'T12:00' : s).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) : ''
 const proc = (p: RYPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + rosin' : 'Hash'
 
-// what "Put on the menu" writes to the strain profile: the customers' low-high range (one number when there's only one run)
-const r1 = (n: number) => Math.round(n * 10) / 10
-const menuVals = (a: Agg, sho: boolean, bho: boolean): Partial<RYMenu> => {
-  const v: Partial<RYMenu> = {}
-  if (sho && a.hash != null) { v.solventless_pct = r1(a.hashLo ?? a.hash); v.solventless_high_pct = r1(a.hashHi ?? a.hash) }
-  if (bho && a.bho != null) { v.hydrocarbon_pct = r1(a.bhoLo ?? a.bho); v.hydrocarbon_high_pct = r1(a.bhoHi ?? a.bho) }
-  return v
-}
-const menuText = (a: Agg, sho: boolean, bho: boolean) => { const v = menuVals(a, sho, bho)
-  return [v.solventless_pct != null ? `${yieldRange(v.solventless_pct, v.solventless_high_pct)} SHO` : '', v.hydrocarbon_pct != null ? `${yieldRange(v.hydrocarbon_pct, v.hydrocarbon_high_pct)} BHO` : ''].filter(Boolean).join(' and ') }
+// YLD-15: no more "Put on the menu": the menu now takes the higher of our strain numbers vs these (SQL 327, automatic)
 
 type Tab = 'strain' | 'customer' | 'issues'
 type SortK = 's' | 'cust' | 'runs' | 'lbs' | 'hash' | 'rosin' | 'roh' | 'bho'
 
-/** the live page: loads the reports (SQL 326) and the strain menu yields, and saves "put on the menu" to the strain profile */
+/** the live page: loads the reports (SQL 326) and what the menu shows today (SQL 327: higher of ours vs reported) */
 export function ReportedYieldsPage({ sb, flash }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void }) {
-  const [d, setD] = useState<{ reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; ids: Record<string, number> } | null>(null)
+  const [d, setD] = useState<{ reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu> } | null>(null)
   const [err, setErr] = useState('')
   async function load() {
-    if (!sb) { setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
-    const [r, o, mi, pr] = await Promise.all([sb.rpc('list_yield_reports'), sb.rpc('list_yield_owed'), loadMenuInfo(sb), loadProfiles(sb)])
-    if (r.error || o.error) { const m = (r.error ?? o.error)!.message; setErr(/list_yield/.test(m) ? 'Reported Yields needs SQL 326 run first.' : m); setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
+    if (!sb) { setD({ reports: [], owed: [], menu: {} }); return }
+    const [r, o, mi] = await Promise.all([sb.rpc('list_yield_reports'), sb.rpc('list_yield_owed'), loadMenuInfo(sb)])
+    if (r.error || o.error) { const m = (r.error ?? o.error)!.message; setErr(/list_yield/.test(m) ? 'Reported Yields needs SQL 326 run first.' : m); setD({ reports: [], owed: [], menu: {} }); return }
     const menu: Record<string, RYMenu> = {}
     for (const [k, v] of mi) menu[k] = { solventless_pct: v.solventless_pct, hydrocarbon_pct: v.hydrocarbon_pct, solventless_high_pct: v.solventless_high_pct ?? null, hydrocarbon_high_pct: v.hydrocarbon_high_pct ?? null }
-    const ids: Record<string, number> = {}
-    for (const p of pr.values()) ids[p.name.toLowerCase()] = p.id
-    setD({ reports: (r.data ?? []) as RYReport[], owed: (o.data ?? []) as RYOwed[], menu, ids })
+    setD({ reports: (r.data ?? []) as RYReport[], owed: (o.data ?? []) as RYOwed[], menu })
   }
   useEffect(() => { load() }, [])
   if (!d) return <p className="muted">Loading…</p>
-  const onMenu = isAdminOf('sales') ? async (strain: string, vals: Partial<RYMenu>) => {
-    const id = d.ids[strain.toLowerCase()]
-    if (!id || !sb) { flash(`${strain} isn't in Strains, so its menu yield can't be set here`, true); return false }
-    const { error } = await sb.rpc('set_strain_info', { p_strain: id, p_vals: vals })
-    if (error) { flash(error.message, true); return false }
-    return true
-  } : undefined
-  return <>{err && <p className="muted" style={{ color: 'var(--bad)' }}>{err}</p>}<ReportedYields reports={d.reports} owed={d.owed} menu={d.menu} flash={flash} onMenu={onMenu} live /></>
+  return <>{err && <p className="muted" style={{ color: 'var(--bad)' }}>{err}</p>}<ReportedYields reports={d.reports} owed={d.owed} menu={d.menu} flash={flash} live /></>
 }
 
-export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void
-  onMenu?: (strain: string, vals: Partial<RYMenu>) => Promise<boolean>; live?: boolean }) {
+export function ReportedYields({ reports, owed, menu, flash, live }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void
+  live?: boolean }) {
   const [tab, setTab] = useState<Tab>('strain')
   const [year, setYear] = useState<'all' | number>('all')
   const [procF, setProcF] = useState<'all' | 'sho' | 'bho'>('all')
@@ -103,7 +84,7 @@ export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { r
   const [open, setOpen] = useState<string | null>(null)
   const [openSub, setOpenSub] = useState<string | null>(null)   // a strain opened inside a customer
   const [sort, setSort] = useState<{ k: SortK; asc: boolean }>({ k: 'lbs', asc: false })
-  const [menuNow, setMenuNow] = useState(menu)
+  const menuNow = menu
 
   const all = useMemo(() => reports.flatMap(r => r.lines.flatMap(l => l.parts.filter(done).map(p => calc(r, l, p)))), [reports])
   const years = [...new Set(all.map(x => x.l.y))].sort((a, b) => b - a)
@@ -142,13 +123,7 @@ export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { r
       .filter(x => !ql || x.s.toLowerCase().includes(ql) || x.rs.length)
   }, [runs, reports, owed, cust, ql])
 
-  const useOnMenu = async (s: string, a: Agg, sho: boolean, bho: boolean) => {
-    const vals = menuVals(a, sho, bho)
-    if (onMenu && !(await onMenu(s, vals))) return
-    const cur = menuNow[s.toLowerCase()]
-    setMenuNow({ ...menuNow, [s.toLowerCase()]: { solventless_pct: cur?.solventless_pct ?? null, hydrocarbon_pct: cur?.hydrocarbon_pct ?? null, solventless_high_pct: cur?.solventless_high_pct ?? null, hydrocarbon_high_pct: cur?.hydrocarbon_high_pct ?? null, ...vals } })
-    flash(live ? `${s}: menu now shows the customer average` : `${s}: menu yields updated to the customer average (mockup, nothing saved)`)
-  }
+
 
   const runTable = (rs: Run[], who: 'customer' | 'strain') => <table className="restable ry-runs"><thead><tr>
       <th>{who === 'customer' ? 'Customer' : 'Strain'}</th><th>Order</th><th>Process</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th>Notes</th></tr></thead>
@@ -221,14 +196,13 @@ export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { r
             <td className="muted">{on ? '▴' : '▾'}</td></tr>
             {on && <tr className="ry-detail"><td colSpan={10}>
               {runTable(x.rs, 'customer')}
-              <div className="row between wrap ry-detail-f"><span className="muted">Average of {x.rs.length} run{x.rs.length > 1 ? 's' : ''} from {x.nc} customer{x.nc > 1 ? 's' : ''}. {!x.sho && x.a.hash != null ? 'Hash needs more reports before it can go on the menu. ' : ''}{!x.bho && x.a.bho != null ? 'BHO needs more reports before it can go on the menu.' : ''}</span>
-                {x.ready && (onMenu || !live) && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {menuText(x.a, x.sho, x.bho)} on the menu</button>}</div>
+              <div className="row between wrap ry-detail-f"><span className="muted">Average of {x.rs.length} run{x.rs.length > 1 ? 's' : ''} from {x.nc} customer{x.nc > 1 ? 's' : ''}. {!x.sho && x.a.hash != null ? 'Hash needs more reports before it counts on the menu. ' : ''}{!x.bho && x.a.bho != null ? 'BHO needs more reports before it counts on the menu.' : ''}</span></div>
             </td></tr>}</Fragment> })}
           {!strains.length && <tr><td colSpan={10} className="muted">No reported runs match.</td></tr>}</tbody>
         {strains.length > 0 && <tfoot><tr><td><b>All strains</b></td><td className="num">{new Set(runs.map(x => x.r.customerId)).size}</td><td className="num">{runs.length}</td><td className="num">{lbs(tot.lbs)}</td>
           <td className="num"><b>{pct(tot.hash)}</b></td><td className="num"><b>{pct(tot.rosinFF)}</b></td><td className="num"><b>{pct1(tot.rosinHash)}</b></td><td className="num"><b>{pct(tot.bho)}</b></td><td colSpan={2} /></tr></tfoot>}
       </table></div>
-      <p className="muted ry-foot">Tap a strain to see every run behind its average. <b>For the menu</b>: a hash (SHO) or BHO average turns green once {READY_CUSTOMERS}+ customers and {READY_LBS}+ lbs are behind it, so one odd run can't swing it; those are the numbers we'd show on the sales menu. "Menu shows" is what the strain profile has today (Strains › Yield to solventless / hydrocarbon, low–high). Putting a strain on the menu sets that range to the low and high of the customers’ runs.</p>
+      <p className="muted ry-foot">Tap a strain to see every run behind its average. <b>For the menu</b>: a hash (SHO) or BHO average turns green once {READY_CUSTOMERS}+ customers and {READY_LBS}+ lbs are behind it, so one odd run can't swing it; from then on the sales menu shows, at each end, the higher of our strain numbers vs the customers' lowest–highest (automatic; Sales › Open menu › Menu yields can switch to customer reports only). "Menu shows" is what customers see today.</p>
     </>}
 
     {tab === 'customer' && <div className="ry-card"><table className="restable ry-main"><thead><tr>
