@@ -296,9 +296,9 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
               <tbody>{rows.map(x => [
                 <tr key={x.s} className={`tap ${sOpen === x.s ? 'open' : ''}`} onClick={() => setSOpen(sOpen === x.s ? null : x.s)}>
                   <td><span onClick={e => e.stopPropagation()}><StrainLink name={x.s} /></span>{x.hidden && <> <span className="pill old">hidden</span></>}</td>
-                  <td className="num">{x.cust || <span className="muted">0</span>}{x.cust > 0 && <span className="muted"> {sOpen === x.s ? '▴' : '▾'}</span>}</td>
-                  <td className="num">{n0(x.have)}</td><td className="num">{x.pend ? n0(x.pend) : <span className="muted">0</span>}</td><td className="num">{n0(x.left)}</td>
-                  <td className={`num ${x.free < 0 ? 'warn-t' : ''}`}><b>{n0(x.free)}</b>{x.held > 0 && <div className="muted small">{n0(x.held)} held</div>}</td>
+                  <td className="num c-cu" data-l="customers ">{x.cust || <span className="muted">0</span>}{x.cust > 0 && <span className="muted"> {sOpen === x.s ? '▴' : '▾'}</span>}</td>
+                  <td className="num c-st" data-l="on hand ">{n0(x.have)}</td><td className="num c-st" data-l="pending ">{x.pend ? n0(x.pend) : <span className="muted">0</span>}</td><td className="num c-st" data-l="res. left ">{n0(x.left)}</td>
+                  <td className={`num c-fr ${x.free < 0 ? 'warn-t' : ''}`} data-l="free "><b>{n0(x.free)}</b>{x.held > 0 && <div className="muted small">{n0(x.held)} held</div>}</td>
                 </tr>,
                 sOpen === x.s && x.rs.length > 0 ? <tr key={`${x.s}-c`} className="resx"><td colSpan={6}>
                   {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => <div key={r.id} className="resxr">
