@@ -1609,12 +1609,15 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                     <span className={c('rmname')}>{x.s} {yrTag(x.y)}</span><span>{x.runs.length}</span><span>{fmt(x.lbs)} lbs</span>
                     <b style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><b>{pct(x.rosinOfHash)}</b><span>{pct(x.rosinOfFF)}</span><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b><span className={c('muted')}>{open ? I.up : I.down}</span></button>
                     {open && runList(x)}</Fragment> })}
-              </> : rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
-                return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('li btnrow')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
-                  <div className={c('grow')}><p className={c('name')}>{x.s} {yrTag(x.y)}</p>
-                    <p className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs{x.rosinOfHash != null ? ` · Rosin ${pct(x.rosinOfHash)} of hash` : ''}{x.bhoPct != null ? ` · BHO ${pct(x.bhoPct)}` : ''}</p></div>
-                  <div className={c('r')}><b className={c('num')} style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><p className={c('meta')}>hash</p></div>{open ? I.up : I.down}</button>
-                  {open && runList(x)}</div> })}
+              </> : <>
+                {/* phone: runs + lbs under the strain, then hash / rosin / BHO yields, all as % of fresh frozen */}
+                <div className={c('ymres head')}><span>Strain</span><span>Hash<small>% of FF</small></span><span>Rosin<small>% of FF</small></span><span>BHO<small>% of FF</small></span><span /></div>
+                {rows.map(x => { const key = x.s + '|' + x.y, open = yOpen === key
+                return <div key={key} style={{ borderTop: '1px solid var(--line-2)' }}><button className={c('ymres')} onClick={() => setYOpen(open ? null : key)} aria-expanded={open}>
+                  <span><span className={c('name')}>{x.s} {yrTag(x.y)}</span><span className={c('meta')}>{plural(x.runs.length, 'run')} · {fmt(x.lbs)} lbs</span></span>
+                  <b style={{ color: 'var(--teal-ink)' }}>{pct(x.hashPct)}</b><b>{pct(x.rosinOfFF)}</b><b style={{ color: x.bhoPct != null ? 'var(--gold)' : undefined }}>{pct(x.bhoPct)}</b>
+                  <span className={c('muted')}>{open ? I.up : I.down}</span></button>
+                  {open && runList(x)}</div> })}</>}
               {rows.length === 0 && <p className={c('meta')} style={{ padding: 16, margin: 0 }}>No strains match.</p>}
             </section>
             <p className={c('meta')} style={{ margin: '0 4px' }}>Yields are weighted by lbs run. Hash and BHO yields are ÷ fresh frozen; rosin yield is ÷ hash (and ÷ fresh frozen). Drafts count too.</p>
