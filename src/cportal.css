@@ -710,3 +710,11 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-yissue { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--gold-bg); color: var(--gold); font-size: 14px; }
 .cp .cp-yissue .cp-linkish { min-width: 0; height: auto; padding: 0; color: var(--gold); text-decoration: underline; }
 .cp .cp-yissue-txt { margin: 2px 0 0; font-size: 13px; color: var(--gold); }
+/* phone: review your order, lbs / price / total columns */
+.cp .cp-rvt { display: grid; grid-template-columns: minmax(0, 1fr) 46px 62px 76px; column-gap: 8px; align-items: start; padding: 12px 14px; border-top: 1px solid var(--line-2); font-size: 15px; font-variant-numeric: tabular-nums; }
+.cp .cp-rvt > :nth-child(n+2) { text-align: right; }
+.cp .cp-rvt > :first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp .cp-rvt .cp-name { font-weight: 600; }
+.cp .cp-rvt .cp-meta { margin: 0; font-size: 13px; }
+.cp .cp-rvt.cp-head { border-top: 0; padding-block: 9px; background: #f7f9f6; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cp .cp-rvt.cp-total { background: #f7f9f6; }

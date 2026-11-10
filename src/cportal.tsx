@@ -534,7 +534,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const min = d?.mc?.monthly_min_lbs ?? d?.st?.month.min ?? null, leftMin = min != null ? Math.max(Number(min) - thisMonth, 0) : null
     const menuTotal = menuItems.reduce((a, m) => a + m.open, 0), menuN = menuItems.filter(m => m.open > 0).length
     const hs = liveHolds, act = hs.filter(h => h.state === 'active').sort((a, b) => daysUntil(a.until) - daysUntil(b.until)), soon = act[0]
-    const names = hs.map(h => h.strain), shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3} more` : '')
     return (
       <div className={c('screen')}>
         <header className={c('hdr home-hdr')}>
@@ -573,7 +572,6 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           </div>
           {hs.length > 0 && <button className={c('tile')} style={{ background: 'var(--gold-bg)' }} onClick={() => go('holds')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')} style={{ color: 'var(--gold)' }}>Sample Holds for You</p><p className={c('big')}>{plural(hs.length, 'strain')} · {fmt(hs.reduce((a, h) => a + holdLbs(h), 0))} lbs</p></div><span className={c('pillbtn')} style={{ background: '#fff', color: 'var(--gold)' }}>Review</span></div>
-            <p className={c('foot')} style={{ color: 'var(--ink)', fontWeight: 500 }}>{shown}</p>
             <p className={c('foot')} style={{ color: 'var(--gold)', marginTop: 2 }}>{soon ? `Next hold ends in ${plural(daysUntil(soon.until), 'day')} (${soon.strain})` : 'Waiting on Lifted to confirm'}</p></button>}
         </main>
         <div className={c('dock')}><button className={c('btn full')} onClick={() => newOrder()}>Place an order</button></div>
@@ -1374,14 +1372,14 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <header className={c('hdr')}>{back('order', 'Keep editing')}<h1>{editing ? `Review changes to ${soLabel(editing)}` : 'Review your order'}</h1>
           <p className={c('sub')}>{editing ? 'Saving sends the updated order back to Lifted to confirm.' : 'Nothing is sent until you tap Place order.'}</p></header>
         <main className={c('main')}>
-          {desk ? orderTable(detail, oTot) : <section className={c('card')}>
-            {detail.map(x => <div key={x.k} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}><p className={c('name')}>{x.s} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</p>
-              <p className={c('meta')}>{splitText(x)}{x.hold ? ` · hold ${fmt(x.hold)} lbs if you like it` : ''}</p>
-              <p className={c('meta num')}>{fmt(x.q)} lbs{x.price != null ? ` × $${x.price.toFixed(2)}/lb` : ''}</p></div>
-              <b className={c('num')}>{x.price != null ? money(x.q * x.price) : `${fmt(x.q)} lbs`}</b></div>)}
-            <div className={c('li')} style={{ background: '#f7f9f6', alignItems: 'flex-start' }}><div className={c('grow')}><b>Total</b>
-              <p className={c('meta')}>{fmt(oTot.lbs)} lbs{contract ? ` · ${fmt(oTot.res)} from reserves · ${fmt(oTot.lbs - oTot.res)} from open menu` : ''}</p></div>
-              <b className={c('num')} style={{ fontSize: 18 }}>{oTot.amount != null ? money(oTot.amount) : `${fmt(oTot.lbs)} lbs`}</b></div>
+          {desk ? orderTable(detail, oTot) : <section className={c('card')} style={{ overflow: 'hidden' }}>
+            {/* phone: lbs, price and total in their own columns */}
+            <div className={c('rvt head')}><span>Strain</span><span>Lbs</span><span>Price</span><span>Total</span></div>
+            {detail.map(x => <div key={x.k} className={c('rvt')}><span><span className={c('name')}>{x.s} {yrTag(x.y)} {x.sample && <span className={c('chip c-wait')}>Sample</span>}</span>
+              <span className={c('meta')}>{splitText(x)}{x.hold ? ` · hold ${fmt(x.hold)} lbs if you like it` : ''}</span></span>
+              <span>{fmt(x.q)}</span><span>{x.price != null ? `$${x.price.toFixed(2)}` : '–'}</span><b>{x.price != null ? money(x.q * x.price) : '–'}</b></div>)}
+            <div className={c('rvt total')}><span><b>Total</b>{contract && <span className={c('meta')}>{fmt(oTot.res)} from reserves · {fmt(oTot.lbs - oTot.res)} from open menu</span>}</span>
+              <b>{fmt(oTot.lbs)}</b><span /><b style={{ fontSize: 16 }}>{oTot.amount != null ? money(oTot.amount) : '–'}</b></div>
           </section>}
           {(po || wanted || note) && <section className={c('card')} style={{ padding: '12px 16px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {po && <span><span className={c('meta')} style={{ display: 'inline' }}>PO</span> {po}</span>}
