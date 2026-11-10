@@ -736,7 +736,7 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .addres .ar-kpis b { font-size: 18px; }
 .addres .ar-table td.c-l .qty { width: 84px; }
 @media (min-width: 1000px) {
-  .addres .ar-table th { white-space: normal; line-height: 1.15; vertical-align: bottom; }
+  .addres .ar-table th { white-space: normal; line-height: 1.15; vertical-align: bottom; font-size: 10.5px; letter-spacing: .02em; }
   .addres .ar-table th, .addres .ar-table td { padding-left: 5px; padding-right: 5px; }
   .addres .ar-table td.c-n { min-width: 0; }
   .addres .ar-table td.c-l .qty { width: 70px; }
