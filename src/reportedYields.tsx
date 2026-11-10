@@ -106,11 +106,11 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
     flash(`${s}: menu yields updated to the customer average (mockup, nothing saved)`)
   }
 
-  const runTable = (rs: Run[], who: 'customer' | 'strain' | 'none') => <table className="restable ry-runs"><thead><tr>
-      {who !== 'none' && <th>{who === 'customer' ? 'Customer' : 'Strain'}</th>}<th>Order</th><th>Process</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th>Notes</th></tr></thead>
+  const runTable = (rs: Run[], who: 'customer' | 'strain') => <table className="restable ry-runs"><thead><tr>
+      <th>{who === 'customer' ? 'Customer' : 'Strain'}</th><th>Order</th><th>Process</th><th className="num">FF run</th><th className="num">Hash</th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO</th><th>Notes</th></tr></thead>
     <tbody>{[...rs].sort((a, b) => b.r.shippedOn.localeCompare(a.r.shippedOn)).map((x, i) => <tr key={i} className={x.draft ? 'ry-draft' : ''}>
-      {who !== 'none' && <td>{who === 'customer' ? x.r.customer : <>{x.l.s} <span className="ry-yr">{x.l.y}</span></>}{x.draft && <> <span className="pill m-mute">Draft</span></>}</td>}
-      <td>{x.r.label}<span className="muted"> · {day(x.r.shippedOn)}</span>{who === 'none' && x.draft && <> <span className="pill m-mute">Draft</span></>}</td><td>{proc(x.p)}</td><td className="num">{lbs(x.p.ff ?? 0)}</td>
+      <td>{who === 'customer' ? x.r.customer : <>{x.l.s} <span className="ry-yr">{x.l.y}</span></>}{x.draft && <> <span className="pill m-mute">Draft</span></>}</td>
+      <td>{x.r.label}<span className="muted"> · {day(x.r.shippedOn)}</span></td><td>{proc(x.p)}</td><td className="num">{lbs(x.p.ff ?? 0)}</td>
       <td className="num">{x.hashG != null ? pct(x.hashG / x.ffG * 100) : '–'}</td><td className="num">{x.rosinG != null ? pct(x.rosinG / x.ffG * 100) : '–'}</td>
       <td className="num">{x.rosinG != null && x.hashG ? pct1(x.rosinG / x.hashG * 100) : '–'}</td><td className="num">{x.bhoG != null ? pct(x.bhoG / x.ffG * 100) : '–'}</td>
       <td className="ry-note">{x.l.issue && <span className="pill m-warn" title={x.l.issue.text}>{x.l.issue.kinds.join(', ') || 'Issue'}</span>} {x.l.note}</td></tr>)}</tbody></table>
@@ -127,7 +127,10 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
           <td><b>{x.s}</b> <span className="ry-yr">{x.y}</span>{x.draft && <> <span className="pill m-mute">Draft</span></>}{x.issues > 0 && <> <span className="pill m-warn">{x.rs.find(r => r.l.issue)?.l.issue?.kinds.join(', ') || 'Issue'}</span></>}</td>
           <td className="num">{x.rs.length}</td><td className="num">{lbs(x.a.lbs)}</td><td className="num"><b className="ry-hash">{pct(x.a.hash)}</b></td><td className="num">{pct(x.a.rosinFF)}</td>
           <td className="num">{pct1(x.a.rosinHash)}</td><td className="num"><b className="ry-bho">{pct(x.a.bho)}</b></td><td className="muted">{on ? '▴' : '▾'}</td></tr>
-          {on && <tr className="ry-sub"><td colSpan={8}>{runTable(x.rs, 'none')}</td></tr>}</Fragment> })}</tbody></table>
+          {on && [...x.rs].sort((a, b) => b.r.shippedOn.localeCompare(a.r.shippedOn)).map((r, i) => <tr key={i} className={`ry-run ${r.draft ? 'ry-draft' : ''}`}>
+            <td>{r.r.label}<span className="muted"> · {day(r.r.shippedOn)}</span>{r.draft && <> <span className="pill m-mute">Draft</span></>}{r.l.note && <small className="ry-range">{r.l.note}</small>}</td>
+            <td /><td className="num">{lbs(r.p.ff ?? 0)}</td><td className="num">{r.hashG != null ? pct(r.hashG / r.ffG * 100) : '–'}</td><td className="num">{r.rosinG != null ? pct(r.rosinG / r.ffG * 100) : '–'}</td>
+            <td className="num">{r.rosinG != null && r.hashG ? pct1(r.rosinG / r.hashG * 100) : '–'}</td><td className="num">{r.bhoG != null ? pct(r.bhoG / r.ffG * 100) : '–'}</td><td /></tr>)}</Fragment> })}</tbody></table>
   }
 
   return <div className="ry">

@@ -41,5 +41,6 @@
 @media (max-width: 640px) { .ry-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ry-kpis b { font-size: 18px; } }
 .ry .ry-cs > tbody > tr.tap > td { padding-top: 8px; padding-bottom: 8px; }
 .ry .ry-cs > tbody > tr.ry-on > td { background: color-mix(in srgb, var(--brand) 7%, var(--panel)); }
-.ry .ry-cs tr.ry-sub > td { padding: 2px 0 10px 22px; background: var(--panel); }
-.ry .ry-cs tr.ry-sub .ry-runs { font-size: 12.5px; }
+.ry .ry-cs tr.ry-run > td { background: var(--panel); color: var(--muted); font-size: 12.5px; padding-top: 5px; padding-bottom: 5px; border-bottom-color: color-mix(in srgb, var(--line) 50%, transparent); }
+.ry .ry-cs tr.ry-run > td:first-child { padding-left: 22px; color: var(--ink); }
+.ry .ry-cs tr.ry-run > td.num { color: var(--ink); }
