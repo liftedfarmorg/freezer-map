@@ -197,11 +197,12 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
           <div className="custfocus">
             <button className="ghost backbtn" onClick={closeCust}>‹ All customers</button>
             <div className="rescard">
-              <div className="li setrow static">
+              {/* RES-6: the customer's card closes it again (it looked like a fold you could tap shut) */}
+              <button className="li setrow custhead" onClick={closeCust} aria-label={`Close ${c.name}`}>
                 <div className="grow"><b>{c.name}</b>
                   <div className="muted">{c.rs.length} strain{c.rs.length === 1 ? '' : 's'} · {n0(sum(c.rs, 'shipped'))} shipped{sum(c.rs, 'pending') > 0 ? ` · ${n0(sum(c.rs, 'pending'))} pending` : ''}</div></div>
-                <div className="num"><b>{n0(sum(c.rs, 'remaining'))}</b><div className="muted">of {n0(sum(c.rs, 'reserved'))} left</div></div>
-              </div>
+                <div className="num"><b>{n0(sum(c.rs, 'remaining'))}</b><div className="muted">of {n0(sum(c.rs, 'reserved'))} left ▴</div></div>
+              </button>
               <table className="restable">
                 <thead><tr><th>Strain</th><th className="num">Reserved</th><th className="num">Shipped</th><th className="num">Pending</th><th className="num">Left</th></tr></thead>
                 <tbody>
