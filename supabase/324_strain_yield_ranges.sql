@@ -28,17 +28,18 @@ do $$
 declare d text;
   a1 text := '"solventless_pct":"sales","hydrocarbon_pct":"sales",';
   b1 text := '"solventless_pct":"sales","hydrocarbon_pct":"sales","solventless_high_pct":"sales","hydrocarbon_high_pct":"sales",';
-  a2 text := E'    hydrocarbon_pct = case when p_vals ? ''hydrocarbon_pct'' then nullif(p_vals ->> ''hydrocarbon_pct'', '''')::numeric else hydrocarbon_pct end,\n';
+  -- anchors are single-line on purpose: the live function was saved with Windows line endings (Msg YLD-8)
+  a2 text := 'else hydrocarbon_pct end,';
   b2 text := a2
-    || E'    solventless_high_pct = case when p_vals ? ''solventless_high_pct'' then nullif(p_vals ->> ''solventless_high_pct'', '''')::numeric else solventless_high_pct end,\n'
-    || E'    hydrocarbon_high_pct = case when p_vals ? ''hydrocarbon_high_pct'' then nullif(p_vals ->> ''hydrocarbon_high_pct'', '''')::numeric else hydrocarbon_high_pct end,\n';
-  a3 text := E'  insert into events (user_email, type, note, details)\n  values (current_email(), ''strain_info''';
-  b3 text := E'  -- 324: a low can''t be above its high\n'
+    || ' solventless_high_pct = case when p_vals ? ''solventless_high_pct'' then nullif(p_vals ->> ''solventless_high_pct'', '''')::numeric else solventless_high_pct end,'
+    || ' hydrocarbon_high_pct = case when p_vals ? ''hydrocarbon_high_pct'' then nullif(p_vals ->> ''hydrocarbon_high_pct'', '''')::numeric else hydrocarbon_high_pct end,';
+  a3 text := 'returning to_jsonb(strain_info) - ''strain_id'' - ''updated_at'' - ''updated_by'' into after;';
+  b3 text := a3
+    || E'\n  -- 324: a low can''t be above its high\n'
     || E'  if (after ->> ''solventless_pct'')::numeric > (after ->> ''solventless_high_pct'')::numeric then\n'
     || E'    raise exception ''Solventless yield: the low (%) is above the high (%)'', (after ->> ''solventless_pct'') || ''%'', (after ->> ''solventless_high_pct'') || ''%''; end if;\n'
     || E'  if (after ->> ''hydrocarbon_pct'')::numeric > (after ->> ''hydrocarbon_high_pct'')::numeric then\n'
-    || E'    raise exception ''Hydrocarbon yield: the low (%) is above the high (%)'', (after ->> ''hydrocarbon_pct'') || ''%'', (after ->> ''hydrocarbon_high_pct'') || ''%''; end if;\n'
-    || a3;
+    || E'    raise exception ''Hydrocarbon yield: the low (%) is above the high (%)'', (after ->> ''hydrocarbon_pct'') || ''%'', (after ->> ''hydrocarbon_high_pct'') || ''%''; end if;';
 begin
   d := pg_get_functiondef('set_strain_info(int, jsonb)'::regprocedure);
   if position('solventless_high_pct' in d) > 0 then raise notice 'set_strain_info already takes the highs'; return; end if;
