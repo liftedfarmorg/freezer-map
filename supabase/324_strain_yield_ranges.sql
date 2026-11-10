@@ -1,6 +1,6 @@
 -- 324: SHO and BHO yields as a low and a high (Aziz 11/9, Msg YLD-2).
 --  * strain_info: solventless_pct / hydrocarbon_pct stay and are now the LOW. New: solventless_high_pct / hydrocarbon_high_pct.
---    Today's numbers stay as the low with the high blank, so every menu shows the same single number until a high is entered.
+--    Today's number goes into both the low and the high (Aziz 11/9), so every menu shows the same single number until one changes.
 --  * set_strain_info takes the two new fields (Sales Admins only, like the lows) and stops if a low is above its high.
 --    Patched by text; stops if the live function isn't what it expects.
 --  * strain_menu_info (catalog PDF, reserves menu) and staff_menu / public_menu (Sales > Open menu + the public link) also
@@ -9,8 +9,19 @@
 -- Safe to re-run.
 begin;
 
-alter table strain_info add column if not exists solventless_high_pct numeric check (solventless_high_pct between 0 and 100);
-alter table strain_info add column if not exists hydrocarbon_high_pct numeric check (hydrocarbon_high_pct between 0 and 100);
+-- first run only: add the highs and copy today's number into both low and high (Aziz 11/9, Msg YLD-5).
+-- A re-run never refills a high someone cleared on purpose.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'strain_info' and column_name = 'solventless_high_pct') then
+    alter table strain_info add column solventless_high_pct numeric check (solventless_high_pct between 0 and 100);
+    update strain_info set solventless_high_pct = solventless_pct where solventless_pct is not null;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'strain_info' and column_name = 'hydrocarbon_high_pct') then
+    alter table strain_info add column hydrocarbon_high_pct numeric check (hydrocarbon_high_pct between 0 and 100);
+    update strain_info set hydrocarbon_high_pct = hydrocarbon_pct where hydrocarbon_pct is not null;
+  end if;
+end $$;
 
 -- ---------- set_strain_info: accept the highs, low can't be above high ----------
 do $$
