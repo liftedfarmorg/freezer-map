@@ -165,7 +165,7 @@ function TagRules({ api, flash }: { api: CultApi; flash: Flash }) {
           <button className="primary" disabled={busy || !ed.site || !ed.letter || !ed.prefix} onClick={() => save(ed)}>Save rule</button>
         </div>
       </div>}
-      <p className="cnote">The Harvest log fills in each pallet's METRC tag from its number. Each rule has its own block of tags (for example trials T and Dry Biomass B at OHR), and those tags aren't offered for splits or new packages. A tag typed or scanned on a pallet always wins.</p>
+      <p className="cnote">The Harvest log fills in each pallet's METRC tag from its number. Trial (T) and Dry Biomass (B) pallets at OHR have their own blocks of tags, which aren't offered for splits or new packages. A tag typed or scanned on a pallet always wins.</p>
     </>
   )
 }
