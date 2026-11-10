@@ -4,3 +4,7 @@ dist
 demo/
 vite.test.config.ts
 .env.test.local
+
+# tsc -b output (never commit; Vite would load these instead of the .ts/.tsx)
+src/**/*.js
+*.tsbuildinfo
