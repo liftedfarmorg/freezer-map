@@ -739,7 +739,12 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .addres .ar-table th { white-space: normal; line-height: 1.15; vertical-align: bottom; font-size: 10.5px; letter-spacing: .02em; }
   .addres .ar-table th, .addres .ar-table td { padding-left: 5px; padding-right: 5px; }
   .addres .ar-table td.c-n { min-width: 0; }
-  .addres .ar-table td.c-l .qty { width: 70px; }
+  .addres .ar-table { table-layout: fixed; width: 100%; }
+  .addres .ar-table th:nth-child(1) { width: 23%; }
+  .addres .ar-table th:nth-child(n+2):nth-child(-n+6) { width: 12%; }
+  .addres .ar-table th:nth-child(7) { width: 17%; }
+  .addres .ar-table td.c-l .qty { width: 100%; max-width: 84px; box-sizing: border-box; }
+  .addres .ar-table td.c-n b { overflow-wrap: anywhere; }
 }
 @media (max-width: 999px) {
   .addres .ar-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
