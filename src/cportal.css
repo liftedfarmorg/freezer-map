@@ -704,8 +704,9 @@ html:has(.cp), html:has(.cp) body { background: #f1f3ef; }
 .cp .cp-ymres.cp-sub:first-child { border-top: 0; }
 .cp .cp-ymres.cp-sub .cp-linkish { font-size: 14px; font-weight: 600; padding: 0; height: auto; }
 .cp:not(.cp-desk) .cp-yruns { padding: 2px 0 6px; }
-/* yields: report an issue with the flower */
-.cp .cp-yissue-btn { display: inline-block; margin-top: 8px; padding: 0; height: auto; min-width: 0; font-size: 13px; font-weight: 600; color: #b4232f; text-align: left; }
-.cp .cp-yissue { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #fdecee; color: #7a1626; font-size: 14px; }
-.cp .cp-yissue .cp-linkish { min-width: 0; height: auto; padding: 0; color: #7a1626; text-decoration: underline; }
-.cp .cp-yissue-txt { margin: 2px 0 0; font-size: 13px; color: #9b1c31; }
+/* yields: report an issue with the flower (kept quiet: soft yellow, at the bottom of the card) */
+.cp .cp-yissue-btn { align-self: flex-start; padding: 0; height: auto; min-width: 0; font-size: 13px; font-weight: 500; color: var(--muted); text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.cp .cp-yissue-btn:hover { color: var(--gold); }
+.cp .cp-yissue { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--gold-bg); color: var(--gold); font-size: 14px; }
+.cp .cp-yissue .cp-linkish { min-width: 0; height: auto; padding: 0; color: var(--gold); text-decoration: underline; }
+.cp .cp-yissue-txt { margin: 2px 0 0; font-size: 13px; color: var(--gold); }
