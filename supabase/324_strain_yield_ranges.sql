@@ -1,4 +1,5 @@
 -- 324: SHO and BHO yields as a low and a high (Aziz 11/9, Msg YLD-2).
+-- RUN LIVE 11/9 by Aziz in the SQL Editor (Msg YLD-10; Claude could not confirm the destructive-ops box this session). Checked after: 2 high columns, set_strain_info takes them.
 --  * strain_info: solventless_pct / hydrocarbon_pct stay and are now the LOW. New: solventless_high_pct / hydrocarbon_high_pct.
 --    Today's number goes into both the low and the high (Aziz 11/9), so every menu shows the same single number until one changes.
 --  * set_strain_info takes the two new fields (Sales Admins only, like the lows) and stops if a low is above its high.
