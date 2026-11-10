@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { AddReservesSheet } from './addreserves';
+import { ReserveEditor } from './reseditor';
 import { ListInput, Select } from './combo';
 import { SampleHolds, SampleSheet } from './samples';
 import { CustomerDashboard } from './statement';
@@ -196,7 +197,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 const c = focus;
                 const cOrders = orders.filter(o => o.customer_id === c.id && o.status !== 'cancelled').sort((a, b) => (b.order_date ?? '').localeCompare(a.order_date ?? ''));
                 const cReqs = reqs.filter(r => r.customer_id === c.id && r.status === 'pending');
-                return (_jsxs("div", { className: "custfocus", children: [_jsx("button", { className: "ghost backbtn", onClick: closeCust, children: "\u2039 All customers" }), _jsxs("div", { className: "rescard", children: [_jsxs("button", { className: "li setrow custhead", onClick: closeCust, "aria-label": `Close ${c.name}`, children: [_jsxs("div", { className: "grow", children: [_jsx("b", { children: c.name }), _jsxs("div", { className: "muted", children: [c.rs.length, " strain", c.rs.length === 1 ? '' : 's', " \u00B7 ", n0(sum(c.rs, 'shipped')), " shipped", sum(c.rs, 'pending') > 0 ? ` · ${n0(sum(c.rs, 'pending'))} pending` : ''] })] }), _jsxs("div", { className: "num", children: [_jsx("b", { children: n0(sum(c.rs, 'remaining')) }), _jsxs("div", { className: "muted", children: ["of ", n0(sum(c.rs, 'reserved')), " left \u25B4"] })] })] }), _jsx(CustReserves, { backend: backend, cid: c.id, name: c.name, rs: c.rs, nums: nums, year: rYear, cur: cur, isAdmin: isAdmin, flash: flash, onSaved: async () => { await load(); setOpen(c.id); }, onAdd: () => setAdding({ preset: c.id }) }, `${c.id}-${rYear}`)] }), _jsx(SampleHolds, { backend: backend, customerId: c.id, staff: true, flash: flash, rev: holdRev, onChanged: load }), _jsx("h3", { children: "Account" }), _jsx(CustomerDashboard, { backend: backend, customerId: c.id, staff: true }), cReqs.length > 0 && _jsxs(_Fragment, { children: [_jsx("h3", { children: "Reserve requests waiting" }), _jsxs("table", { className: "restable wide", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Strain" }), _jsx("th", { className: "num", children: "Now" }), _jsx("th", { className: "num", children: "Asked for" }), _jsx("th", { children: "Crop" })] }) }), _jsx("tbody", { children: cReqs.map(r => _jsxs("tr", { children: [_jsx("td", { children: r.strain }), _jsx("td", { className: "num", children: n0(Number(r.current_lbs)) }), _jsx("td", { className: "num", children: _jsx("b", { children: n0(Number(r.requested_lbs)) }) }), _jsx("td", { children: r.crop_year ?? cur })] }, r.id)) })] })] }), _jsx("h3", { children: "Orders" }), cOrders.length === 0 ? _jsx("p", { className: "muted", children: "No orders yet." }) : (_jsxs("table", { className: "restable wide", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Order" }), _jsx("th", { children: "Date" }), _jsx("th", { children: "Status" }), _jsx("th", { className: "num", children: "Lbs" })] }) }), _jsx("tbody", { children: cOrders.slice(0, 25).map(o => _jsxs("tr", { children: [_jsx("td", { children: o.so_number ?? `#${o.id}` }), _jsx("td", { children: fmtDate(o.order_date) }), _jsx("td", { children: _jsx("span", { className: `pill o-${o.status}`, children: STATUS_LABEL[o.status] }) }), _jsx("td", { className: "num", children: n0(orderLbs(o)) })] }, o.id)) })] })), _jsx("button", { className: "ghost backbtn", onClick: closeCust, children: "\u2039 All customers" })] }));
+                return (_jsxs("div", { className: "custfocus", children: [_jsx("button", { className: "ghost backbtn", onClick: closeCust, children: "\u2039 All customers" }), _jsx("div", { className: "rescard", children: _jsxs("button", { className: "li setrow custhead", onClick: closeCust, "aria-label": `Close ${c.name}`, children: [_jsxs("div", { className: "grow", children: [_jsx("b", { children: c.name }), _jsxs("div", { className: "muted", children: [c.rs.length, " strain", c.rs.length === 1 ? '' : 's', " \u00B7 ", n0(sum(c.rs, 'shipped')), " shipped", sum(c.rs, 'pending') > 0 ? ` · ${n0(sum(c.rs, 'pending'))} pending` : ''] })] }), _jsxs("div", { className: "num", children: [_jsx("b", { children: n0(sum(c.rs, 'remaining')) }), _jsxs("div", { className: "muted", children: ["of ", n0(sum(c.rs, 'reserved')), " left \u25B4"] })] })] }) }), _jsx(ReserveEditor, { backend: backend, cid: c.id, cname: c.name, year: rYear, cur: cur, flash: flash, canEdit: isAdmin, reservesOff: cust.get(c.id)?.reserves_enabled === false, onSaved: async () => { await load(); setOpen(c.id); } }, `${c.id}-${rYear}`), _jsx(SampleHolds, { backend: backend, customerId: c.id, staff: true, flash: flash, rev: holdRev, onChanged: load }), _jsx("h3", { children: "Account" }), _jsx(CustomerDashboard, { backend: backend, customerId: c.id, staff: true }), cReqs.length > 0 && _jsxs(_Fragment, { children: [_jsx("h3", { children: "Reserve requests waiting" }), _jsxs("table", { className: "restable wide", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Strain" }), _jsx("th", { className: "num", children: "Now" }), _jsx("th", { className: "num", children: "Asked for" }), _jsx("th", { children: "Crop" })] }) }), _jsx("tbody", { children: cReqs.map(r => _jsxs("tr", { children: [_jsx("td", { children: r.strain }), _jsx("td", { className: "num", children: n0(Number(r.current_lbs)) }), _jsx("td", { className: "num", children: _jsx("b", { children: n0(Number(r.requested_lbs)) }) }), _jsx("td", { children: r.crop_year ?? cur })] }, r.id)) })] })] }), _jsx("h3", { children: "Orders" }), cOrders.length === 0 ? _jsx("p", { className: "muted", children: "No orders yet." }) : (_jsxs("table", { className: "restable wide", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "Order" }), _jsx("th", { children: "Date" }), _jsx("th", { children: "Status" }), _jsx("th", { className: "num", children: "Lbs" })] }) }), _jsx("tbody", { children: cOrders.slice(0, 25).map(o => _jsxs("tr", { children: [_jsx("td", { children: o.so_number ?? `#${o.id}` }), _jsx("td", { children: fmtDate(o.order_date) }), _jsx("td", { children: _jsx("span", { className: `pill o-${o.status}`, children: STATUS_LABEL[o.status] }) }), _jsx("td", { className: "num", children: n0(orderLbs(o)) })] }, o.id)) })] })), _jsx("button", { className: "ghost backbtn", onClick: closeCust, children: "\u2039 All customers" })] }));
             })(), mode === 'customer' && !focus && byCust.length > 0 && (() => {
                 const termOf = (id) => cterms.find(x => x.customer_id === id && x.crop_year === rYear);
                 const contractOf = (id) => termOf(id)?.contract_lbs ?? (rYear === cur ? cust.get(id)?.contract_lbs ?? null : null);
@@ -392,61 +393,4 @@ export function FillOk({ f, backend, flash, onDone }) {
                                 setBusy(false);
                             }
                         }, children: "OK these amounts" }), _jsx("span", { className: "muted", children: "Or ask Distribution to change the pallets." })] })] }));
-}
-/** RES-10: one customer's reserves as a sortable table. Sales Admins type a new total in Reserved and save them all at once.
- *  Same limits as Add reserves: not under shipped + open SOs, up by at most what's open on the menu. */
-function CustReserves({ backend, cid, name, rs, nums, year, cur, isAdmin, flash, onSaved, onAdd }) {
-    const [srt, setSrt] = useState({ k: 'name', up: true });
-    const [ed, setEd] = useState({});
-    const [note, setNote] = useState('');
-    const [busy, setBusy] = useState(false);
-    const openOf = (s) => { const m = nums.find(x => x.crop_year === year && x.on_menu && x.strain.toLowerCase() === s.toLowerCase()); return m ? Math.max(0, Math.floor(Number(m.free))) : 0; };
-    const rows = rs.map(r => {
-        const res = Number(r.reserved), ship = Number(r.shipped), so = Number(r.pending);
-        return { r, key: r.strain.toLowerCase(), res, ship, so, left: Math.max(0, Number(r.remaining)), open: openOf(r.strain), pct: res > 0 ? ship / res : 0 };
-    });
-    const minOf = (x) => x.ship + x.so;
-    const maxOf = (x) => Math.max(x.res, x.ship + x.so) + x.open;
-    const changes = rows.filter(x => ed[x.key] !== undefined && ed[x.key] !== '' && Number(ed[x.key]) !== x.res).map(x => {
-        const to = Number(ed[x.key]);
-        const err = !Number.isFinite(to) || to < 0 ? 'not a number' : to < minOf(x) ? `can't go under ${n0(minOf(x))} (shipped + open SOs)`
-            : to > maxOf(x) ? `${n0(maxOf(x))} is the most (${n0(Math.max(x.res, x.ship + x.so))} theirs + ${n0(x.open)} open)` : '';
-        return { x, to, d: to - x.res, err };
-    });
-    const bad = changes.some(c => c.err);
-    const v = (x) => srt.k === 'name' ? x.r.strain.toLowerCase() : x[srt.k];
-    rows.sort((a, b) => { const p = v(a), q = v(b); const d = typeof p === 'string' ? p.localeCompare(q) : p - q; return srt.up ? d : -d; });
-    const tot = rows.reduce((t, x) => ({ res: t.res + x.res, ship: t.ship + x.ship, so: t.so + x.so, left: t.left + x.left }), { res: 0, ship: 0, so: 0, left: 0 });
-    const dTot = changes.filter(c => !c.err).reduce((a, c) => a + c.d, 0);
-    const th = (k, label, num = true, title) => _jsx("th", { className: `${num ? 'num ' : ''}sortth${srt.k === k ? ' on' : ''}`, title: title, "aria-sort": srt.k === k ? (srt.up ? 'ascending' : 'descending') : 'none', children: _jsxs("button", { className: "linkbtn", onClick: () => setSrt(o => ({ k, up: o.k === k ? !o.up : k === 'name' })), children: [label, srt.k === k ? (srt.up ? ' ▲' : ' ▼') : ''] }) });
-    async function save() {
-        if (!changes.length || bad)
-            return;
-        setBusy(true);
-        let done = 0;
-        try {
-            for (const c of changes) {
-                await backend.setReserve(cid, c.x.r.strain, c.to, note.trim() || undefined, year !== cur ? year : undefined);
-                done++;
-            }
-            flash(`${done} reserve${done === 1 ? '' : 's'} saved for ${name}`);
-            setEd({});
-            setNote('');
-            await onSaved();
-        }
-        catch (e) {
-            flash(`${done ? `${done} saved, then: ` : ''}${String(e.message ?? e)}`, true);
-            if (done)
-                await onSaved();
-        }
-        finally {
-            setBusy(false);
-        }
-    }
-    return _jsxs(_Fragment, { children: [_jsx("div", { className: "cwrap", children: _jsxs("table", { className: "ctable restbl rescust", children: [_jsx("thead", { children: _jsxs("tr", { children: [th('name', 'Strain', false), th('res', isAdmin ? 'Reserved (new total)' : 'Reserved'), th('ship', 'Shipped'), th('so', 'Open SO', true, 'On confirmed open sales orders; these lbs count against the reserve'), th('left', 'Left'), th('open', 'Open menu', true, 'Free on the menu: how much the reserve can go up'), th('pct', 'Shipped %')] }) }), _jsx("tbody", { children: rows.map(x => {
-                                const c = changes.find(z => z.x.key === x.key);
-                                return _jsxs("tr", { className: c ? (c.err ? 'bad' : 'on') : '', children: [_jsxs("td", { className: "c-n", children: [_jsx(StrainLink, { name: x.r.strain }), c?.err && _jsx("div", { className: "warn-t small", children: c.err }), Number(x.r.rejected ?? 0) > 0 && _jsxs("div", { className: "small warn-t", title: "Rejected at delivery and back on this reserve. Lower the reserve if they shouldn't get these lbs back.", children: [n0(Number(x.r.rejected)), " rejected, back on reserve"] })] }), _jsxs("td", { className: "num c-r", "data-l": "reserved ", children: [isAdmin && _jsx("span", { className: `rdel ${c && !c.err ? (c.d > 0 ? 'ok-t' : 'warn-t') : ''}`, children: c && !c.err ? `${c.d > 0 ? '+' : ''}${n0(c.d)}` : '' }), isAdmin
-                                                    ? _jsx("input", { className: `qty ${c?.err ? 'bad' : ''}`, type: "number", step: "10", min: "0", inputMode: "numeric", "aria-label": `Reserve total for ${x.r.strain}`, value: ed[x.key] ?? String(x.res), onChange: e => setEd(m => ({ ...m, [x.key]: e.target.value })), onFocus: e => e.target.select() })
-                                                    : n0(x.res)] }), _jsx("td", { className: "num", "data-l": "shipped ", children: n0(x.ship) }), _jsx("td", { className: "num", "data-l": "open SO ", children: x.so > 0 ? n0(x.so) : _jsx("span", { className: "muted", children: "0" }) }), _jsx("td", { className: "num c-lf", "data-l": "left ", children: _jsx("b", { children: c && !c.err ? n0(Math.max(0, c.to - x.ship - x.so)) : n0(x.left) }) }), _jsx("td", { className: "num muted", "data-l": "open ", children: n0(x.open) }), _jsxs("td", { className: "num c-pc", "data-l": "", children: [_jsx("span", { className: "respct", children: _jsx("i", { style: { width: `${Math.min(100, Math.round(x.pct * 100))}%` } }) }), " ", Math.round(x.pct * 100), "%"] })] }, x.r.id);
-                            }) }), _jsx("tfoot", { children: _jsxs("tr", { children: [_jsx("td", { children: _jsxs("b", { children: [rows.length, " strain", rows.length === 1 ? '' : 's'] }) }), _jsxs("td", { className: "num", children: [_jsx("b", { children: n0(tot.res + dTot) }), dTot !== 0 && _jsxs("div", { className: "small muted", children: ["was ", n0(tot.res)] })] }), _jsx("td", { className: "num", children: n0(tot.ship) }), _jsx("td", { className: "num", children: n0(tot.so) }), _jsx("td", { className: "num", children: _jsx("b", { children: n0(tot.left + changes.filter(c => !c.err).reduce((a, c) => a + Math.max(0, c.to - c.x.ship - c.x.so) - c.x.left, 0)) }) }), _jsx("td", {}), _jsxs("td", { className: "num", children: [tot.res > 0 ? Math.round(tot.ship / tot.res * 100) : 0, "%"] })] }) })] }) }), isAdmin && changes.length > 0 && _jsxs("div", { className: "rescsave", children: [_jsxs("div", { className: "grow", children: [_jsxs("b", { children: [changes.length, " change", changes.length === 1 ? '' : 's'] }), " ", _jsxs("span", { className: "muted", children: ["\u00B7 ", dTot > 0 ? '+' : '', n0(dTot), " lbs \u00B7 new total ", n0(tot.res + dTot)] })] }), _jsx("input", { type: "text", placeholder: "Reason (optional, they see it in Reserve History)", value: note, onChange: e => setNote(e.target.value), "aria-label": "Reason" }), _jsx("button", { className: "ghost", disabled: busy, onClick: () => { setEd({}); setNote(''); }, children: "Cancel" }), _jsx("button", { className: "primary", disabled: busy || bad, onClick: save, children: busy ? 'Saving…' : bad ? 'Fix the red lines' : `Save ${changes.length}` })] }), isAdmin && _jsxs("div", { className: "row rescfoot", children: [_jsx("span", { className: "muted small", children: "Type the new total in Reserved (it includes what's shipped and on open SOs). 0 removes a reserve that has nothing shipped or on an order." }), _jsxs("button", { className: "ghost small", onClick: onAdd, children: ["+ Add strains for ", name] })] })] });
 }
