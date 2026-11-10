@@ -110,7 +110,8 @@ export interface Act { id: string; at: string; by: 'you' | 'lifted'; who: string
 export type YUnit = 'g' | 'kg' | 'lb' | '%' | '%ff'   // '%' = % of fresh frozen for hash/BHO, % of hash for rosin; '%ff' = rosin as % of fresh frozen
 /** one way a strain was run: washed to hash (and maybe pressed to rosin), or run to BHO. A strain can be split into several parts */
 export interface YPart { bho: boolean; rosin: boolean; ff: number | null; outV: number | null; outU: YUnit; rosinV: number | null; rosinU: YUnit }
-export interface YieldLine { s: string; y: number; shipped: number; parts: YPart[]; note: string }
+export interface YIssue { kinds: string[]; text: string }   // a quality problem with the flower (mold, bud rot, foreign matter…)
+export interface YieldLine { s: string; y: number; shipped: number; parts: YPart[]; note: string; issue?: YIssue | null }
 export interface YieldReport { orderId: number; lines: YieldLine[]; sentAt: string | null; savedAt: string | null }
 interface Data {
   cy: number; contract: boolean; terms: Terms | null; menu: MenuRow[]; bal: Balance[]; reqs: ReserveRequest[]; orders: Order[]; flags: number[]
@@ -1442,7 +1443,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       if (v) v.shipped += Number(l.lbs); else by.set(k, { s: l.strain, y: y0, shipped: Number(l.lbs), parts: [], note: '' }) }
     const saved = x.rep?.lines ?? []
     setYDraft([...by.values()].map(l => { const sv = saved.find(z => z.s === l.s && z.y === l.y)
-      return { ...l, note: sv?.note ?? '', parts: sv?.parts?.length ? sv.parts.map(p => ({ ...p })) : [newPart(l.shipped)] } }))
+      return { ...l, note: sv?.note ?? '', issue: sv?.issue ?? null, parts: sv?.parts?.length ? sv.parts.map(p => ({ ...p })) : [newPart(l.shipped)] } }))
     setYEdit(!x.rep?.sentAt); setYTxt({}); setYOrder(orderId); go('yield')
   }
   // grams for each step of one part, and the yields worked out from them
@@ -1470,12 +1471,38 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     }
     toast('Saved. You can finish later.'); await reload(); go('yields')
   }
+  // "Report an issue" on a strain: what was wrong with the flower, as tick boxes plus a description
+  const ISSUE_KINDS = ['Mold', 'Bud rot', 'Foreign matter', 'Too wet', 'Pests', 'Off smell', 'Other']
+  const issueTxt = (x: YIssue) => [x.kinds.join(', '), x.text.trim()].filter(Boolean).join(' · ')
+  const [yIssue, setYIssue] = useState<{ i: number; kinds: string[]; text: string } | null>(null)
+  function issueSheet() {
+    if (!yIssue) return null
+    const l = yDraft[yIssue.i]; if (!l) return null
+    const close = () => setYIssue(null)
+    const save = (issue: YIssue | null) => { setYDraft(yDraft.map((z, j) => j === yIssue.i ? { ...z, issue } : z)); close() }
+    const tog = (k: string) => setYIssue({ ...yIssue, kinds: yIssue.kinds.includes(k) ? yIssue.kinds.filter(z => z !== k) : [...yIssue.kinds, k] })
+    const ok = yIssue.kinds.length > 0 || yIssue.text.trim().length > 0
+    return <><div className={c('scrim')} onClick={close} />
+      <div className={c('sheet')} role="dialog" aria-modal="true" aria-labelledby="cp-yi-t">
+        <div className={c('row')} style={{ justifyContent: 'space-between' }}><h2 id="cp-yi-t" style={{ margin: 0, fontSize: 22 }}>Report an issue · {l.s}</h2>
+          <button className={c('iconbtn')} style={{ color: 'var(--ink)', borderColor: 'var(--line)' }} onClick={close} aria-label="Close">{I.close}</button></div>
+        <p className={c('meta')} style={{ fontSize: 15, margin: 0 }}>Something wrong with this flower? Tell us what you found. It goes to Lifted with your yields.</p>
+        <div className={c('filters')} role="group" aria-label="What was wrong">{ISSUE_KINDS.map(k => <button key={k} aria-pressed={yIssue.kinds.includes(k)} onClick={() => tog(k)}>{k}</button>)}</div>
+        <label className={c('field')}>What did you find?
+          <textarea className={c('fbtext')} rows={4} maxLength={2000} value={yIssue.text} onChange={e => setYIssue({ ...yIssue, text: e.target.value })}
+            placeholder="How much was affected, where in the bags, what it looked like…" /></label>
+        <div className={c('row')} style={{ gap: 10 }}>
+          {l.issue ? <button className={c('btn ghost')} style={{ flex: 1, color: '#b4232f' }} onClick={() => save(null)}>Remove issue</button>
+            : <button className={c('btn ghost')} style={{ flex: 1 }} onClick={close}>Cancel</button>}
+          <button className={c('btn')} style={{ flex: 1.4 }} disabled={!ok} onClick={() => save({ kinds: yIssue.kinds, text: yIssue.text.trim() })}>Save issue</button></div>
+      </div></>
+  }
   const [ySent, setYSent] = useState<{ label: string; revised: boolean; lines: YieldLine[] } | null>(null)
   const procTxt = (p: YPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + Rosin' : 'Hash'
   function YieldSentScreen() {
     const r = ySent
     if (!r) return <div className={c('screen')}><p className={c('loading')}>Done.</p></div>
-    const done = r.lines.filter(l => l.parts.length), blank = r.lines.filter(l => !l.parts.length)
+    const done = r.lines.filter(l => l.parts.length || l.issue), blank = r.lines.filter(l => !l.parts.length && !l.issue)
     const runs = done.flatMap(l => l.parts.map(p => ({ orderId: 0, label: '', date: null, p, note: '', k: yCalc(p), draft: false })))
     const all = yAgg(runs), ffLbs = runs.reduce((a, x) => a + (x.p.ff ?? 0), 0)
     // hash and BHO together, weighted by the fresh frozen run
@@ -1492,9 +1519,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <main className={c('main')}>
           {desk ? <section className={c('card')} style={{ padding: 0, overflow: 'hidden' }}>
             <div className={c('ysum head')}><span>Strain</span><span>Process</span><span>Fresh frozen</span><span>Hash / BHO yield</span><span>Rosin yield</span></div>
-            {done.map(l => <Fragment key={l.s + l.y}>{l.parts.map((p, pi) => <div key={pi} className={c(`ysum ${pi ? 'cont' : ''}`)}>
+            {done.map(l => <Fragment key={l.s + l.y}>{!l.parts.length && <div className={c('ysum')}><span><b>{l.s}</b> {yrTag(l.y)}</span><span className={c('meta')}>Not run</span><span /><span /><span /></div>}{l.parts.map((p, pi) => <div key={pi} className={c(`ysum ${pi ? 'cont' : ''}`)}>
                 <span>{pi === 0 && <><b>{l.s}</b> {yrTag(l.y)}{l.parts.length > 1 && <span className={c('meta')}>{plural(l.parts.length, 'run')}</span>}</>}</span>
                 <span>{procTxt(p)}</span><span>{p.ff == null ? '–' : `${fmt(p.ff)} lbs`}</span><span>{outCell(p)}</span><span>{rosCell(p)}</span></div>)}
+              {l.issue && <div className={c('ysum cont note')}><span /><span className={c('yissue-txt')}>⚠ Issue: <b>{issueTxt(l.issue)}</b></span></div>}
               {l.note && <div className={c('ysum cont note')}><span /><span className={c('meta')}>Note: {l.note}</span></div>}</Fragment>)}
             <div className={c('ysum total')}><span>Total · {plural(done.length, 'strain')}</span><span /><span>{fmt(ffLbs)} lbs</span>
               <span>{pct(outAvg)}</span>
@@ -1503,6 +1531,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : <section className={c('card')}>{done.map(l => <div key={l.s + l.y} className={c('li')} style={{ alignItems: 'flex-start' }}><div className={c('grow')}>
               <p className={c('name')}>{l.s} {yrTag(l.y)}</p>
               {l.parts.map((p, pi) => <p key={pi} className={c('meta')}>{l.parts.length > 1 ? `Run ${pi + 1}: ` : ''}{procTxt(p)} · {p.ff == null ? '–' : `${fmt(p.ff)} lbs`} FF → {outCell(p)}{!p.bho && p.rosin && p.rosinV != null && <> · rosin {rosCell(p)}</>}</p>)}
+              {!l.parts.length && <p className={c('meta')}>Not run</p>}
+              {l.issue && <p className={c('yissue-txt')}>⚠ Issue: <b>{issueTxt(l.issue)}</b></p>}
               {l.note && <p className={c('meta')} style={{ fontStyle: 'italic' }}>“{l.note}”</p>}</div></div>)}
             <div className={c('li')} style={{ background: '#f7f9f6' }}><b className={c('grow')}>Total</b><b className={c('num')}>{fmt(ffLbs)} lbs FF{outAvg != null ? ` · ${pct(outAvg)} yield` : ''}</b></div></section>}
           {blank.length > 0 && <div className={c('note gold')}><b>Not reported yet:</b> {blank.map(l => l.s).join(', ')}. Add them any time from Yields when you've run them.</div>}
@@ -1647,7 +1677,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
         <select value={u} aria-label={`${l.s} ${what} unit`} onChange={e => setP(i, pi, which === 'out' ? { outU: e.target.value as YUnit } : { rosinU: e.target.value as YUnit })}>
           {(which === 'rosin' ? ROSIN_UNITS : UNITS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></span>
     }
-    const filled = yDraft.filter(yDone).length
+    const filled = yDraft.filter(l => yDone(l) || l.issue).length
     const overOf = (l: YieldLine) => Math.round((l.parts.reduce((a, p) => a + (p.ff ?? 0), 0) - l.shipped) * 100) / 100
     const over = yDraft.filter(l => overOf(l) > 0)
     const sentAt = x.rep?.sentAt ?? null, locked = !!sentAt && !yEdit
@@ -1668,7 +1698,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
               <div className={c('ybody')}>
                 <div className={c('ystrain')}><p className={c('name')}>{l.s} {yrTag(l.y)}</p><p className={c('meta')}>{fmt(l.shipped)} lbs shipped</p>
                   {left < 0 ? <p className={c('err')} style={{ margin: '4px 0 0' }}>{fmt(-left)} lbs more than shipped. Lower the fresh frozen run{l.parts.length > 1 ? 's' : ''} to {fmt(l.shipped)} lbs or less.</p>
-                    : l.parts.length > 1 && <p className={c('meta')}>{left === 0 ? 'All lbs accounted for' : `${fmt(left)} lbs not in a part yet`}</p>}</div>
+                    : l.parts.length > 1 && <p className={c('meta')}>{left === 0 ? 'All lbs accounted for' : `${fmt(left)} lbs not in a part yet`}</p>}
+                  {!locked && !l.issue && <button type="button" className={c('linkish yissue-btn')} onClick={() => setYIssue({ i, kinds: [], text: '' })}>⚠ Report an issue</button>}</div>
                 <div className={c('yparts')}>
                   {l.parts.map((p, pi) => { const k = yCalc(p)
                     return <div key={pi} className={c(`ypart ${l.parts.length > 1 ? 'split' : ''}`)}>
@@ -1690,6 +1721,8 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
                   {!locked && <button className={c('linkish ysplit')} onClick={() => setL(i, { parts: [...l.parts, { ...newPart(left > 0 ? left : null), bho: !l.parts[l.parts.length - 1].bho }] })}>+ Split this strain{l.parts.length === 1 ? ' (e.g. multiple runs, or some to hash, some to BHO)' : ''}</button>}
                 </div>
               </div>
+              {l.issue && <div className={c('yissue')}><span>⚠ <b>Issue reported:</b> {issueTxt(l.issue)}</span>
+                {!locked && <button type="button" className={c('linkish')} onClick={() => setYIssue({ i, kinds: [...l.issue!.kinds], text: l.issue!.text })}>Edit</button>}</div>}
               <label className={c('ynote')}><span className={c('ylbl')}>Notes</span><input type="text" placeholder="Anything we should know: terps, color, how it washed…" value={l.note} onChange={e => setL(i, { note: e.target.value })} /></label>
             </section> })}
           </fieldset>
@@ -1701,6 +1734,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           : <button className={c('btn ghost')} style={{ flex: 1 }} disabled={busy} onClick={() => saveYields(false)}>Save for later</button>}
           <button className={c('btn')} style={{ flex: 1.4 }} disabled={busy || filled === 0 || over.length > 0} title={over.length ? `More lbs than shipped: ${over.map(l => l.s).join(', ')}` : undefined}
             onClick={() => saveYields(true)}>{over.length ? (desk ? `Fix the red line${over.length > 1 ? 's' : ''} (more than shipped)` : 'Fix the red lines') : filled === 0 ? 'Fill in a strain' : sentAt ? 'Submit revisions' : desk ? `Send ${plural(filled, 'strain')} to Lifted` : 'Send to Lifted'}</button></div>}
+        {issueSheet()}
       </div>
     )
   }
