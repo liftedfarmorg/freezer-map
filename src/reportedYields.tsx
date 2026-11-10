@@ -29,18 +29,19 @@ const calc = (r: RYReport, l: RYLine, p: RYPart): Run => {
   return { r, l, p, ffG, hashG, bhoG, rosinG, draft: !r.sentAt }
 }
 const done = (p: RYPart) => p.outV != null || (!p.bho && p.rosinV != null)
-type Agg = { lbs: number; hash: number | null; bho: number | null; rosinFF: number | null; rosinHash: number | null; hashLo: number | null; hashHi: number | null; bhoLo: number | null; bhoHi: number | null }
+type Agg = { lbs: number; hash: number | null; bho: number | null; rosinFF: number | null; rosinHash: number | null; hashLo: number | null; hashHi: number | null; bhoLo: number | null; bhoHi: number | null; rosLo: number | null; rosHi: number | null }
 /** lbs-weighted yields over a set of runs, plus the low-high of the per-run hash and BHO yields */
 const agg = (rs: Run[]): Agg => {
   const sum = (xs: Run[], f: (x: Run) => number | null) => xs.reduce((a, x) => a + (f(x) ?? 0), 0)
   const div = (a: number, b: number) => b > 0 ? a / b * 100 : null
   const h = rs.filter(x => x.hashG != null), b = rs.filter(x => x.bhoG != null), ro = rs.filter(x => x.rosinG != null), both = ro.filter(x => x.hashG != null)
   const each = (xs: Run[], f: (x: Run) => number | null) => xs.map(x => div(f(x) ?? 0, x.ffG)).filter((v): v is number => v != null)
-  const hs = each(h, x => x.hashG), bs = each(b, x => x.bhoG)
+  const hs = each(h, x => x.hashG), bs = each(b, x => x.bhoG), rs2 = each(ro, x => x.rosinG)
   return { lbs: rs.reduce((a, x) => a + (x.p.ff ?? 0), 0),
     hash: div(sum(h, x => x.hashG), sum(h, x => x.ffG)), bho: div(sum(b, x => x.bhoG), sum(b, x => x.ffG)),
     rosinFF: div(sum(ro, x => x.rosinG), sum(ro, x => x.ffG)), rosinHash: div(sum(both, x => x.rosinG), sum(both, x => x.hashG)),
-    hashLo: hs.length > 1 ? Math.min(...hs) : null, hashHi: hs.length > 1 ? Math.max(...hs) : null, bhoLo: bs.length > 1 ? Math.min(...bs) : null, bhoHi: bs.length > 1 ? Math.max(...bs) : null }
+    hashLo: hs.length > 1 ? Math.min(...hs) : null, hashHi: hs.length > 1 ? Math.max(...hs) : null, bhoLo: bs.length > 1 ? Math.min(...bs) : null, bhoHi: bs.length > 1 ? Math.max(...bs) : null,
+    rosLo: rs2.length > 1 ? Math.min(...rs2) : null, rosHi: rs2.length > 1 ? Math.max(...rs2) : null }
 }
 const pct = (n: number | null | undefined) => n == null ? '–' : `${n < 10 ? n.toFixed(2) : n.toFixed(1)}%`
 const pct1 = (n: number | null | undefined) => n == null ? '–' : `${n.toFixed(1)}%`
@@ -49,7 +50,7 @@ const day = (s: string | null) => s ? new Date(s.length === 10 ? s + 'T12:00' : 
 const proc = (p: RYPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + rosin' : 'Hash'
 
 type Tab = 'strain' | 'customer' | 'issues'
-type SortK = 's' | 'cust' | 'runs' | 'lbs' | 'hash' | 'rosin' | 'bho'
+type SortK = 's' | 'cust' | 'runs' | 'lbs' | 'hash' | 'rosin' | 'roh' | 'bho'
 
 export function ReportedYields({ reports, owed, menu, flash }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void }) {
   const [tab, setTab] = useState<Tab>('strain')
@@ -85,7 +86,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
       const sho = ok(rs.filter(x => x.hashG != null)), bho = ok(rs.filter(x => x.bhoG != null))
       return { k, s: rs[0].l.s, y: rs[0].l.y, rs, a, nc, sho, bho, ready: sho || bho, issues: new Set(rs.filter(x => x.l.issue).map(x => x.r.orderId)).size } })
   }, [runs])
-  const val = (x: { s: string; nc: number; rs: Run[]; a: Agg }, k: SortK): number | string => k === 's' ? x.s : k === 'cust' ? x.nc : k === 'runs' ? x.rs.length : k === 'lbs' ? x.a.lbs : k === 'hash' ? x.a.hash ?? -1 : k === 'rosin' ? x.a.rosinFF ?? -1 : x.a.bho ?? -1
+  const val = (x: { s: string; nc: number; rs: Run[]; a: Agg }, k: SortK): number | string => k === 's' ? x.s : k === 'cust' ? x.nc : k === 'runs' ? x.rs.length : k === 'lbs' ? x.a.lbs : k === 'hash' ? x.a.hash ?? -1 : k === 'rosin' ? x.a.rosinFF ?? -1 : k === 'roh' ? x.a.rosinHash ?? -1 : x.a.bho ?? -1
   const sorted = <T extends { s: string; nc: number; rs: Run[]; a: Agg }>(xs: T[]) => [...xs].sort((a, b) => { const va = val(a, sort.k), vb = val(b, sort.k)
     const c = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number); return sort.asc ? c : -c })
   const th = (k: SortK, label: React.ReactNode, cls = 'num') => <th className={cls}><button className={`ry-sort ${sort.k === k ? 'on' : ''}`} onClick={() => setSort({ k, asc: sort.k === k ? !sort.asc : k === 's' })}>{label}{sort.k === k ? (sort.asc ? ' ▲' : ' ▼') : ''}</button></th>
@@ -162,39 +163,40 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
 
     {tab === 'strain' && <>
       <div className="ry-card"><table className="restable ry-main"><thead><tr>
-        {th('s', 'Strain', '')}{th('cust', 'Customers')}{th('runs', 'Runs')}{th('lbs', 'FF run')}{th('hash', <>Hash<span>of FF · range</span></>)}{th('rosin', <>Rosin<span>of FF · of hash</span></>)}{th('bho', <>BHO<span>of FF · range</span></>)}<th>For the menu</th><th /></tr></thead>
+        {th('s', 'Strain', '')}{th('cust', 'Customers')}{th('runs', 'Runs')}{th('lbs', 'FF run')}{th('hash', <>Hash<span>of FF · range</span></>)}{th('rosin', <>Rosin<span>of FF · range</span></>)}{th('roh', <>Rosin<span>of hash</span></>)}{th('bho', <>BHO<span>of FF · range</span></>)}<th>For the menu</th><th /></tr></thead>
         <tbody>{sorted(strains).map(x => { const on = open === x.k, m = menuNow[x.s.toLowerCase()]
           return <Fragment key={x.k}><tr className={`tap ${on ? 'ry-on' : ''}`} onClick={() => setOpen(on ? null : x.k)}>
             <td><b>{x.s}</b> <span className="ry-yr">{x.y}</span>{x.issues > 0 && <> <span className="pill m-warn">{x.issues} issue{x.issues > 1 ? 's' : ''}</span></>}</td>
             <td className="num">{x.nc}</td><td className="num">{x.rs.length}</td><td className="num">{lbs(x.a.lbs)}</td>
             <td className="num"><b className="ry-hash">{pct(x.a.hash)}</b>{x.a.hashLo != null && <small className="ry-range">{pct(x.a.hashLo)}–{pct(x.a.hashHi)}</small>}</td>
-            <td className="num"><b>{pct(x.a.rosinFF)}</b>{x.a.rosinHash != null && <small className="ry-range">{pct1(x.a.rosinHash)} of hash</small>}</td>
+            <td className="num"><b>{pct(x.a.rosinFF)}</b>{x.a.rosLo != null && <small className="ry-range">{pct(x.a.rosLo)}–{pct(x.a.rosHi)}</small>}</td>
+            <td className="num">{pct1(x.a.rosinHash)}</td>
             <td className="num"><b className="ry-bho">{pct(x.a.bho)}</b>{x.a.bhoLo != null && <small className="ry-range">{pct(x.a.bhoLo)}–{pct(x.a.bhoHi)}</small>}</td>
             <td className="ry-menu">{x.ready ? <>{x.sho && <span className="pill m-ok">SHO {pct1(x.a.hash)}</span>} {x.bho && <span className="pill m-ok">BHO {pct1(x.a.bho)}</span>}</>
               : <span className="pill m-mute" title={`Needs reports from ${READY_CUSTOMERS}+ customers and ${READY_LBS}+ lbs`}>Needs more reports</span>}
               <small>Menu shows {m?.solventless_pct != null || m?.hydrocarbon_pct != null ? [m?.solventless_pct != null ? `${m.solventless_pct}% SHO` : '', m?.hydrocarbon_pct != null ? `${m.hydrocarbon_pct}% BHO` : ''].filter(Boolean).join(' · ') : 'no yield'}</small></td>
             <td className="muted">{on ? '▴' : '▾'}</td></tr>
-            {on && <tr className="ry-detail"><td colSpan={9}>
+            {on && <tr className="ry-detail"><td colSpan={10}>
               {runTable(x.rs, 'customer')}
               <div className="row between wrap ry-detail-f"><span className="muted">Average of {x.rs.length} run{x.rs.length > 1 ? 's' : ''} from {x.nc} customer{x.nc > 1 ? 's' : ''}. {!x.sho && x.a.hash != null ? 'Hash needs more reports before it can go on the menu. ' : ''}{!x.bho && x.a.bho != null ? 'BHO needs more reports before it can go on the menu.' : ''}</span>
                 {x.ready && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {[x.sho ? `${pct1(x.a.hash)} SHO` : '', x.bho ? `${pct1(x.a.bho)} BHO` : ''].filter(Boolean).join(' and ')} on the menu</button>}</div>
             </td></tr>}</Fragment> })}
-          {!strains.length && <tr><td colSpan={9} className="muted">No reported runs match.</td></tr>}</tbody>
+          {!strains.length && <tr><td colSpan={10} className="muted">No reported runs match.</td></tr>}</tbody>
         {strains.length > 0 && <tfoot><tr><td><b>All strains</b></td><td className="num">{new Set(runs.map(x => x.r.customerId)).size}</td><td className="num">{runs.length}</td><td className="num">{lbs(tot.lbs)}</td>
-          <td className="num"><b>{pct(tot.hash)}</b></td><td className="num"><b>{pct(tot.rosinFF)}</b></td><td className="num"><b>{pct(tot.bho)}</b></td><td colSpan={2} /></tr></tfoot>}
+          <td className="num"><b>{pct(tot.hash)}</b></td><td className="num"><b>{pct(tot.rosinFF)}</b></td><td className="num"><b>{pct1(tot.rosinHash)}</b></td><td className="num"><b>{pct(tot.bho)}</b></td><td colSpan={2} /></tr></tfoot>}
       </table></div>
       <p className="muted ry-foot">Tap a strain to see every run behind its average. <b>For the menu</b>: a hash (SHO) or BHO average turns green once {READY_CUSTOMERS}+ customers and {READY_LBS}+ lbs are behind it, so one odd run can't swing it; those are the numbers we'd show on the sales menu. "Menu shows" is what the strain profile has today (Strains › Yield to solventless / hydrocarbon).</p>
     </>}
 
     {tab === 'customer' && <div className="ry-card"><table className="restable ry-main"><thead><tr>
-        <th>Customer</th><th className="num">Reports sent</th><th>Not reported yet</th><th className="num">FF run</th><th className="num">Hash<span>of FF</span></th><th className="num">Rosin<span>of FF</span></th><th className="num">BHO<span>of FF</span></th><th className="num">Issues</th><th>Last report</th><th /></tr></thead>
+        <th>Customer</th><th className="num">Reports sent</th><th>Not reported yet</th><th className="num">FF run</th><th className="num">Hash<span>of FF</span></th><th className="num">Rosin<span>of FF</span></th><th className="num">Rosin<span>of hash</span></th><th className="num">BHO<span>of FF</span></th><th className="num">Issues</th><th>Last report</th><th /></tr></thead>
       <tbody>{customers.map(x => { const on = open === x.k
         return <Fragment key={x.k}><tr className={`tap ${on ? 'ry-on' : ''}`} onClick={() => setOpen(on ? null : x.k)}>
           <td><b>{x.s}</b></td><td className="num">{x.nc}{x.drafts > 0 && <small className="ry-range">+{x.drafts} draft</small>}</td>
           <td>{x.owed.length ? <span className="pill m-warn" title={x.owed.map(o => `${o.label} (${day(o.shippedOn)})`).join(', ')}>{x.owed.length} order{x.owed.length > 1 ? 's' : ''}</span> : <span className="muted">All reported</span>}</td>
-          <td className="num">{x.a.lbs ? lbs(x.a.lbs) : '–'}</td><td className="num"><b className="ry-hash">{pct(x.a.hash)}</b></td><td className="num">{pct(x.a.rosinFF)}</td><td className="num"><b className="ry-bho">{pct(x.a.bho)}</b></td>
+          <td className="num">{x.a.lbs ? lbs(x.a.lbs) : '–'}</td><td className="num"><b className="ry-hash">{pct(x.a.hash)}</b></td><td className="num">{pct(x.a.rosinFF)}</td><td className="num">{pct1(x.a.rosinHash)}</td><td className="num"><b className="ry-bho">{pct(x.a.bho)}</b></td>
           <td className="num">{x.issues || '–'}</td><td className="muted">{x.last ? day(x.last) : 'Never'}</td><td className="muted">{on ? '▴' : '▾'}</td></tr>
-          {on && <tr className="ry-detail"><td colSpan={10}>
+          {on && <tr className="ry-detail"><td colSpan={11}>
             {x.rs.length ? custStrains(x.k, x.rs) : <p className="muted">No runs reported{drafts ? '' : ' (drafts hidden)'}.</p>}
             {x.owed.length > 0 && <p className="muted ry-owed">Shipped, not reported yet: {x.owed.map(o => `${o.label} (shipped ${day(o.shippedOn)}, ${o.strains} strain${o.strains > 1 ? 's' : ''})`).join(' · ')}</p>}
           </td></tr>}</Fragment> })}</tbody></table></div>}
