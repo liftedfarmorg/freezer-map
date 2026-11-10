@@ -63,14 +63,13 @@ const I = {
 }
 
 /** typed quantity in lbs with −/+ 10 buttons */
-function Stepper({ val, on, bad, label, onChange, autoFocus, sm, onEmpty }: { val: number; on?: boolean; bad?: boolean; label: string; onChange: (n: number) => void; autoFocus?: boolean
-  sm?: boolean; onEmpty?: () => void }) {   // sm: fits in a list row; onEmpty: − at the bottom (or leaving it at 0) takes the strain off
+function Stepper({ val, on, bad, label, onChange, autoFocus }: { val: number; on?: boolean; bad?: boolean; label: string; onChange: (n: number) => void; autoFocus?: boolean }) {
   return (
-    <span className={c(`stepper ${sm ? 'sm' : ''} ${on ? 'on' : ''} ${bad ? 'bad' : ''}`)}>
-      <button type="button" onClick={() => { const n = snap(val, -10); if (onEmpty && n <= 0) onEmpty(); else onChange(n) }} aria-label={onEmpty && val <= 10 ? `Remove ${label}` : `Less ${label}`}>−</button>
+    <span className={c(`stepper ${on ? 'on' : ''} ${bad ? 'bad' : ''}`)}>
+      <button type="button" onClick={() => onChange(snap(val, -10))} aria-label={`Less ${label}`}>−</button>
       <input type="text" inputMode="numeric" pattern="[0-9]*" value={val ? String(val) : ''} placeholder="0" aria-label={`${label} lbs`} aria-invalid={bad ? 'true' : 'false'} autoFocus={autoFocus}
         onChange={e => { const d = e.target.value.replace(/[^0-9]/g, '').slice(0, 6); onChange(d ? Number(d) : 0) }}
-        onBlur={() => { if (onEmpty && !val) onEmpty(); else if (not10(val)) onChange(round10(val)) }}
+        onBlur={() => { if (not10(val)) onChange(round10(val)) }}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
       <button type="button" onClick={() => onChange(snap(val, 10))} aria-label={`More ${label}`}>+</button>
     </span>
@@ -1107,32 +1106,30 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
             <div className={c(`mg mg-head ${contract ? '' : 'nc'}`)}><span>Strain</span><span className={c('mg-a')}>Available<span className={c('meta')} style={{ display: 'block', fontSize: 11, margin: 0 }}>lbs</span></span>{contract && <span style={{ textAlign: 'right' }}>Your reserve</span>}</div>
             {list.length === 0 && <p className={c('meta')} style={{ padding: 14 }}>{menuItems.length ? 'Nothing matches.' : 'Nothing on the menu right now.'}</p>}
             {list.map(m => {
-              const yr = m.y < cy ? <span className={c('yr old')} style={{ fontSize: 12 }}>{m.y} crop</span> : null
-              const nameCell = (extra?: React.ReactNode) => <div style={{ minWidth: 0 }}><p className={c('name')}>{m.s} {tagPill(m.s)}</p>
-                {(yr || extra) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{yr}{yr && extra ? ' · ' : ''}{extra}</p>}</div>
-              const avail = <b className={c('num mg-a')}>{fmt(m.open)}</b>
-              if (!contract) return <div key={m.k} className={c('mg nc')}>{nameCell()}{avail}</div>
+              const nameCell = <div style={{ minWidth: 0 }}><p className={c('name')}>{m.s} {tagPill(m.s)}</p>{m.y < cy && <p className={c('meta')} style={{ margin: '1px 0 0' }}><span className={c('yr old')} style={{ fontSize: 12 }}>{m.y} crop</span></p>}</div>
+              const cells = <>{nameCell}<b className={c('num mg-a')}>{fmt(m.open)}</b></>
+              if (!contract) return <div key={m.k} className={c('mg nc')}>{cells}</div>
               const r = resRow(m.k), t = !r ? editNew.find(x => x.k === m.k) : undefined
-              // picking a strain or changing a reserve happens in the row itself (the stepper takes the button's place), so nothing shifts
-              let right: React.ReactNode, extra: React.ReactNode = null, sel = false
+              let right: React.ReactNode, pick: React.ReactNode = null, sel = false
               if (r) {
                 const v = ed[r.k] ?? 0, base = r.asked ?? r.res, changed = v !== base, open = menuOpen.includes(r.k) || changed, e = resErr(r)
                 sel = changed
-                if (open) {
-                  right = <><Stepper sm val={v} on={changed} bad={!!e} label={m.s} autoFocus={focusK === 'res' + r.k} onChange={n => setRes(r.k, n)} />
-                    {changed && <span className={c('stepnote')}>was {fmt(base)} · <button className={c('linkish inl')} onClick={() => { setRes(r.k, base); setMenuOpen(menuOpen.filter(x => x !== r.k)) }}>Undo</button></span>}</>
-                  extra = e ? <span style={{ color: 'var(--red)' }}>{e}</span> : null
-                } else {
-                  right = <button className={c('linkish')} onClick={() => { setMenuOpen([...menuOpen, r.k]); setFocusK('res' + r.k) }}><span>{fmt(r.res)} reserved</span>{r.asked != null ? 'Waiting · Edit' : 'Change'}</button>
-                }
+                right = open
+                  ? <button className={c('linkish')} onClick={() => { setRes(r.k, base); setMenuOpen(menuOpen.filter(x => x !== r.k)) }}><span>{fmt(r.res)} reserved</span>{changed ? 'Undo' : 'Close'}</button>
+                  : <button className={c('linkish')} onClick={() => setMenuOpen([...menuOpen, r.k])}><span>{fmt(r.res)} reserved</span>{r.asked != null ? 'Waiting · Edit' : 'Change'}</button>
+                if (open) pick = <><div className={c('row')} style={{ gap: 10, padding: '0 14px 12px', flexWrap: 'wrap' }}><span className={c('grow')} style={{ fontSize: 14, fontWeight: 600 }}>Your reserve total
+                  <span className={c('meta')} style={{ display: 'block', fontWeight: 400 }}>{changed ? changedLine(r) : `${fmt(r.used)} already picked up`}</span></span>
+                  <Stepper val={v} on={changed} bad={!!e} label={m.s} onChange={n => setRes(r.k, n)} /></div>{e && <div style={{ padding: '0 14px 12px' }}><StepErr msg={e} /></div>}</>
               } else if (t) {
                 sel = true
                 const e = newErr(t)
-                right = <Stepper sm val={t.lbs} on bad={!!e && t.lbs > 0} label={m.s} autoFocus={focusK === 'tray' + m.k} onChange={n => setEditNew(editNew.map(x => x.k === m.k ? { ...x, lbs: n } : x))} onEmpty={() => toggleTray(m)} />
-                extra = e && t.lbs > 0 ? <span style={{ color: 'var(--red)' }}>{e}</span> : null
+                right = <button className={c('linkish')} style={{ color: 'var(--red)' }} onClick={() => toggleTray(m)}>Remove</button>
+                pick = <><div className={c('row')} style={{ gap: 10, padding: '0 14px 12px', flexWrap: 'wrap' }}><span className={c('grow')} style={{ fontSize: 14, fontWeight: 600 }}>How many lbs to reserve?</span>
+                  <Stepper val={t.lbs} on bad={!!e && t.lbs > 0} label={m.s} autoFocus={focusK === 'tray' + m.k} onChange={n => setEditNew(editNew.map(x => x.k === m.k ? { ...x, lbs: n } : x))} /></div>
+                  {e && t.lbs > 0 && <div style={{ padding: '0 14px 12px' }}><StepErr msg={e} /></div>}</>
               } else right = <button className={c('outline-btn')} onClick={() => toggleTray(m)} disabled={m.open <= 0}>+ Reserve</button>
               return <div key={m.k} className={sel ? c('sel') : ''} style={{ borderBottom: '1px solid var(--line-2)', background: sel ? 'var(--teal-tint)' : undefined }}>
-                <div className={c('mg')}>{nameCell(extra)}{avail}<div style={{ textAlign: 'right' }}>{right}</div></div></div>
+                <div className={c('mg')}>{cells}<div style={{ textAlign: 'right' }}>{right}</div></div>{pick}</div>
             })}
           </section>
         </main>
@@ -1147,25 +1144,29 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     const picked = l.k in ord, qv = ord[l.k] ?? 0, sp = lineSplit(l, qv)
     const sub = l.resLeft ? <>{fmt(l.resLeft)} reserve + {fmt(l.open)} open</> : l.hold ? <span style={{ color: 'var(--gold)' }}>incl. {fmt(l.hold)} held for you</span> : null
     const unpick = () => { const o = { ...ord }; delete o[l.k]; setOrd(o); const s = { ...smp }; delete s[l.k]; setSmp(s); const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) }
-    const e = picked ? lineError(l, qv) : '', sampleOk = !l.resLeft, hq = holdAsk[l.k] ?? 0, he = picked && smp[l.k] ? holdError(l, qv, hq) : ''
-    // once picked, the lines under the name say where the lbs come from (or what's wrong), so the row keeps its height
-    const split = [sp.fromRes ? `${fmt(sp.fromRes)} reserve` : '', sp.fromHold ? `${fmt(sp.fromHold)} held` : '', sp.fromOpen ? `${fmt(sp.fromOpen)} open menu` : ''].filter(Boolean).join(' + ')
-    const line3 = !picked ? lastOrdTxt(l.s) : e ? <span style={{ color: 'var(--red)' }}>{e}</span> : qv > 0 && !not10(qv) && split ? <span style={{ color: 'var(--teal-ink)' }}>{split}</span> : lastOrdTxt(l.s)
-    const yr = l.y < cy ? <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span> : null
+    const head = <div className={c('mg')}>
+      <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s} {tagPill(l.s)}</p>{(l.y < cy || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{l.y < cy && <span className={c('yr old')} style={{ fontSize: 12 }}>{l.y} crop</span>}{l.y < cy && sub ? ' · ' : ''}{sub}</p>}<p className={c('meta')} style={{ margin: '1px 0 0', fontSize: 12 }}>{lastOrdTxt(l.s)}</p></div>
+      <b className={c('num mg-a')}>{fmt(sp.max)}</b>
+      <div style={{ textAlign: 'right' }}>{picked ? <button className={c('linkish')} style={{ color: 'var(--red)' }} onClick={unpick}>Remove</button>
+        : <button className={c('outline-btn')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+ Add</button>}</div></div>
+    if (!picked) return <div style={{ borderBottom: '1px solid var(--line-2)' }}>{head}</div>
+    const e = lineError(l, qv), sampleOk = !l.resLeft, hq = holdAsk[l.k] ?? 0, he = smp[l.k] ? holdError(l, qv, hq) : ''
     return (
-      <div style={{ borderBottom: '1px solid var(--line-2)', background: picked ? 'var(--teal-tint)' : undefined }}>
-        <div className={c('mg')}>
-          <div style={{ minWidth: 0 }}><p className={c('name')}>{l.s} {tagPill(l.s)}</p>
-            {(yr || sub) && <p className={c('meta')} style={{ margin: '1px 0 0' }}>{yr}{yr && sub ? ' · ' : ''}{sub}</p>}
-            <p className={c('meta')} style={{ margin: '1px 0 0', fontSize: 12 }}>{line3}</p></div>
-          <b className={c('num mg-a')}>{fmt(sp.max)}</b>
-          <div style={{ textAlign: 'right' }}>{picked
-            ? <><Stepper sm val={qv} on bad={!!e} label={l.s} autoFocus={focusK === 'ord' + l.k} onChange={n => setOrd({ ...ord, [l.k]: n })} onEmpty={unpick} />
-              {sampleOk && <label className={c('smpck')}><input type="checkbox" checked={!!smp[l.k]} onChange={ev => { setSmp({ ...smp, [l.k]: ev.target.checked }); if (!ev.target.checked) { const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) } }} /> Sample</label>}</>
-            : <button className={c('outline-btn')} onClick={() => { setOrd({ ...ord, [l.k]: 10 }); setFocusK('ord' + l.k) }} aria-label={`Add ${l.s}`}>+ Add</button>}</div></div>
-        {picked && sampleOk && smp[l.k] && <div style={{ padding: '0 14px 12px' }}><div className={c('row')} style={{ justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)', background: '#fff', borderRadius: 10, padding: '8px 10px', flexWrap: 'wrap' }}>
-          <span>If you like it, hold for me <span style={{ fontSize: 12 }}>({d?.holdDays ?? 10} days after it ships · up to {fmt(Math.max(sp.max - qv, 0))} lbs)</span></span>
-          <Stepper val={hq} bad={!!he} label={`${l.s} hold`} onChange={n => setHoldAsk({ ...holdAsk, [l.k]: n })} /></div>{he && <StepErr msg={he} />}</div>}
+      <div style={{ borderBottom: '1px solid var(--line-2)', background: 'var(--teal-tint)' }}>
+        {head}
+        <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className={c('row')} style={{ gap: 10, flexWrap: 'wrap' }}><span className={c('grow')} style={{ fontSize: 14, fontWeight: 600 }}>How many lbs?</span>
+            <Stepper val={qv} on bad={!!e} label={l.s} autoFocus={focusK === 'ord' + l.k} onChange={n => setOrd({ ...ord, [l.k]: n })} /></div>
+          {e && <StepErr msg={e} />}
+          <div className={c('chips')}>
+            {qv > 0 && !not10(qv) && <>{sp.fromRes > 0 && <span className={c('chip c-res')}>{fmt(sp.fromRes)} from your reserve</span>}{sp.fromHold > 0 && <span className={c('chip c-wait')}>{fmt(sp.fromHold)} held for you</span>}{sp.fromOpen > 0 && <span className={c('chip c-open')}>{fmt(sp.fromOpen)} from open menu</span>}</>}
+            {sampleOk && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, marginLeft: 'auto' }}>
+              <input type="checkbox" checked={!!smp[l.k]} onChange={ev => { setSmp({ ...smp, [l.k]: ev.target.checked }); if (!ev.target.checked) { const h = { ...holdAsk }; delete h[l.k]; setHoldAsk(h) } }} style={{ width: 18, height: 18, accentColor: 'var(--teal-dk)' }} /> Sample</label>}
+          </div>
+          {sampleOk && smp[l.k] && <><div className={c('row')} style={{ justifyContent: 'space-between', fontSize: 13, color: 'var(--muted)', background: '#fff', borderRadius: 10, padding: '8px 10px', flexWrap: 'wrap' }}>
+            <span>If you like it, hold for me <span style={{ fontSize: 12 }}>({d?.holdDays ?? 10} days after it ships · up to {fmt(Math.max(sp.max - qv, 0))} lbs)</span></span>
+            <Stepper val={hq} bad={!!he} label={`${l.s} hold`} onChange={n => setHoldAsk({ ...holdAsk, [l.k]: n })} /></div>{he && <StepErr msg={he} />}</>}
+        </div>
       </div>
     )
   }
