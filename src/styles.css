@@ -1236,3 +1236,7 @@ a.btnlink { display: inline-flex; align-items: center; text-decoration: none; co
   background: #b45309; color: #fff; font: 600 12px/1 system-ui, sans-serif; letter-spacing: .04em; padding: 6px 12px; border-radius: 99px; pointer-events: none; opacity: .92; }
 .preview-toast { position: fixed; z-index: 10000; left: 50%; top: 16px; transform: translateX(-50%); background: #231f20; color: #fff;
   font: 600 14px/1.3 system-ui, sans-serif; padding: 10px 16px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+
+/* YLD-17: customer reports on the strain profile */
+.srep { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 4px 0 10px; display: grid; gap: 6px; font-size: 14px; }
+.srep-h { font-weight: 700; font-size: 13px; }

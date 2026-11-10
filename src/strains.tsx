@@ -81,6 +81,26 @@ const GROUPS: { m: 'nursery' | 'cultivation' | 'sales'; l: string; fields: Field
 ]
 
 /** the strain sheet's profile: one fold per module; only that module's Admins can override */
+// YLD-17 (SQL 328): what customers reported for this strain, all crop years, and what the menu shows because of it
+type RepOne = { lo: number | null; hi: number | null; avg: number | null; runs: number; customers: number; lbs: number; ready: boolean }
+type RepAll = { sho: RepOne; bho: RepOne; source: string; menu: { sho: number | null; sho_high: number | null; bho: number | null; bho_high: number | null } | null }
+function ReportedBox({ sb, p }: { sb: SupabaseClient | null; p: StrainProfile }) {
+  const [d, setD] = useState<RepAll | null>(null)
+  useEffect(() => { sb?.rpc('strain_reported_yields', { p_strain: p.id }).then(({ data, error }) => setD(error ? null : (data as RepAll | null))) }, [p.id, JSON.stringify(p.set ?? {})])
+  if (!d) return null
+  const line = (nm: string, r: RepOne) => r.runs === 0 ? <div><b>{nm}</b> <span className="muted">no customer reports yet</span></div>
+    : <div><b>{nm} {yieldRange(r.lo, r.hi)}</b> <span className="muted">avg {r.avg != null ? `${f1(r.avg)}%` : '–'} · {r.runs} run{r.runs === 1 ? '' : 's'} · {r.customers} customer{r.customers === 1 ? '' : 's'} · {Math.round(r.lbs).toLocaleString()} lbs</span>
+      {' '}{d.source === 'reported' ? <span className="pill m-ok">on the menu</span> : r.ready ? <span className="pill m-ok">counts on the menu</span>
+        : <span className="pill m-mute" title="Counts once 2+ customers and 100+ lbs have reported it">not counted yet</span>}</div>
+  const m = d.menu, ms = [yieldRange(m?.sho, m?.sho_high) && `SHO ${yieldRange(m?.sho, m?.sho_high)}`, yieldRange(m?.bho, m?.bho_high) && `BHO ${yieldRange(m?.bho, m?.bho_high)}`].filter(Boolean).join(' · ')
+  return <div className="srep">
+    <div className="srep-h">Customer reports <span className="muted">· all crop years, sent reports only</span></div>
+    {line('SHO', d.sho)}{line('BHO', d.bho)}
+    <div className="muted small">Menu shows {ms || 'no yield'} · {d.source === 'reported' ? 'customer reports only (Sales › Open menu › Menu yields)'
+      : 'the higher of the numbers above vs our low and high, at each end, once a report counts'}</div>
+  </div>
+}
+
 export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: SupabaseClient | null; p: StrainProfile; flash: (t: string, bad?: boolean) => void; onSaved: () => void
   /** YLD-12: lets the strain sheet's main Save also save any changed profile fields (they used to be dropped) */
   saveRef?: { current: null | (() => Promise<boolean>) } }) {
@@ -138,6 +158,7 @@ export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: Supa
             {f.k === 'photo_url' && v.photo_url && /^(https?:|\/)/.test(v.photo_url) && <img className="sphoto" src={v.photo_url} alt={p.name} />}
           </div>
         })}
+        {g.m === 'sales' && <ReportedBox sb={sb} p={p} />}
         {can ? <div className="row"><button className="primary small" disabled={busy || !dirty} onClick={() => save(g.l, g.fields)}>Save {g.l.toLowerCase()}</button></div>
           : <p className="muted small">Only a {g.l === 'Sales and extraction' ? 'Sales' : g.l} Admin can change these.</p>}
       </Fold>
