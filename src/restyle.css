@@ -788,3 +788,30 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .resstr tfoot tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 10px 4px; } .resstr tfoot td { border: 0; padding: 0; }
   .resstr tfoot td:empty { display: none; }
 }
+
+/* RES-10: one customer's reserves as an editable table */
+.rescust { width: 100%; }
+.rescust td.c-r .qty { width: 96px; text-align: right; }
+.rescust tr.on td { background: var(--r-teal-bg); }
+.rescust tr.bad td { background: #fdecea; }
+.rescsave { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 10px 0 0; padding: 10px 14px;
+  background: var(--card, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
+.rescsave input[type=text] { flex: 1 1 260px; min-width: 0; }
+.rescfoot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 4px 0; }
+@media (max-width: 640px) {
+  .ctable.rescust { min-width: 0 !important; width: 100%; }
+  .rescust thead { display: none; }
+  .rescust tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  .rescust tbody td { border: 0; padding: 0; text-align: left; }
+  .rescust tbody td.c-n { flex: 1 0 calc(100% - 130px); min-width: 0; order: 1; font-weight: 600; }
+  .rescust tbody td.c-r { order: 2; text-align: right; }
+  .rescust tbody td.c-r::before { content: none; }
+  .rescust tbody td:not(.c-n):not(.c-r) { order: 3; font-size: 12.5px; color: var(--muted); }
+  .rescust tbody td:not(.c-n):not(.c-r)::before { content: attr(data-l); }
+  .rescust tbody td.c-lf b { color: var(--ink); }
+  .rescust tbody td.c-pc { display: none; }
+  .rescust tfoot tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 10px 4px; } .rescust tfoot td { border: 0; padding: 0; }
+  .rescust tfoot td:empty { display: none; }
+  .rescsave { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .rescsave input[type=text] { flex-basis: 100%; order: 3; }
+}

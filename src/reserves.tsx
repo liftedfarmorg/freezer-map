@@ -203,18 +203,9 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                   <div className="muted">{c.rs.length} strain{c.rs.length === 1 ? '' : 's'} · {n0(sum(c.rs, 'shipped'))} shipped{sum(c.rs, 'pending') > 0 ? ` · ${n0(sum(c.rs, 'pending'))} pending` : ''}</div></div>
                 <div className="num"><b>{n0(sum(c.rs, 'remaining'))}</b><div className="muted">of {n0(sum(c.rs, 'reserved'))} left ▴</div></div>
               </button>
-              <table className="restable">
-                <thead><tr><th>Strain</th><th className="num">Reserved</th><th className="num">Shipped</th><th className="num">Pending</th><th className="num">Left</th></tr></thead>
-                <tbody>
-                  {c.rs.map(r => (
-                    <tr key={r.id} className={isAdmin ? 'tap' : ''} onClick={() => isAdmin && setEdit({ customer_id: c.id, strain: r.strain, lbs: String(r.reserved), isNew: false })}>
-                      <td><StrainLink name={r.strain} /></td><td className="num">{n0(Number(r.reserved))}</td><td className="num">{n0(Number(r.shipped))}{Number(r.rejected ?? 0) > 0 && <div className="small warn-t" title="Rejected at delivery and back on this reserve. Lower the reserve if they shouldn't get these lbs back.">{n0(Number(r.rejected))} rejected, back on reserve</div>}</td>
-                      <td className="num">{n0(Number(r.pending))}</td><td className="num"><b>{n0(Number(r.remaining))}</b></td>
-                    </tr>
-                  ))}
-                </tbody>
-                {isAdmin && <tfoot><tr><td colSpan={5}><span className="muted">Tap a strain to change it. </span><button className="ghost small" onClick={() => setEdit({ customer_id: c.id, strain: '', lbs: '', isNew: true })}>+ Add strain for {c.name}</button></td></tr></tfoot>}
-              </table>
+              {/* RES-10: a sortable table; Sales Admins change reserves right in it */}
+              <CustReserves key={`${c.id}-${rYear}`} backend={backend} cid={c.id} name={c.name} rs={c.rs} nums={nums} year={rYear} cur={cur} isAdmin={isAdmin} flash={flash}
+                onSaved={async () => { await load(); setOpen(c.id) }} onAdd={() => setAdding({ preset: c.id })} />
             </div>
             <SampleHolds backend={backend} customerId={c.id} staff flash={flash} rev={holdRev} onChanged={load} />
             <h3>Account</h3>
@@ -597,4 +588,72 @@ export function FillOk({ f, backend, flash, onDone }: { f: FOrder; backend: Back
         <span className="muted">Or ask Distribution to change the pallets.</span></div>
     </div>
   )
+}
+
+/** RES-10: one customer's reserves as a sortable table. Sales Admins type a new total in Reserved and save them all at once.
+ *  Same limits as Add reserves: not under shipped + open SOs, up by at most what's open on the menu. */
+function CustReserves({ backend, cid, name, rs, nums, year, cur, isAdmin, flash, onSaved, onAdd }: {
+  backend: Backend; cid: number; name: string; rs: Balance[]; nums: MenuNumbers[]; year: number; cur: number; isAdmin: boolean
+  flash: (t: string, bad?: boolean) => void; onSaved: () => Promise<void>; onAdd: () => void
+}) {
+  type K = 'name' | 'res' | 'ship' | 'so' | 'left' | 'open' | 'pct'
+  const [srt, setSrt] = useState<{ k: K; up: boolean }>({ k: 'name', up: true })
+  const [ed, setEd] = useState<Record<string, string>>({})
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const openOf = (s: string) => { const m = nums.find(x => x.crop_year === year && x.on_menu && x.strain.toLowerCase() === s.toLowerCase()); return m ? Math.max(0, Math.floor(Number(m.free))) : 0 }
+  const rows = rs.map(r => { const res = Number(r.reserved), ship = Number(r.shipped), so = Number(r.pending)
+    return { r, key: r.strain.toLowerCase(), res, ship, so, left: Math.max(0, Number(r.remaining)), open: openOf(r.strain), pct: res > 0 ? ship / res : 0 } })
+  const minOf = (x: typeof rows[number]) => x.ship + x.so
+  const maxOf = (x: typeof rows[number]) => Math.max(x.res, x.ship + x.so) + x.open
+  const changes = rows.filter(x => ed[x.key] !== undefined && ed[x.key] !== '' && Number(ed[x.key]) !== x.res).map(x => {
+    const to = Number(ed[x.key])
+    const err = !Number.isFinite(to) || to < 0 ? 'not a number' : to < minOf(x) ? `can't go under ${n0(minOf(x))} (shipped + open SOs)`
+      : to > maxOf(x) ? `${n0(maxOf(x))} is the most (${n0(Math.max(x.res, x.ship + x.so))} theirs + ${n0(x.open)} open)` : ''
+    return { x, to, d: to - x.res, err } })
+  const bad = changes.some(c => c.err)
+  const v = (x: typeof rows[number]) => srt.k === 'name' ? x.r.strain.toLowerCase() : x[srt.k]
+  rows.sort((a, b) => { const p = v(a), q = v(b); const d = typeof p === 'string' ? p.localeCompare(q as string) : (p as number) - (q as number); return srt.up ? d : -d })
+  const tot = rows.reduce((t, x) => ({ res: t.res + x.res, ship: t.ship + x.ship, so: t.so + x.so, left: t.left + x.left }), { res: 0, ship: 0, so: 0, left: 0 })
+  const dTot = changes.reduce((a, c) => a + c.d, 0)
+  const th = (k: K, label: string, num = true, title?: string) => <th className={`${num ? 'num ' : ''}sortth${srt.k === k ? ' on' : ''}`} title={title} aria-sort={srt.k === k ? (srt.up ? 'ascending' : 'descending') : 'none'}>
+    <button className="linkbtn" onClick={() => setSrt(o => ({ k, up: o.k === k ? !o.up : k === 'name' }))}>{label}{srt.k === k ? (srt.up ? ' ▲' : ' ▼') : ''}</button></th>
+  async function save() {
+    if (!changes.length || bad) return
+    setBusy(true); let done = 0
+    try {
+      for (const c of changes) { await backend.setReserve(cid, c.x.r.strain, c.to, note.trim() || undefined, year !== cur ? year : undefined); done++ }
+      flash(`${done} reserve${done === 1 ? '' : 's'} saved for ${name}`); setEd({}); setNote(''); await onSaved()
+    } catch (e) { flash(`${done ? `${done} saved, then: ` : ''}${String((e as Error).message ?? e)}`, true); if (done) await onSaved() }
+    finally { setBusy(false) }
+  }
+  return <>
+    <div className="cwrap"><table className="ctable restbl rescust">
+      <thead><tr>{th('name', 'Strain', false)}{th('res', isAdmin ? 'Reserved (new total)' : 'Reserved')}{th('ship', 'Shipped')}{th('so', 'Open SO', true, 'On confirmed open sales orders; these lbs count against the reserve')}{th('left', 'Left')}{th('open', 'Open menu', true, 'Free on the menu: how much the reserve can go up')}{th('pct', 'Shipped %')}</tr></thead>
+      <tbody>{rows.map(x => { const c = changes.find(z => z.x.key === x.key)
+        return <tr key={x.r.id} className={c ? (c.err ? 'bad' : 'on') : ''}>
+          <td className="c-n"><StrainLink name={x.r.strain} />{c?.err && <div className="warn-t small">{c.err}</div>}
+            {Number(x.r.rejected ?? 0) > 0 && <div className="small warn-t" title="Rejected at delivery and back on this reserve. Lower the reserve if they shouldn't get these lbs back.">{n0(Number(x.r.rejected))} rejected, back on reserve</div>}</td>
+          <td className="num c-r" data-l="reserved ">{isAdmin
+            ? <input className={`qty ${c?.err ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" aria-label={`Reserve total for ${x.r.strain}`}
+                value={ed[x.key] ?? String(x.res)} onChange={e => setEd(m => ({ ...m, [x.key]: e.target.value }))} onFocus={e => e.target.select()} />
+            : n0(x.res)}{c && !c.err && <div className={`small ${c.d > 0 ? 'ok-t' : 'warn-t'}`}>{c.d > 0 ? '+' : ''}{n0(c.d)}</div>}</td>
+          <td className="num" data-l="shipped ">{n0(x.ship)}</td>
+          <td className="num" data-l="open SO ">{x.so > 0 ? n0(x.so) : <span className="muted">0</span>}</td>
+          <td className="num c-lf" data-l="left "><b>{c && !c.err ? n0(Math.max(0, c.to - x.ship - x.so)) : n0(x.left)}</b></td>
+          <td className="num muted" data-l="open ">{n0(x.open)}</td>
+          <td className="num c-pc" data-l=""><span className="respct"><i style={{ width: `${Math.min(100, Math.round(x.pct * 100))}%` }} /></span> {Math.round(x.pct * 100)}%</td>
+        </tr> })}</tbody>
+      <tfoot><tr><td><b>{rows.length} strain{rows.length === 1 ? '' : 's'}</b></td><td className="num"><b>{n0(tot.res + dTot)}</b>{dTot !== 0 && <div className="small muted">was {n0(tot.res)}</div>}</td><td className="num">{n0(tot.ship)}</td><td className="num">{n0(tot.so)}</td>
+        <td className="num"><b>{n0(tot.left + changes.filter(c => !c.err).reduce((a, c) => a + Math.max(0, c.to - c.x.ship - c.x.so) - c.x.left, 0))}</b></td><td /><td className="num">{tot.res > 0 ? Math.round(tot.ship / tot.res * 100) : 0}%</td></tr></tfoot>
+    </table></div>
+    {isAdmin && changes.length > 0 && <div className="rescsave">
+      <div className="grow"><b>{changes.length} change{changes.length === 1 ? '' : 's'}</b> <span className="muted">· {dTot > 0 ? '+' : ''}{n0(dTot)} lbs · new total {n0(tot.res + dTot)}</span></div>
+      <input type="text" placeholder="Reason (optional, they see it in Reserve History)" value={note} onChange={e => setNote(e.target.value)} aria-label="Reason" />
+      <button className="ghost" disabled={busy} onClick={() => { setEd({}); setNote('') }}>Cancel</button>
+      <button className="primary" disabled={busy || bad} onClick={save}>{busy ? 'Saving…' : bad ? 'Fix the red lines' : `Save ${changes.length}`}</button>
+    </div>}
+    {isAdmin && <div className="row rescfoot"><span className="muted small">Type the new total in Reserved (it includes what's shipped and on open SOs). 0 removes a reserve that has nothing shipped or on an order.</span>
+      <button className="ghost small" onClick={onAdd}>+ Add strains for {name}</button></div>}
+  </>
 }
