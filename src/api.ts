@@ -418,6 +418,17 @@ class SupaBackend implements Backend {
     fail(error)
     return portalUrl(`?${kind}=${data as string}`)
   }
+  /** 325: the customer's yield reports (null until 325 is run, so the portal keeps Yields hidden) */
+  async myYields() {
+    const { data, error } = await this.sb.rpc('my_yields')
+    fail(error)
+    return (data ?? []) as unknown[]
+  }
+  /** 325: save a yield report as a draft, or send it to Lifted */
+  async saveYields(orderId: number, lines: unknown[], send: boolean) {
+    const { error } = await this.sb.rpc('save_yields', { p_order_id: orderId, p_lines: lines, p_send: send })
+    fail(error)
+  }
   /** 180: the customer's reserve history: their requests (with Lifted's decision) and changes Lifted made */
   async reserveActivity() {
     const { data, error } = await this.sb.rpc('my_reserve_activity')

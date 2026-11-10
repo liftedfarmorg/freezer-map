@@ -1,4 +1,7 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadMenuInfo, loadProfiles } from './strains'
+import { isAdminOf } from './fold'
 import './reportedYields.css'
 
 // Sales > Reported Yields (MOCKUP). Every yield report customers send from the portal, in one place:
@@ -52,7 +55,34 @@ const proc = (p: RYPart) => p.bho ? 'BHO' : p.rosin ? 'Hash + rosin' : 'Hash'
 type Tab = 'strain' | 'customer' | 'issues'
 type SortK = 's' | 'cust' | 'runs' | 'lbs' | 'hash' | 'rosin' | 'roh' | 'bho'
 
-export function ReportedYields({ reports, owed, menu, flash }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void }) {
+/** the live page: loads the reports (SQL 325) and the strain menu yields, and saves "put on the menu" to the strain profile */
+export function ReportedYieldsPage({ sb, flash }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void }) {
+  const [d, setD] = useState<{ reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; ids: Record<string, number> } | null>(null)
+  const [err, setErr] = useState('')
+  async function load() {
+    if (!sb) { setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
+    const [r, o, mi, pr] = await Promise.all([sb.rpc('list_yield_reports'), sb.rpc('list_yield_owed'), loadMenuInfo(sb), loadProfiles(sb)])
+    if (r.error || o.error) { const m = (r.error ?? o.error)!.message; setErr(/list_yield/.test(m) ? 'Reported Yields needs SQL 325 run first.' : m); setD({ reports: [], owed: [], menu: {}, ids: {} }); return }
+    const menu: Record<string, RYMenu> = {}
+    for (const [k, v] of mi) menu[k] = { solventless_pct: v.solventless_pct, hydrocarbon_pct: v.hydrocarbon_pct }
+    const ids: Record<string, number> = {}
+    for (const p of pr.values()) ids[p.name.toLowerCase()] = p.id
+    setD({ reports: (r.data ?? []) as RYReport[], owed: (o.data ?? []) as RYOwed[], menu, ids })
+  }
+  useEffect(() => { load() }, [])
+  if (!d) return <p className="muted">Loading…</p>
+  const onMenu = isAdminOf('sales') ? async (strain: string, vals: Partial<RYMenu>) => {
+    const id = d.ids[strain.toLowerCase()]
+    if (!id || !sb) { flash(`${strain} isn't in Strains, so its menu yield can't be set here`, true); return false }
+    const { error } = await sb.rpc('set_strain_info', { p_strain: id, p_vals: vals })
+    if (error) { flash(error.message, true); return false }
+    return true
+  } : undefined
+  return <>{err && <p className="muted" style={{ color: 'var(--bad)' }}>{err}</p>}<ReportedYields reports={d.reports} owed={d.owed} menu={d.menu} flash={flash} onMenu={onMenu} live /></>
+}
+
+export function ReportedYields({ reports, owed, menu, flash, onMenu, live }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void
+  onMenu?: (strain: string, vals: Partial<RYMenu>) => Promise<boolean>; live?: boolean }) {
   const [tab, setTab] = useState<Tab>('strain')
   const [year, setYear] = useState<'all' | number>('all')
   const [procF, setProcF] = useState<'all' | 'sho' | 'bho'>('all')
@@ -101,10 +131,13 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
       .filter(x => !ql || x.s.toLowerCase().includes(ql) || x.rs.length)
   }, [runs, reports, owed, cust, ql])
 
-  const useOnMenu = (s: string, a: Agg, sho: boolean, bho: boolean) => {
-    const cur = menuNow[s.toLowerCase()]
-    setMenuNow({ ...menuNow, [s.toLowerCase()]: { solventless_pct: sho && a.hash != null ? Math.round(a.hash * 10) / 10 : cur?.solventless_pct ?? null, hydrocarbon_pct: bho && a.bho != null ? Math.round(a.bho * 10) / 10 : cur?.hydrocarbon_pct ?? null } })
-    flash(`${s}: menu yields updated to the customer average (mockup, nothing saved)`)
+  const useOnMenu = async (s: string, a: Agg, sho: boolean, bho: boolean) => {
+    const vals: Partial<RYMenu> = {}
+    if (sho && a.hash != null) vals.solventless_pct = Math.round(a.hash * 10) / 10
+    if (bho && a.bho != null) vals.hydrocarbon_pct = Math.round(a.bho * 10) / 10
+    if (onMenu && !(await onMenu(s, vals))) return
+    setMenuNow({ ...menuNow, [s.toLowerCase()]: { solventless_pct: menuNow[s.toLowerCase()]?.solventless_pct ?? null, hydrocarbon_pct: menuNow[s.toLowerCase()]?.hydrocarbon_pct ?? null, ...vals } })
+    flash(live ? `${s}: menu now shows the customer average` : `${s}: menu yields updated to the customer average (mockup, nothing saved)`)
   }
 
   const runTable = (rs: Run[], who: 'customer' | 'strain') => <table className="restable ry-runs"><thead><tr>
@@ -137,7 +170,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
   return <div className="ry">
     <div className="row between wrap ry-top"><div><h2>Reported Yields</h2>
       <p className="muted" style={{ margin: 0 }}>How customers' runs came out, from the yield reports they send in the portal. Yields are lbs-weighted, % of fresh frozen.</p></div>
-      <span className="pill m-warn">Mockup · sample data</span></div>
+      {!live && <span className="pill m-warn">Mockup · sample data</span>}</div>
 
     <div className="ry-kpis">
       <div><span>Reports in</span><b>{sent}</b><small>{owed.length} shipped orders not reported yet</small></div>
@@ -179,7 +212,7 @@ export function ReportedYields({ reports, owed, menu, flash }: { reports: RYRepo
             {on && <tr className="ry-detail"><td colSpan={10}>
               {runTable(x.rs, 'customer')}
               <div className="row between wrap ry-detail-f"><span className="muted">Average of {x.rs.length} run{x.rs.length > 1 ? 's' : ''} from {x.nc} customer{x.nc > 1 ? 's' : ''}. {!x.sho && x.a.hash != null ? 'Hash needs more reports before it can go on the menu. ' : ''}{!x.bho && x.a.bho != null ? 'BHO needs more reports before it can go on the menu.' : ''}</span>
-                {x.ready && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {[x.sho ? `${pct1(x.a.hash)} SHO` : '', x.bho ? `${pct1(x.a.bho)} BHO` : ''].filter(Boolean).join(' and ')} on the menu</button>}</div>
+                {x.ready && (onMenu || !live) && <button className="ghost small" onClick={e => { e.stopPropagation(); useOnMenu(x.s, x.a, x.sho, x.bho) }}>Put {[x.sho ? `${pct1(x.a.hash)} SHO` : '', x.bho ? `${pct1(x.a.bho)} BHO` : ''].filter(Boolean).join(' and ')} on the menu</button>}</div>
             </td></tr>}</Fragment> })}
           {!strains.length && <tr><td colSpan={10} className="muted">No reported runs match.</td></tr>}</tbody>
         {strains.length > 0 && <tfoot><tr><td><b>All strains</b></td><td className="num">{new Set(runs.map(x => x.r.customerId)).size}</td><td className="num">{runs.length}</td><td className="num">{lbs(tot.lbs)}</td>

@@ -61,6 +61,7 @@ import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
 import { FeedbackView } from './feedback'
+import { ReportedYieldsPage } from './reportedYields'
 import { ItemsView } from './items'
 import { StaffOpenMenu } from './openmenu'
 import { CatalogButton } from './catalog'
@@ -93,7 +94,7 @@ const ALL_SETTINGS: [Mod, string][] = [['admin', 'Admin'], ['dist', 'Distributio
 const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', cult: 'Cultivation', nurs: 'Nursery', proc: 'Processing', acct: 'Accounting', comp: 'Compliance', admin: 'Admin' }
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
-type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'feedback' | 'review' | 'activity' | 'settings' | 'customers'
+type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'feedback' | 'yields' | 'review' | 'activity' | 'settings' | 'customers'
 type AdminTab = 'dash' | 'customers' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
@@ -904,7 +905,7 @@ export default function App() {
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
   const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
-    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback')]
+    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback'), sItem('yields', 'Reported Yields')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
@@ -1190,6 +1191,7 @@ export default function App() {
           if (salesTab === 'returns') return <ReturnsView sb={backend.client()} customers={snap.customers ?? []} flash={flash}
             canEdit={lv.sales === 'user' || lv.sales === 'admin' || !!me?.access?.owner} canSend={lv.accounting === 'user' || lv.accounting === 'admin' || !!me?.access?.owner} isAdmin={salesAdmin || !!me?.access?.owner} />
           if (salesTab === 'feedback') return <FeedbackView sb={backend.client()} flash={flash} />
+          if (salesTab === 'yields') return <ReportedYieldsPage sb={backend.client()} flash={flash} />
           if (salesTab === 'shipping') return <ShippingQuote sb={backend.client()} customers={snap.customers ?? []} flash={flash} />
           if (salesTab === 'invoices') return <InvoicesView backend={backend} customers={snap.customers ?? []} flash={flash} isAdmin={salesAdmin} sender={me?.display_name} />
           if (salesTab === 'settings') return salesSettings
