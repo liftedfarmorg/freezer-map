@@ -329,6 +329,9 @@ export function palletFromTag(tag: string, prefix = 'P') {
   return n ? prefix + (prefix === 'T' ? String(n).padStart(3, '0') : String(n)) : ''
 }
 
+/** starting weight in the pallet box: Dry Biomass (combine) pallets 500 lbs, fresh frozen 650 (Msg BIO-TAG-6) */
+const palletDefaultLbs = (h: Harvest) => (h.kind === 'combine' ? 500 : 650)
+
 type LogPallet = CPallet
 
 /** fresh frozen pallets: logged as they're made (not pushed), fixed freely, then pushed to METRC as packages */
@@ -337,7 +340,8 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
   run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string
 }) {
   const last = pallets[pallets.length - 1]
-  const [lbs, setLbs] = useState<number | null>(650)
+  const defLbs = palletDefaultLbs(h)
+  const [lbs, setLbs] = useState<number | null>(defLbs)
   const [boxes, setBoxes] = useState<number | null>(last?.boxes ?? null)
   const [partial, setPartial] = useState(false)
   const [next, setNext] = useState<{ code: string; tag: string | null; available: boolean | null } | null>(null)
@@ -357,7 +361,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
     // a tag typed or cleared by hand wins; otherwise the database makes it from the pallet # (site tag rule)
     await run(() => api.addPallets(h.id, [{ lbs: lbs!, tag: shownTag.trim(), code: c || undefined, boxes, partial, pending: tag != null && !tag.trim() }]),
       `Pallet ${c} saved: ${n0(lbs!)} lbs, in Staging (not pushed yet)`)
-    setPartial(false); setLbs(650); setCode(null); setTag(null)
+    setPartial(false); setLbs(defLbs); setCode(null); setTag(null)
   }
   async function push(ids: number[] | null) {
     const list = ids ? waiting.filter(p => ids.includes(p.id)) : waiting
@@ -526,7 +530,7 @@ function Finish({ h, busy, run, api, back, ready, raw, pallets }: { h: Harvest; 
 function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: CultApi; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string; pallets: { code: string }[] }) {
   const [open, setOpen] = useState(false)
   const [n, setN] = useState<number | null>(null)
-  const [lbs, setLbs] = useState<number | null>(650)
+  const [lbs, setLbs] = useState<number | null>(palletDefaultLbs(h))
   const [rows, setRows] = useState<{ lbs: string; tag: string; code: string; auto?: boolean }[]>([])
   const [loading, setLoading] = useState(false)
   const set = (i: number, v: Partial<{ lbs: string; tag: string; code: string; auto: boolean }>) => setRows(rs => rs.map((x, j) => (j === i ? { ...x, ...v } : x)))
