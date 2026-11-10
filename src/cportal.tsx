@@ -558,10 +558,10 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
           </section>}
           {contract && <button className={c('tile')} onClick={() => go('reserves')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Contract Reserves</p><p className={c('big')}>{fmt(totals.left)} lbs left</p></div><span className={c('pillbtn')}>View / Edit</span></div>
-            <p className={c('foot')}>of {fmt(totals.res)} reserved · {fmt(totals.used)} picked up · {plural(reserves.filter(r => r.res > 0).length, 'strain')}</p></button>}
+            <p className={c('foot')}>of {fmt(totals.res)} reserved</p></button>}
           <button className={c('tile')} onClick={() => go('menu')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Open Menu</p><p className={c('big')}>{fmt(menuTotal)} lbs open</p></div><span className={c('pillbtn')}>{contract ? 'Add to Reserves' : 'View Menu'}</span></div>
-            <p className={c('foot')}>{plural(menuN, 'strain')} · updates live as orders and reserves change</p></button>
+            <p className={c('foot')}>{plural(menuN, 'strain')}</p></button>
           {d?.yields && yOrders.length > 0 && <button className={c('tile')} onClick={() => go('yields')}>
             <div className={c('row')}><div className={c('grow')}><p className={c('lbl')}>Yields</p><p className={c('big')}>{yToDo.length ? `${plural(yToDo.length, 'order')} to report` : 'All reported'}</p></div><span className={c('pillbtn')}>View / Report</span></div></button>}
           <div className={contract ? c('grid2') : ''}>
