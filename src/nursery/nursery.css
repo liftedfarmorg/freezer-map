@@ -100,3 +100,6 @@
   .pp-bar .pp-kind { flex: 1 1 100%; }
   .pp-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }
+.pp-pend { border: 1px dashed #c9862b; border-radius: 10px; padding: 8px; margin: 0 0 10px; background: color-mix(in srgb, #c9862b 8%, var(--panel)); }
+.pp-pend .row { gap: 8px; align-items: center; margin-bottom: 8px; }
+.pp-not { opacity: .75; cursor: default; }

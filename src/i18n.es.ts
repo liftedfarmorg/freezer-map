@@ -1184,7 +1184,18 @@ export const ES: Record<string, string> = {
  "No photos yet. Pick Plant, Jar or Bud, then take a photo.": "Todavía no hay fotos. Escoge Planta, Frasco o Cogollo y toma una foto.",
  "Jar": "Frasco",
  "Bud": "Cogollo",
- "Photos": "Fotos"
+ "Photos": "Fotos",
+ "{n} photo(s) didn't upload (weak signal?). They're kept on this card: tap Retry.": "{n} foto(s) no se subieron (¿poca señal?). Se guardan en esta tarjeta: toca Reintentar.",
+ "{n} photo(s) still didn't upload. Try again when you have signal.": "{n} foto(s) todavía no se subieron. Intenta de nuevo cuando tengas señal.",
+ "Not uploaded yet: {n}": "Sin subir todavía: {n}",
+ "Retry upload": "Reintentar subida",
+ "Throw away the photos that didn't upload?": "¿Descartar las fotos que no se subieron?",
+ "Not uploaded": "Sin subir",
+ "Pheno order": "Orden de feno",
+ "Best score first": "Mejor puntaje primero",
+ "Showing one person's scorecard.": "Mostrando la tarjeta de una persona.",
+ "Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average; pick a person to see their scorecard.": "Cada quien califica en su propia tarjeta: vigor, estructura, aroma, color, pegajosidad y la prueba del frasco, 1-5. La tabla muestra el promedio del grupo; escoge a una persona para ver su tarjeta.",
+ "Discard": "Descartar"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

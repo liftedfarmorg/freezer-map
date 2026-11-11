@@ -35,23 +35,57 @@ export function PhenoPhotos({ sb, phenoId, me, admin, flash, onCount }: { sb: Su
   }, [sb, phenoId])
   useEffect(() => { load() }, [load])
 
+  // PHENO-PIC-4: weak signal in the field. Each photo tries 3 times; if it still can't upload it stays on the card
+  // (not saved yet) with Retry, so the photo isn't lost while the card is open.
+  const [pending, setPending] = useState<{ id: string; file: File; kind: string; url: string; err: string }[]>([])
+  useEffect(() => () => pending.forEach(x => URL.revokeObjectURL(x.url)), [])
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+  const sendOne = async (f0: File, k: string) => {
+    const f = await shrink(f0)
+    const ext = (f.name.match(/\.(\w+)$/)?.[1] ?? 'jpg').toLowerCase()
+    const path = `pheno/${phenoId}/${uuid()}.${ext}`
+    let last = ''
+    for (let a = 0; a < 3; a++) {
+      if (a) await sleep(1500 * a)
+      const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'image/jpeg', upsert: false }).catch(e => ({ error: { message: String(e?.message ?? e) } }))
+      if (!up.error || /already exists|duplicate/i.test(up.error.message)) { last = ''; break }  // an earlier try landed
+      last = /bucket|not found/i.test(up.error.message) ? `${up.error.message} (run 337_pheno_photos.sql in Supabase)` : up.error.message
+      if (/bucket|not found|row-level|policy|denied/i.test(last)) break
+    }
+    if (last) throw new Error(last)
+    for (let a = 0; a < 3; a++) {
+      if (a) await sleep(1500 * a)
+      const ins = await sb.from('pheno_photos').insert({ pheno_id: phenoId, file_path: path, kind: k })
+      if (!ins.error || /duplicate|unique/i.test(ins.error.message)) return
+      last = ins.error.message
+      if (/row-level|policy|denied/i.test(last)) break
+    }
+    await sb.storage.from(BUCKET).remove([path])
+    throw new Error(last)
+  }
   const add = async (fl: FileList | null) => {
     const files = [...(fl ?? [])].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name))
     if (!files.length) return
-    try {
-      for (const [i, f0] of files.entries()) {
-        setBusy(files.length > 1 ? `${i + 1} / ${files.length}…` : '…')
-        const f = await shrink(f0)
-        const ext = (f.name.match(/\.(\w+)$/)?.[1] ?? 'jpg').toLowerCase()
-        const path = `pheno/${phenoId}/${uuid()}.${ext}`
-        const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'image/jpeg', upsert: false })
-        if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? `${up.error.message} (run 337_pheno_photos.sql in Supabase)` : up.error.message)
-        const ins = await sb.from('pheno_photos').insert({ pheno_id: phenoId, file_path: path, kind })
-        if (ins.error) { await sb.storage.from(BUCKET).remove([path]); throw new Error(ins.error.message) }
-      }
-      flash(files.length > 1 ? t('{n} photos added', { n: files.length }) : t('Photo added'))
-      await load()
-    } catch (e) { flash(e instanceof Error ? e.message : String(e), true) } finally { setBusy(null) }
+    let ok = 0; const bad: typeof pending = []
+    for (const [i, f] of files.entries()) {
+      setBusy(files.length > 1 ? `${i + 1} / ${files.length}…` : '…')
+      try { await sendOne(f, kind); ok++ } catch (e) { bad.push({ id: uuid(), file: f, kind, url: URL.createObjectURL(f), err: e instanceof Error ? e.message : String(e) }) }
+    }
+    setBusy(null)
+    if (bad.length) { setPending(p => [...p, ...bad]); flash(t('{n} photo(s) didn\'t upload (weak signal?). They\'re kept on this card: tap Retry.', { n: bad.length }), true) }
+    else flash(ok > 1 ? t('{n} photos added', { n: ok }) : t('Photo added'))
+    if (ok) await load()
+  }
+  const retry = async () => {
+    const list = pending; let ok = 0; const still: typeof pending = []
+    for (const [i, x] of list.entries()) {
+      setBusy(list.length > 1 ? `${i + 1} / ${list.length}…` : '…')
+      try { await sendOne(x.file, x.kind); ok++; URL.revokeObjectURL(x.url) } catch (e) { still.push({ ...x, err: e instanceof Error ? e.message : String(e) }) }
+    }
+    setBusy(null); setPending(still)
+    if (still.length) flash(t('{n} photo(s) still didn\'t upload. Try again when you have signal.', { n: still.length }), true)
+    else flash(ok > 1 ? t('{n} photos added', { n: ok }) : t('Photo added'))
+    if (ok) await load()
   }
 
   const del = async (p: PhenoPhoto) => {
@@ -81,6 +115,12 @@ export function PhenoPhotos({ sb, phenoId, me, admin, flash, onCount }: { sb: Su
           <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={e => { add(e.target.files); e.target.value = '' }} />
           <input ref={roll} type="file" accept="image/*" multiple hidden onChange={e => { add(e.target.files); e.target.value = '' }} />
         </div>
+        {pending.length > 0 && <div className="pp-pend">
+          <div className="row wrap"><span className="small"><b>{t('Not uploaded yet: {n}', { n: pending.length })}</b> <span className="muted">{pending[0].err}</span></span>
+            <button className="primary" disabled={!!busy} onClick={retry}>{t('Retry upload')}</button>
+            <button className="ghost" disabled={!!busy} onClick={() => { if (confirm(t('Throw away the photos that didn\'t upload?'))) { pending.forEach(x => URL.revokeObjectURL(x.url)); setPending([]) } }}>{t('Discard')}</button></div>
+          <div className="pp-grid">{pending.map(x => <div key={x.id} className="pp-th pp-not"><img src={x.url} alt="" /><span className="pp-tag">{t('Not uploaded')}</span></div>)}</div>
+        </div>}
         {list == null ? <p className="muted small">{t('Loading…')}</p>
           : list.length === 0 ? <p className="muted small">{t('No photos yet. Pick Plant, Jar or Bud, then take a photo.')}</p>
             : <div className="pp-grid">{list.map(p => <button key={p.id} type="button" className="pp-th" onClick={() => setBig(p)} title={`${who(p.taken_by)} · ${fmtD(p.created_at.slice(0, 10))}`}>

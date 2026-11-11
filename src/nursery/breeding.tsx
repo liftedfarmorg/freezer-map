@@ -445,6 +445,9 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   const [q, setQ] = useState('')
   const [shown, setShown] = useState(SHOW)
   const [who_, setWho] = useState<string | null>(null)
+  // PHENO-PIC-4: pheno order while scoring (default), or best score first; remembered on this device
+  const [rank, setRankS] = useState<'pheno' | 'score'>(() => { try { return localStorage.getItem('nur.phenoSort') === 'score' ? 'score' : 'pheno' } catch { return 'pheno' } })
+  const setRank = (v: 'pheno' | 'score') => { setRankS(v); try { localStorage.setItem('nur.phenoSort', v) } catch { /* private */ } }
   const [tying, setTying] = useState(false)
   const [addN, setAddN] = useState<number | null>(null)
   const [addLot, setAddLot] = useState<number | null>(h.seed_lot_id)
@@ -473,8 +476,9 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       const tr = Object.fromEntries(TRAITS.map(([k]) => [k, avg(sc.map(z => z[k]))])) as Record<Trait, number | null>
       return { p, sc, t: tr, total: avg(TRAITS.map(([k]) => tr[k])), mine: sc.some(z => z.scorer === me) }
     })
-    .sort((a, z) => (z.total ?? -1) - (a.total ?? -1) || (c.room(a.p.room_id)).localeCompare(c.room(z.p.room_id), undefined, { numeric: true }) || (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true })),
-  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_])
+    .sort((a, z) => (rank === 'pheno' ? (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true }) || a.p.number - z.p.number : 0)
+      || (z.total ?? -1) - (a.total ?? -1) || (c.room(a.p.room_id)).localeCompare(c.room(z.p.room_id), undefined, { numeric: true }) || (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true })),
+  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_, rank])
   useEffect(() => setShown(SHOW), [f, lotF, roomF, ql])
   const add = async () => {
     const l = b.seeds.find(z => z.id === addLot)
@@ -506,6 +510,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       {crosses.length > 1 && <Pick value={lotF} blank={t('All crosses')} options={crosses.map(x => ({ v: x.lot.id, l: cross(x.lot) }))} onChange={setLotF} />}
       {rooms.length > 1 && <Pick value={roomF} blank={t('All hoops')} options={rooms.map(r => ({ v: r, l: c.room(r) }))} onChange={setRoomF} />}
       <input className="search" type="search" placeholder={t('Search pheno or tag')} value={q} onChange={e => setQ(e.target.value)} />
+      <Pick value={rank} options={[{ v: 'pheno', l: t('Pheno order') }, { v: 'score', l: t('Best score first') }]} onChange={v => setRank(v ?? 'pheno')} />
       <Pick value={who_} blank={t('Group average')} options={scorers.map(z => ({ v: z, l: z === me ? t('My scorecard') : who(z) }))} onChange={setWho} />
     </div>
     {(untagged > 0 || unconf > 0) && <p className="muted small-note">{t('{a} growing phenos without a METRC tag · {b} tags not confirmed yet', { a: n0(untagged), b: n0(unconf) })}
@@ -516,7 +521,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       <NumIn value={addN} onChange={setAddN} placeholder={t('How many')} />
       <button className="ghost small" disabled={!addN || (!h.seed_lot_id && !addLot)} onClick={add}>{t('Number them')}</button></span>
       <p className="muted small">{t('They get the next numbers for that cross (#1, #2… in order).')}</p></details>
-    <p className="muted small-note">{t(who_ ? 'Showing one person\'s scorecard, best first.' : 'Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average, best first; pick a person to see their scorecard.')}</p>
+    <p className="muted small-note">{t(who_ ? 'Showing one person\'s scorecard.' : 'Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average; pick a person to see their scorecard.')}</p>
     {!rows.length ? <p className="muted">{t('No phenos match.')}</p> : <div className="cwrap"><table className="ctable">
       <thead><tr><th>{t('Pheno')}</th><th>{t('Where')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l)}</th>)}<th className="num">{t('Avg')}</th><th className="num">{t('Scores')}</th><th className="num">{t('Cuts')}</th><th>{t('Status')}</th></tr></thead>
       <tbody>{rows.slice(0, shown).map(r => <tr key={r.p.id} className={`tap ${isOut(r.p) ? 'done' : ''}`} onClick={() => setOpen(r.p)}>
