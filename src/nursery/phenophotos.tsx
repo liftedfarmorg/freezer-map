@@ -9,7 +9,7 @@ import { t } from '../i18n'
 // Pick what it's a photo of first (Plant / Jar / Bud). Everyone with Nursery access sees them; you can delete your own.
 export interface PhenoPhoto { id: number; pheno_id: number; file_path: string; kind: string; caption: string | null; taken_by: string; created_at: string }
 const BUCKET = 'nursery'
-const KINDS: [string, string][] = [['plant', 'Plant'], ['jar', 'Jar'], ['bud', 'Bud'], ['other', 'Other']]
+const KINDS: [string, string][] = [['plant', 'Plant'], ['jar', 'Jar'], ['bud', 'Bud'], ['rosin', 'Rosin'], ['other', 'Other']]
 const uuid = () => (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 const who = (e: string) => e.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
@@ -109,7 +109,7 @@ export function PhenoPhotos({ sb, phenoId, me, admin, flash, onCount }: { sb: Su
       <h3>{t('Photos')}{list && list.length > 0 ? <span className="muted small"> {list.length}</span> : ''}</h3>
       {err ? <div className="warnbox">{err}</div> : <>
         <div className="pp-bar">
-          <div className="seg pp-kind">{KINDS.slice(0, 3).map(([k, l]) => <button key={k} type="button" className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{t(l)}</button>)}</div>
+          <div className="seg pp-kind">{KINDS.slice(0, 4).map(([k, l]) => <button key={k} type="button" className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{t(l)}</button>)}</div>
           <button className="primary" disabled={!!busy} onClick={() => cam.current?.click()}>📷 {busy ? t('Uploading photos {s}', { s: busy }) : t('Take photo')}</button>
           <button className="ghost" disabled={!!busy} onClick={() => roll.current?.click()}>{t('Upload photos')}</button>
           <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={e => { add(e.target.files); e.target.value = '' }} />
@@ -122,7 +122,7 @@ export function PhenoPhotos({ sb, phenoId, me, admin, flash, onCount }: { sb: Su
           <div className="pp-grid">{pending.map(x => <div key={x.id} className="pp-th pp-not"><img src={x.url} alt="" /><span className="pp-tag">{t('Not uploaded')}</span></div>)}</div>
         </div>}
         {list == null ? <p className="muted small">{t('Loading…')}</p>
-          : list.length === 0 ? <p className="muted small">{t('No photos yet. Pick Plant, Jar or Bud, then take a photo.')}</p>
+          : list.length === 0 ? <p className="muted small">{t('No photos yet. Pick Plant, Jar, Bud or Rosin, then take a photo.')}</p>
             : <div className="pp-grid">{list.map(p => <button key={p.id} type="button" className="pp-th" onClick={() => setBig(p)} title={`${who(p.taken_by)} · ${fmtD(p.created_at.slice(0, 10))}`}>
               {urls[p.file_path] ? <img src={urls[p.file_path]} alt="" loading="lazy" /> : <span className="muted small">…</span>}
               <span className="pp-tag">{t(KINDS.find(k => k[0] === p.kind)?.[1] ?? 'Other')}</span>

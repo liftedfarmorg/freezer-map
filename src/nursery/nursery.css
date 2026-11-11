@@ -103,3 +103,15 @@
 .pp-pend { border: 1px dashed #c9862b; border-radius: 10px; padding: 8px; margin: 0 0 10px; background: color-mix(in srgb, #c9862b 8%, var(--panel)); }
 .pp-pend .row { gap: 8px; align-items: center; margin-bottom: 8px; }
 .pp-not { opacity: .75; cursor: default; }
+/* PHENO-PIC-5: keeper cards */
+.kcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 6px 0 14px; }
+.kcard { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+.kc-pics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--line); min-height: 90px; }
+.kc-pics img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.kc-nopic { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; min-height: 90px; background: var(--panel); }
+.kc-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.kc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.kc-avg { font-size: 22px; font-weight: 700; color: var(--brand); }
+.kc-traits { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+.kc-note { border-left: 3px solid var(--line); padding-left: 6px; }
+@media (max-width: 560px) { .kcards { grid-template-columns: 1fr; } }

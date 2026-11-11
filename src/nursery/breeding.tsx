@@ -43,7 +43,7 @@ interface Pheno {
 interface Obs { id: number; pheno_id: number; stage: string; observed_on: string; traits: Record<string, string | number | null>; notes: string | null; observer: string | null }
 interface DonorBatch { id: number; project: string; label: string; strains: string | null; plants: number | null; cut_on: string | null; room_id: number | null; to_room_on: string | null; move_in_on: string | null; notes: string | null }
 interface Score { id: number; pheno_id: number; scorer: string; scored_on: string; vigor: number | null; structure: number | null; aroma: number | null; color: number | null; tackiness: number | null; jar: number | null; notes: string | null }
-interface BData { runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg>; photos: Map<number, number> }
+interface BData { runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg>; photos: Map<number, number>; pics: Map<number, { path: string; kind: string }[]> }
 
 const TRAITS = [['vigor', 'Vigor'], ['structure', 'Structure'], ['aroma', 'Aroma'], ['color', 'Color'], ['tackiness', 'Tackiness'], ['jar', 'Jar test']] as const
 type Trait = typeof TRAITS[number][0]
@@ -88,9 +88,11 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
     const pk = want.length ? await sb.from('metrc_packages').select('label,item,qty,uom').in('label', want) : { data: [] }
     const pkgs = new Map(((pk.data ?? []) as SeedPkg[]).map(z => [z.label, z]))
     // 337: photo count per pheno (before 337 runs there's no table: no counts)
-    const ph = await pageAll((a, z) => sb.from('pheno_photos').select('pheno_id').order('id').range(a, z))
-    const photos = new Map<number, number>(); for (const r of ((ph.error ? [] : ph.data ?? []) as { pheno_id: number }[])) photos.set(r.pheno_id, (photos.get(r.pheno_id) ?? 0) + 1)
-    setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos }); setErr(null)
+    const ph = await pageAll((a, z) => sb.from('pheno_photos').select('pheno_id,file_path,kind').order('id', { ascending: false }).range(a, z))
+    const photos = new Map<number, number>(); const pics = new Map<number, { path: string; kind: string }[]>()
+    for (const r of ((ph.error ? [] : ph.data ?? []) as { pheno_id: number; file_path: string; kind: string }[])) {
+      photos.set(r.pheno_id, (photos.get(r.pheno_id) ?? 0) + 1); const l = pics.get(r.pheno_id) ?? []; l.push({ path: r.file_path, kind: r.kind }); pics.set(r.pheno_id, l) }
+    setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos, pics }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
   const [openPheno, setOpenPheno] = useState<number | null>(() => lastPheno()?.pheno ?? null)
@@ -439,7 +441,9 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   useEffect(() => { rememberPheno(h.id, open?.id ?? null) }, [h.id, open?.id])
   // after a save the card stays open: point it at the reloaded pheno
   useEffect(() => { setOpen(o => (o ? b.phenos.find(z => z.id === o.id) ?? o : o)) }, [b.phenos])
-  const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled'>('growing')
+  const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled' | 'suggested'>('growing')
+  // PHENO-PIC-5: Suggested keepers = scored, still in the hunt, group average at or above this, best first
+  const [minAvg, setMinAvg] = useState<number>(4)
   const [lotF, setLotF] = useState<number | null>(null)
   const [roomF, setRoomF] = useState<number | null>(null)
   const [q, setQ] = useState('')
@@ -468,7 +472,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   }, [ps, lotOf, scoresBy])
   const rooms = useMemo(() => [...new Set(ps.map(p => p.room_id).filter((x): x is number => x != null))].sort((a, z) => (d.rooms.find(r => r.id === a)?.sort ?? 0) - (d.rooms.find(r => r.id === z)?.sort ?? 0)), [ps, d.rooms])
   const ql = q.trim().toLowerCase()
-  const rows = useMemo(() => ps.filter(p => (f === 'all' || p.status === f || (f === 'culled' && p.status === 'male')) && (lotF == null || lotOf(p)?.id === lotF) && (roomF == null || p.room_id === roomF)
+  const rows = useMemo(() => ps.filter(p => (f === 'all' || f === 'suggested' ? (f === 'all' || (!isOut(p) && p.status !== 'keeper')) : p.status === f || (f === 'culled' && p.status === 'male')) && (lotF == null || lotOf(p)?.id === lotF) && (roomF == null || p.room_id === roomF)
       && (!ql || (p.label ?? '').toLowerCase().includes(ql) || (p.plant_tag ?? '').toLowerCase().includes(ql) || (p.lot_tag ?? '').toLowerCase().endsWith(ql)))
     .map(p => {
       const all = scoresBy.get(p.id) ?? []
@@ -476,10 +480,27 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       const tr = Object.fromEntries(TRAITS.map(([k]) => [k, avg(sc.map(z => z[k]))])) as Record<Trait, number | null>
       return { p, sc, t: tr, total: avg(TRAITS.map(([k]) => tr[k])), mine: sc.some(z => z.scorer === me) }
     })
+    .filter(r => f !== 'suggested' || (r.total != null && r.total >= minAvg))
     .sort((a, z) => (rank === 'pheno' ? (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true }) || a.p.number - z.p.number : 0)
       || (z.total ?? -1) - (a.total ?? -1) || (c.room(a.p.room_id)).localeCompare(c.room(z.p.room_id), undefined, { numeric: true }) || (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true })),
-  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_, rank])
-  useEffect(() => setShown(SHOW), [f, lotF, roomF, ql])
+  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_, rank, minAvg])
+  useEffect(() => setShown(SHOW), [f, lotF, roomF, ql, minAvg])
+  // PHENO-PIC-5: Excel of these phenos: everyone's scores, notes and photo count
+  const exportXlsx = async (list: Pheno[]) => {
+    const { default: writeXlsxFile } = await import('write-excel-file/browser')
+    const head = ['Pheno', 'Cross', 'Where', 'Plant tag', ...TRAITS.map(([, l]) => l), 'Avg', 'Scores', 'Who scored', 'Score notes', 'Grower notes', 'Photos', 'Status', 'Keeper name']
+    const body = list.map(p => {
+      const sc = scoresBy.get(p.id) ?? []; const tr = TRAITS.map(([k]) => avg(sc.map(z => z[k]))); const tot = avg(tr)
+      const lot = lotOf(p)
+      return [p.label ?? `#${p.number}`, lot ? cross(lot) : '', `${c.room(p.room_id)}${p.bed ? ' ' + p.bed : ''}`, p.plant_tag ?? '', ...tr.map(v => (v == null ? '' : Math.round(v * 10) / 10)),
+        tot == null ? '' : Math.round(tot * 10) / 10, sc.length, sc.map(z => who(z.scorer)).join(', '), sc.filter(z => z.notes).map(z => `${who(z.scorer)}: ${z.notes}`).join(' | '),
+        b.obs.filter(z => z.pheno_id === p.id && z.notes).map(z => `${who(z.observer ?? '')} (${z.stage}): ${z.notes}`).join(' | '), b.photos.get(p.id) ?? 0, PSTATUS[p.status] ?? p.status, p.keeper_strain ?? '']
+    })
+    await writeXlsxFile([head.map(v => ({ value: v, fontWeight: 'bold' as const, backgroundColor: '#E6F3EE' })),
+      ...body.map(l => l.map(v => ({ value: v === '' ? null : v, type: typeof v === 'number' ? Number : String })))] as never,
+      { stickyRowsCount: 1, columns: head.map(x => ({ width: /notes/i.test(x) ? 50 : /cross|pheno|tag/i.test(x) ? 30 : 12 })) } as never)
+      .toFile(`${h.name} ${f === 'suggested' ? 'suggested keepers' : 'keepers'} ${today()}.xlsx`)
+  }
   const add = async () => {
     const l = b.seeds.find(z => z.id === addLot)
     const { error } = await sb.rpc('pheno_hunt_number', { p_hunt: h.id, p_count: addN, p_prefix: l ? (l.code || cross(l)) : (s?.code ?? ''), p_seed_lot: addLot, p_room: addRoom })
@@ -506,11 +527,12 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
         <td className="small">{[...x.rooms].map(r => c.room(r)).join(', ')}</td><td className="num">{x.n}</td><td className="num">{x.alive}</td><td className="num">{x.culled || ''}</td><td className="num">{x.cut || ''}</td><td className="num">{x.scored || ''}</td><td className="num">{x.keepers || ''}</td></tr>)}</tbody>
     </table></div></details>}
     <div className="row wrap toolbar">
-      <div className="seg">{(['growing', 'maybe', 'keeper', 'culled', 'all'] as const).map(k => <button key={k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>{k === 'all' ? `${t('All')} (${nAll})` : t(PSTATUS[k])}</button>)}</div>
+      <div className="seg">{(['growing', 'maybe', 'suggested', 'keeper', 'culled', 'all'] as const).map(k => <button key={k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>{k === 'all' ? `${t('All')} (${nAll})` : k === 'suggested' ? t('Suggested keepers') : t(PSTATUS[k])}</button>)}</div>
+      {f === 'suggested' && <Pick value={minAvg} options={[3, 3.5, 4, 4.5].map(v => ({ v, l: t('Avg {n}+', { n: v.toFixed(1) }) }))} onChange={v => setMinAvg(v ?? 4)} />}
       {crosses.length > 1 && <Pick value={lotF} blank={t('All crosses')} options={crosses.map(x => ({ v: x.lot.id, l: cross(x.lot) }))} onChange={setLotF} />}
       {rooms.length > 1 && <Pick value={roomF} blank={t('All hoops')} options={rooms.map(r => ({ v: r, l: c.room(r) }))} onChange={setRoomF} />}
       <input className="search" type="search" placeholder={t('Search pheno or tag')} value={q} onChange={e => setQ(e.target.value)} />
-      <Pick value={rank} options={[{ v: 'pheno', l: t('Pheno order') }, { v: 'score', l: t('Best score first') }]} onChange={v => setRank(v ?? 'pheno')} />
+      <div className="seg">{([['pheno', 'By number'], ['score', 'Best score']] as const).map(([k, l]) => <button key={k} className={rank === k ? 'on' : ''} onClick={() => setRank(k)}>{t(l)}</button>)}</div>
       <Pick value={who_} blank={t('Group average')} options={scorers.map(z => ({ v: z, l: z === me ? t('My scorecard') : who(z) }))} onChange={setWho} />
     </div>
     {(untagged > 0 || unconf > 0) && <p className="muted small-note">{t('{a} growing phenos without a METRC tag · {b} tags not confirmed yet', { a: n0(untagged), b: n0(unconf) })}
@@ -522,7 +544,10 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       <button className="ghost small" disabled={!addN || (!h.seed_lot_id && !addLot)} onClick={add}>{t('Number them')}</button></span>
       <p className="muted small">{t('They get the next numbers for that cross (#1, #2… in order).')}</p></details>
     <p className="muted small-note">{t(who_ ? 'Showing one person\'s scorecard.' : 'Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average; pick a person to see their scorecard.')}</p>
-    {!rows.length ? <p className="muted">{t('No phenos match.')}</p> : <div className="cwrap"><table className="ctable">
+    {(f === 'suggested' || f === 'keeper') && <p className="muted small-note">{f === 'suggested' ? t('Scored phenos still in the hunt with a group average of {n} or better. Tap one to see everyone\'s scores, notes and photos.', { n: minAvg.toFixed(1) }) : t('Phenos picked as keepers.')}
+      {rows.length > 0 && <> <button className="ghost small" onClick={() => exportXlsx(rows.map(r => r.p))}>{t('Download Excel')}</button></>}</p>}
+    {(f === 'suggested' || f === 'keeper') && rows.length > 0 ? <KeeperCards sb={sb} rows={rows.slice(0, shown)} b={b} c={c} lotOf={lotOf} onOpen={setOpen} />
+      : !rows.length ? <p className="muted">{t(f === 'suggested' ? 'No scored phenos at that average yet.' : 'No phenos match.')}</p> : <div className="cwrap"><table className="ctable">
       <thead><tr><th>{t('Pheno')}</th><th>{t('Where')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l)}</th>)}<th className="num">{t('Avg')}</th><th className="num">{t('Scores')}</th><th className="num">{t('Cuts')}</th><th>{t('Status')}</th></tr></thead>
       <tbody>{rows.slice(0, shown).map(r => <tr key={r.p.id} className={`tap ${isOut(r.p) ? 'done' : ''}`} onClick={() => setOpen(r.p)}>
         <td><b>{r.p.label ?? `#${r.p.number}`}</b>{r.p.keeper_strain && r.p.keeper_strain !== r.p.label ? <span className="muted"> → {r.p.keeper_strain}</span> : ''}{obsBy.get(r.p.id) ? <span className="muted small"> · {t('notes')}</span> : ''}{b.photos.get(r.p.id) ? <span className="muted small" title={t('Photos')}> · 📷{b.photos.get(r.p.id)}</span> : ''}</td>
@@ -616,9 +641,9 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
       <div className="row wrap docact">
         <button className="ghost" disabled={busy} onClick={() => savePheno(x, 'Saved')}>{t('Save plant details')}</button>
         {p.plant_tag && !p.tag_confirmed && x.plant_tag === p.plant_tag && <button className="ghost" disabled={busy} onClick={() => run(() => sb.from('phenos').update({ tag_confirmed: true }).eq('id', p.id), 'Tag confirmed')}>{t('Tag is right on the plant')}</button>}
-        {!out && <button className="primary" disabled={busy} onClick={keeper}>{t(x.status === 'keeper' ? 'Rename keeper…' : 'Keeper…')}</button>}
+        {!out && admin && <button className="primary" disabled={busy} onClick={keeper}>{t(x.status === 'keeper' ? 'Rename keeper…' : 'Keeper…')}</button>}
         {!out && x.status !== 'maybe' && <button className="ghost" disabled={busy} onClick={() => savePheno({ status: 'maybe' }, 'Marked maybe')}>{t('Maybe')}</button>}
-        {x.status !== 'growing' && <button className="ghost" disabled={busy} onClick={() => savePheno({ status: 'growing', cull_reason: null }, 'Back to growing')}>{t('Back to growing')}</button>}
+        {x.status !== 'growing' && (x.status !== 'keeper' || admin) && <button className="ghost" disabled={busy} onClick={() => savePheno({ status: 'growing', cull_reason: null }, 'Back to growing')}>{t('Back to growing')}</button>}
       </div>
       {!out && <div className="row wrap docact">
         <Pick value={reason} blank={t('Cull reason…')} options={CULL_REASONS.map(r => ({ v: r, l: t(r) }))} onChange={setReason} />
@@ -626,4 +651,30 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
       </div>}
     </Sheet>
   )
+}
+
+/** PHENO-PIC-5: suggested keepers / keepers side by side: photos, group scores, everyone's notes */
+function KeeperCards({ sb, rows, b, c, lotOf, onOpen }: { sb: SupabaseClient; rows: { p: Pheno; sc: Score[]; t: Record<Trait, number | null>; total: number | null }[]; b: BData; c: NCtx
+  lotOf: (p: Pheno) => SeedLot | undefined; onOpen: (p: Pheno) => void }) {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const want = useMemo(() => rows.flatMap(r => (b.pics.get(r.p.id) ?? []).slice(0, 3).map(x => x.path)), [rows, b.pics])
+  useEffect(() => {
+    const need = want.filter(x => !urls[x]); if (!need.length) return
+    sb.storage.from('nursery').createSignedUrls(need, 3600).then(r => setUrls(u => ({ ...u, ...Object.fromEntries((r.data ?? []).filter(x => x.path && x.signedUrl).map(x => [x.path as string, x.signedUrl])) })))
+  }, [want.join('|')])
+  return <div className="kcards">{rows.map(r => {
+    const pics = (b.pics.get(r.p.id) ?? []).slice(0, 3); const lot = lotOf(r.p)
+    const notes = r.sc.filter(z => z.notes)
+    return <div key={r.p.id} className="kcard tap" onClick={() => onOpen(r.p)}>
+      <div className="kc-pics">{pics.length ? pics.map(x => urls[x.path] ? <img key={x.path} src={urls[x.path]} alt="" loading="lazy" /> : <span key={x.path} className="kc-nopic">…</span>)
+        : <span className="kc-nopic muted small">{t('No photos')}</span>}</div>
+      <div className="kc-body">
+        <div className="kc-top"><b>{r.p.label ?? `#${r.p.number}`}</b><span className="kc-avg">{f1(r.total)}</span></div>
+        <div className="muted small">{lot ? cross(lot) + ' · ' : ''}{c.room(r.p.room_id)}{r.p.keeper_strain ? ` · ${r.p.keeper_strain}` : ''}</div>
+        <div className="kc-traits">{TRAITS.map(([k, l]) => <span key={k}><span className="muted">{t(l).slice(0, 5)}</span> {f1(r.t[k]) || '–'}</span>)}</div>
+        <div className="muted small">{tn(r.sc.length, '{n} score', '{n} scores')}{r.sc.length ? `: ${r.sc.map(z => who(z.scorer)).join(', ')}` : ''}{b.photos.get(r.p.id) ? ` · 📷${b.photos.get(r.p.id)}` : ''}</div>
+        {notes.slice(0, 3).map(z => <div key={z.id} className="small kc-note"><b>{who(z.scorer)}:</b> {z.notes}</div>)}
+      </div>
+    </div>
+  })}</div>
 }

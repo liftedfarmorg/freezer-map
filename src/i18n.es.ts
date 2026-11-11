@@ -1195,7 +1195,18 @@ export const ES: Record<string, string> = {
  "Best score first": "Mejor puntaje primero",
  "Showing one person's scorecard.": "Mostrando la tarjeta de una persona.",
  "Everyone scores on their own card: vigor, structure, aroma, color, tackiness and the jar test, 1-5. The table shows the group average; pick a person to see their scorecard.": "Cada quien califica en su propia tarjeta: vigor, estructura, aroma, color, pegajosidad y la prueba del frasco, 1-5. La tabla muestra el promedio del grupo; escoge a una persona para ver su tarjeta.",
- "Discard": "Descartar"
+ "Discard": "Descartar",
+ "Rosin": "Rosin",
+ "No photos yet. Pick Plant, Jar, Bud or Rosin, then take a photo.": "Todavía no hay fotos. Escoge Planta, Frasco, Cogollo o Rosin y toma una foto.",
+ "Suggested keepers": "Keepers sugeridos",
+ "Avg {n}+": "Prom. {n}+",
+ "By number": "Por número",
+ "Best score": "Mejor puntaje",
+ "Scored phenos still in the hunt with a group average of {n} or better. Tap one to see everyone's scores, notes and photos.": "Fenos calificados que siguen en la búsqueda con promedio de {n} o más. Toca uno para ver las calificaciones, notas y fotos de todos.",
+ "Phenos picked as keepers.": "Fenos escogidos como keepers.",
+ "No scored phenos at that average yet.": "Todavía no hay fenos calificados con ese promedio.",
+ "No photos": "Sin fotos",
+ "Download Excel": "Descargar Excel"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
