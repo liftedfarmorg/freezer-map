@@ -26,7 +26,7 @@ export interface NPlanting { id: number; site: string; batch_id: number; use: NU
 /** a nursery package as METRC has it (last pull) */
 export interface MPkg { label: string; item: string; qty: number | null; uom: string | null; state: string }
 export interface NRun { id: number; name: string; room_id: number | null; status: string; season: number; donor_strain: string | null }
-export interface NDonorBatch { id: number; project: string; label: string; room_id: number | null }
+export interface NDonorBatch { id: number; project: string; label: string; strains: string | null; room_id: number | null }
 export interface StrainPlan { strain: string; cuts_g3: number | null; cuts_g2: number | null; cuts_g1: number | null; notes: string | null }
 export interface LabTest {
   id: number; site: string; strain: string; mother_id: number | null; room_id: number | null; test: string; round: number; plants: number | null; tested: number | null

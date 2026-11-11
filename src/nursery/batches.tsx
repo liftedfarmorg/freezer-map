@@ -203,7 +203,7 @@ function PlantSheet({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx
       <div className="grid3">
         <F label={t('Plant as')}><Pick value={use} blank={u0 === 'g4' ? t('Pick: G4 isn\'t planted here') : undefined} options={USES.filter(x => x !== 'g4').map(x => ({ v: x, l: t(USE_LABEL[x]) }))} onChange={v => { setUse(v as NUse | null); setRoom(null); setBed(null) }} /></F>
         {use === 'receivers' && <F label={t('Pollination run')}><Pick value={ref} blank="—" options={openRuns(d).map(x => ({ v: x.id, l: `${x.name}${x.room_id ? ` · ${d.rooms.find(q => q.id === x.room_id)?.name ?? ''}` : ''}` }))} onChange={setRef} /></F>}
-        {use === 'donors' && <F label={t('Donor batch')}><Pick value={ref} blank="—" options={d.donorBatches.map(x => ({ v: x.id, l: `${x.project} · ${x.label}` }))} onChange={setRef} /></F>}
+        {use === 'donors' && <F label={t('Donor batch')}><Pick value={ref} blank="—" options={d.donorBatches.filter(x => !x.strains || strainKey(x.strains) === strainKey(b.strain)).map(x => ({ v: x.id, l: `${x.strains ?? ''} · ${x.label} · ${x.project}` }))} onChange={setRef} /></F>}
         {use === 'receivers' ? <div className="field"><label>{t('Where')}</label><div className="calcline">{run ? (r?.name ?? <span className="warn-t">{t('Set the trailer on the run first')}</span>) : <span className="muted">{t('the run\'s trailer')}</span>}</div></div>
           : <F label={t('Where')}><Pick value={where} blank="—" options={locs.map(x => ({ v: x.id, l: `${x.name}${x.place !== 'Webb' ? ` (${x.place})` : ''}` }))} onChange={v => { setRoom(v); setBed(null) }} /></F>}
         {r?.kind === 'hoop' && <F label={t('Bed')}><Pick value={bed} blank="—" options={(r.beds.length ? r.beds.map(x => x.bed) : ['A', 'B', 'C']).map(x => ({ v: x, l: x }))} onChange={setBed} /></F>}
@@ -240,7 +240,7 @@ function SplitSheet({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx
         <F label={t('Plants')}><NumIn value={qty} onChange={setQty} autoFocus /></F>
         <F label={t('For')}><Pick value={use} blank="—" options={USES.map(x => ({ v: x, l: t(USE_LABEL[x]) }))} onChange={v => { setUse(v as NUse | null); setRef(null) }} /></F>
         {use === 'receivers' && <F label={t('Pollination run')}><Pick value={ref} blank="—" options={openRuns(d).map(x => ({ v: x.id, l: x.name }))} onChange={setRef} /></F>}
-        {use === 'donors' && <F label={t('Donor batch')} hint={t('(optional)')}><Pick value={ref} blank="—" options={d.donorBatches.map(x => ({ v: x.id, l: `${x.project} · ${x.label}` }))} onChange={setRef} /></F>}
+        {use === 'donors' && <F label={t('Donor batch')} hint={t('(optional)')}><Pick value={ref} blank="—" options={d.donorBatches.filter(x => !x.strains || strainKey(x.strains) === strainKey(b.strain)).map(x => ({ v: x.id, l: `${x.strains ?? ''} · ${x.label} · ${x.project}` }))} onChange={setRef} /></F>}
         <F label={t('Split on')}><DateIn value={on} onChange={setOn} /></F>
       </div>
       <F label={t('New package tag (the one in your hand)')}><div className="row"><TagInput value={tag} onChange={setTag} where={{ site: b.site, type: 'package' }} disabled={busy} />

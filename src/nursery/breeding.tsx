@@ -127,8 +127,8 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
             <td className="nowrap">{fmtD(r.harvested_on)}</td><td className="num">{sl.length ? n0(sum(sl.map(s => s.seeds ?? 0))) : ''}</td><td><span className="pill">{cap(r.status)}</span></td></tr> })}</tbody>
       </table></div>
         {dbs.length > 0 && <div className="cwrap tight"><table className="ctable">
-          <thead><tr><th>{t('Donor batch')}</th><th>{t('Donors')}</th><th className="num">{t('Plants')}</th><th>{t('Cut')}</th><th>{t('Flower in')}</th><th>{t('Transplant')}</th><th>{t('Into receiver trailers')}</th></tr></thead>
-          <tbody>{[...dbs].sort((x, y) => x.label.localeCompare(y.label)).map(x => <tr key={x.id} className="tap" onClick={() => setDonor(x)}><td><b>{x.label}</b></td><td>{x.strains}</td><td className="num">{n0(x.plants)}</td>
+          <thead><tr><th>{t('Donor')}</th><th>{t('Batch')}</th><th className="num">{t('Plants')}</th><th>{t('Cut')}</th><th>{t('Flower in')}</th><th>{t('Transplant')}</th><th>{t('Into receiver trailers')}</th></tr></thead>
+          <tbody>{[...dbs].sort((x, y) => (x.strains ?? '').localeCompare(y.strains ?? '') || x.label.localeCompare(y.label)).map(x => <tr key={x.id} className="tap" onClick={() => setDonor(x)}><td><b>{x.strains}</b></td><td>{x.label}</td><td className="num">{n0(x.plants)}</td>
             <td className="nowrap">{fmtD(x.cut_on)}</td><td>{c.room(x.room_id)}</td><td className="nowrap">{fmtD(x.to_room_on)}</td><td className="nowrap">{fmtD(x.move_in_on)}</td></tr>)}</tbody>
         </table></div>}
         </Fragment> })}

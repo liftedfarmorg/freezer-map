@@ -28,7 +28,7 @@ export class NurseryApi {
       opt(() => all<LabTest>((a, b) => this.sb.from('nursery_tests').select('*').order('tested_on', { ascending: false }).range(a, b))),
       opt(() => all<NPlanting>((a, b) => this.sb.from('nursery_plantings').select('*').order('id').range(a, b))),   // 337
       opt(() => all<NRun>((a, b) => this.sb.from('breed_runs').select('id,name,room_id,status,season,donor_strain').order('id').range(a, b))),
-      opt(() => all<NDonorBatch>((a, b) => this.sb.from('breed_donor_batches').select('id,project,label,room_id').order('id').range(a, b))),
+      opt(() => all<NDonorBatch>((a, b) => this.sb.from('breed_donor_batches').select('id,project,label,strains,room_id').order('id').range(a, b))),
     ])
     const [sites, rooms, mothers, batches, orders, deliveries, licenses, ranges, strains, st] = await Promise.all([
       all<NSite>((a, b) => this.sb.from('nursery_sites').select('*').order('sort').range(a, b)),
