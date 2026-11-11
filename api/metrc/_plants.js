@@ -304,6 +304,16 @@ export async function sendFlower(job, ctx) {
 }
 
 // ---------- the harvest chain ----------
+
+/** NAPA-8 (11/11): a started harvest always finishes. A METRC server error / timeout never fails the to-do: it waits for the
+ *  next run (which reads METRC's count first, so no plant twice). After 5 in a row it pauses 15 minutes between tries. */
+async function hiccup(job, prog, e, what) {
+  prog.unconfirmed = (prog.unconfirmed ?? 0) + 1
+  if (prog.unconfirmed >= 5) prog.retry_after = Date.now() + 15 * 60000
+  await saveProgress(job, prog)
+  throw new Wait(`${what} (METRC: "${String(e?.message ?? e).slice(0, 80)}", ${prog.unconfirmed} in a row); ${prog.retry_after ? `next try ${hhmm(prog.retry_after)}` : 'tries again on the next run'}`)
+}
+const hhmm = t => new Date(Number(t)).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' })
 export async function sendHarvestPlants(job, ctx) {
   const d = job.details || {}
   const lic = job.license
@@ -313,6 +323,9 @@ export async function sendHarvestPlants(job, ctx) {
   const plants = Number(d.plants || 0), wet = r4(job.lbs ?? d.wet_lbs ?? 0)
   const prog = progressOf(job); prog.done ??= 0; prog.wet ??= 0
   if (prog.done >= plants && plants > 0) throw new Skip(`All ${plants} plants harvested into ${name}`)
+  // NAPA-8: METRC kept erroring; don't ask again until the pause is over (no METRC calls while paused)
+  if (ctx.live && prog.retry_after && Date.now() < Number(prog.retry_after))
+    throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC kept answering with errors (${prog.unconfirmed} in a row); next try ${hhmm(prog.retry_after)}`)
   if (plants <= 0) {
     if (wet > 0) throw new Error(`METRC adds wet weight only by harvesting plants. This step has ${wet} lb and no plants: harvest more plants into ${name} by hand, or add the plants in the app.`)
     throw new Skip('Nothing to harvest')
@@ -354,11 +367,9 @@ export async function sendHarvestPlants(job, ctx) {
     try {
       got = await t3('GET', '/v2/harvests/create/source-plants', { query: { licenseNumber: lic, pageSize: n, filter: [`locationName__eq:${where}`, `strainName__eq:${strain.name}`], filterLogic: 'and', sort: 'label:asc' } })
     } catch (e) {
-      // NAPA-6: a read that times out changed nothing in METRC; try again on the next run (5 in a row and it fails)
-      if (!ctx.live || !serverSide(e) || (prog.unconfirmed ?? 0) >= 4) throw e
-      prog.unconfirmed = (prog.unconfirmed ?? 0) + 1
-      await saveProgress(job, prog)
-      throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC didn't answer the plant list ("${String(e?.message ?? e).slice(0, 80)}"); tries again on the next run (${prog.unconfirmed} of 5)`)
+      // NAPA-6/8: a read that times out changed nothing in METRC; try again on the next run (never fails, see hiccup)
+      if (!ctx.live || !serverSide(e)) throw e
+      return hiccup(job, prog, e, `${prog.done} of ${plants} plants harvested into ${name}. METRC didn't answer the plant list`)
     }
     const src = list(got)
       .filter(p => Number(p.harvestCount ?? 0) === 0 && lc(p.locationName) === lc(where))
@@ -387,7 +398,7 @@ export async function sendHarvestPlants(job, ctx) {
       // Re-read METRC's own count: if the plants went in, carry on at full speed.
       // NAPA-6 (11/11): METRC can take a while to show them, so look up to 3 times (about 3 s, 10 s, 30 s). If it still
       // doesn't show them and the error was a server error / timeout, wait for the next run (which reads METRC's count
-      // first, so nothing is harvested twice) instead of failing; 5 of those in a row and it fails for real.
+      // first, so nothing is harvested twice) instead of failing. NAPA-8: never fails on these; 5 in a row = 15 min pause between tries.
       if (!ctx.live) throw e
       let ex = null, real = -1
       for (const ms of [3000, 7000, 20000]) {
@@ -397,19 +408,17 @@ export async function sendHarvestPlants(job, ctx) {
         if (real > prog.done) break
       }
       if (!(real > prog.done)) {
-        if (!serverSide(e) || (prog.unconfirmed ?? 0) >= 4) throw e
-        prog.unconfirmed = (prog.unconfirmed ?? 0) + 1
-        await saveProgress(job, prog)
-        throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC answered "${String(e?.message ?? e).slice(0, 80)}" and its count hasn't moved yet; tries again on the next run (${prog.unconfirmed} of 5)`)
+        if (!serverSide(e)) throw e
+        return hiccup(job, prog, e, `${prog.done} of ${plants} plants harvested into ${name}. METRC's count hasn't moved yet`)
       }
       prog.done = Math.min(real, plants); prog.wet = r4(Number(ex.totalWetWeight ?? 0) - prog.baseWet)
-      prog.recovered = (prog.recovered ?? 0) + 1; prog.unconfirmed = 0
+      prog.recovered = (prog.recovered ?? 0) + 1; prog.unconfirmed = 0; delete prog.retry_after
       await saveProgress(job, prog)
       lastBody = body; lastResp = { note: `METRC answered "${String(e?.message ?? e).slice(0, 80)}" but the plants went in (count ${real})` }
       continue
     }
     if (!ctx.live) return { state: 'checked', request: body, response: lastResp, info: `Dry run OK: first ${body.length} of ${plants} plants into ${name} (${per} lb each) from ${loc.location}` }
-    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0)); prog.unconfirmed = 0
+    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0)); prog.unconfirmed = 0; delete prog.retry_after
     await saveProgress(job, prog)
   }
   if (prog.done < plants) throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}; the rest go on the next run`)
