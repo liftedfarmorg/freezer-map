@@ -311,23 +311,21 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
             const bad = all.filter(c => c.err)
             const net = all.reduce((a, c) => a + c.d, 0)
             const nStr = new Set(all.map(c => c.x.s)).size
-            // Spread a strain's shortfall over its customers by what they have left (whole 10 lb boxes)
+            // Spread a strain's shortfall over its customers by what they have left. Aziz (RES-15): each new reserve is
+            // rounded DOWN to the nearest 10 lbs, so reserves stay whole boxes and the strain lands at 0 free or a bit over.
+            // Never under shipped + open SOs.
             const spread = (x: typeof rows[number]) => {
               const need = -x.free, rs = x.rs.filter(r => Number(r.remaining) > 0), totRem = rs.reduce((a, r) => a + Number(r.remaining), 0)
               if (need <= 0 || !totRem) return
-              const cut = new Map(rs.map(r => [r.id, Math.min(Number(r.remaining), Math.floor(Number(r.remaining) / totRem * need / 10) * 10)]))
-              let got = [...cut.values()].reduce((a, b) => a + b, 0)
-              const big = [...rs].sort((a, b) => Number(b.remaining) - Number(a.remaining))
-              while (got < need) {   // top up 10 lbs at a time, biggest left first, until the strain is back to 0 or better
-                let moved = false
-                for (const r of big) {
-                  if (got >= need) break
-                  const c = cut.get(r.id)!, add = Math.min(10, Number(r.remaining) - c)
-                  if (add > 0) { cut.set(r.id, c + add); got += add; moved = true }
+              setSEd(m => {
+                const y = { ...m }; for (const r of x.rs) delete y[r.id]
+                for (const r of rs) {
+                  const res = Number(r.reserved), share = Number(r.remaining) / totRem * need
+                  const to = Math.max(sh(r), Math.floor((res - share) / 10) * 10)
+                  if (to < res) y[r.id] = to - res
                 }
-                if (!moved) break
-              }
-              setSEd(m => { const y = { ...m }; for (const r of x.rs) delete y[r.id]; for (const [id, c] of cut) if (c) y[id] = -c; return y })
+                return y
+              })
             }
             return <>
               {isAdmin && <div className="row toolbar" style={{ alignItems: 'center', gap: 10 }}>
@@ -349,7 +347,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 sOpen === x.s && x.rs.length > 0 ? <tr key={`${x.s}-c`} className="resx"><td colSpan={6}>
                   {isAdmin && x.free < 0 && <div className="resxr" style={{ alignItems: 'center' }}>
                     <span className={`small ${x.nFree < 0 ? 'warn-t' : 'ok-t'}`} style={{ flex: '1 1 200px' }}>{x.nFree < 0 ? `${n0(-x.nFree)} lbs more promised than on hand.` : `Back to ${n0(x.nFree)} free once saved.`}</span>
-                    <button className="ghost small" onClick={() => spread(x)} title="Fills in cuts by how much each customer has left, in 10 lb boxes. Nothing saves until you press Save.">Spread the shortfall</button>
+                    <button className="ghost small" onClick={() => spread(x)} title="Cuts each customer by their share of what they have left; new reserves are rounded down to the nearest 10 lbs. Nothing saves until you press Save.">Spread the shortfall</button>
                     {x.nCh > 0 && <button className="ghost small" onClick={() => setSEd(m => { const y = { ...m }; for (const r of x.rs) delete y[r.id]; return y })}>Clear</button>}
                   </div>}
                   {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => { const d = sEd[r.id] ?? 0, to = Number(r.reserved) + d
