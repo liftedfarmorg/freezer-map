@@ -535,6 +535,10 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
   .app.shell:has(.scrim > .sheet.side) main { padding-right: calc(var(--sidew) + 12px); }
   .app.shell:has(.scrim > .sheet.side) table.slimmable > :is(thead, tbody, tfoot) > tr > :is(th, td):not(.slim) { display: none; }
   .app.shell:has(.scrim > .sheet.side) table.slimmable { min-width: 0; width: 100%; }
+  /* Msg NUR-SIDE-2: with the big side card open, a wide table on the left (nursery batches etc.) keeps all its columns and gets its own scroll box
+     the height of the screen, so the left-right scroll bar is always in view instead of hiding under the last row. Header row stays pinned. */
+  .app.shell:has(.scrim > .sheet.side) .cwrap { max-height: calc(100dvh - 110px); overflow: auto; overscroll-behavior: contain; scrollbar-width: auto; }
+  .app.shell:has(.scrim > .sheet.side) .cwrap .ctable th { z-index: 2; }
 }
 
 /* Msg 300: quiet scrollbar in the dark sidebar (thin, only a faint thumb, no arrows or white track) */
