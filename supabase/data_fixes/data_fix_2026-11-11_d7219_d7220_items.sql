@@ -26,12 +26,14 @@ begin
   if bf is null or tr is null then raise exception 'Could not find or make the Royals Cherry items'; end if;
 
   update proc_runs set crop_year = 2026, updated_at = now() where id = r.id;
-  update pallets set crop_year = 2026, updated_at = now() where run_id = r.id and code in ('D7219', 'D7220');
-  -- after the crop year, so the item guess doesn't override it
-  update pallets set item_id = bf where run_id = r.id and code = 'D7219' and product = 'bucked';
+  -- crop year + item in one go, with the item-guess trigger paused: the outputs sit at GVR, so the guess would make
+  -- (and set) a stray FL26GV item card
+  alter table pallets disable trigger pallet_set_item_lot;
+  update pallets set crop_year = 2026, item_id = bf, updated_at = now() where run_id = r.id and code = 'D7219' and product = 'bucked';
   get diagnostics n = row_count; if n <> 1 then raise exception 'D7219 not bucked'; end if;
-  update pallets set item_id = tr where run_id = r.id and code = 'D7220' and product = 'trim';
+  update pallets set crop_year = 2026, item_id = tr, updated_at = now() where run_id = r.id and code = 'D7220' and product = 'trim';
   get diagnostics n = row_count; if n <> 1 then raise exception 'D7220 not trim'; end if;
+  alter table pallets enable trigger pallet_set_item_lot;
 
   insert into events (user_email, type, pallet_id, lbs, note, details)
   select 'aziz@lifted-organics.com', 'item_fix', p.id, p.current_weight, 'Item set (run had no crop year)',
