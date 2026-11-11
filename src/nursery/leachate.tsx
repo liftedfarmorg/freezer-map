@@ -107,7 +107,7 @@ function LeachSheet({ sb, d, x0, can, flash, onClose, onSaved }: { sb: SupabaseC
     setBusy(false)
     if (error) flash(error.message, true); else await onSaved(t('Reading deleted'))
   }
-  return <Sheet title={x.id ? `${room?.name ?? t('Leachate')} · ${fmtD(x.taken_on)}` : t('New leachate reading')} onClose={onClose} wide>
+  return <Sheet side title={x.id ? `${room?.name ?? t('Leachate')} · ${fmtD(x.taken_on)}` : t('New leachate reading')} onClose={onClose} wide>
     <div className="grid3">
       <F label={t('Date')}><DateIn value={x.taken_on} onChange={v => set({ taken_on: v ?? today() })} /></F>
       <F label={t('Location')}><Pick value={x.room_id} blank="—" options={d.rooms.filter(r => r.active || r.id === x.room_id).map(r => ({ v: r.id, l: `${r.name}${r.place !== 'Webb' && !r.name.startsWith(r.place) ? ` (${r.place})` : ''}` }))} onChange={v => set({ room_id: v })} /></F>

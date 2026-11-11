@@ -38,7 +38,7 @@ function TestSheet({ d, c, t: t0, api, flash, onClose, onSaved }: { d: NData; c:
     try { await f(); onClose(); await onSaved(ok) } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
   return (
-    <Sheet title={t0.id ? `${t0.strain} · ${t0.test} ${t('round')} ${t0.round}` : t('New lab test')} onClose={onClose}>
+    <Sheet side title={t0.id ? `${t0.strain} · ${t0.test} ${t('round')} ${t0.round}` : t('New lab test')} onClose={onClose}>
       <F label={t('Strain')}><TextIn value={x.strain} list="n-strains" onChange={v => set({ strain: v ?? '' })} autoFocus={!t0.id} /></F>
       <StrainList id="n-strains" names={[...new Set(d.mothers.map(m => m.strain))]} />
       <div className="grid3">

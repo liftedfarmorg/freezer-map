@@ -91,7 +91,7 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
   }), isNew ? t('{n} {strain} {gen} cuttings added', { n: n0(x.cuttings), strain: x.strain, gen: GEN_LABEL[gen] }) : t('Saved'))
 
   if (mode === 'ready' && b0.id) return (
-    <Sheet title={`${b0.strain}: ${t('ready')}`} sub={`${b0.name ?? ''} · ${t('{n} cut {date}', { n: n0(b0.cuttings), date: fmtD(b0.cut_on) })}`} onClose={() => setMode('edit')}>
+    <Sheet side title={`${b0.strain}: ${t('ready')}`} sub={`${b0.name ?? ''} · ${t('{n} cut {date}', { n: n0(b0.cuttings), date: fmtD(b0.cut_on) })}`} onClose={() => setMode('edit')}>
       <F label={t('Good plants (rooted, ready to go)')}><NumIn value={good} onChange={setGood} autoFocus /></F>
       <p className="muted small-note">{t('The rest ({n}) count as lost.', { n: n0(Math.max(0, b0.cuttings! - delivered - (good ?? 0))) })}{r != null ? ' ' + t('The sorts say {n} rooted.', { n: n0(r) }) : ''}</p>
       <SaveBar busy={busy} disabled={good == null || good < 0 || good > b0.cuttings! - delivered} saveLabel={t('Mark ready')} onCancel={() => setMode('edit')}
@@ -99,7 +99,7 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
     </Sheet>
   )
   if (mode === 'loss' && b0.id) return (
-    <Sheet title={`${b0.strain}: ${t('losses')}`} sub={t('{n} left in {batch}', { n: n0(c.left(b0 as Batch)), batch: b0.name ?? t('this batch') })} onClose={() => setMode('edit')}>
+    <Sheet side title={`${b0.strain}: ${t('losses')}`} sub={t('{n} left in {batch}', { n: n0(c.left(b0 as Batch)), batch: b0.name ?? t('this batch') })} onClose={() => setMode('edit')}>
       <F label={t('Plants lost (died, culled)')}><NumIn value={loss} onChange={setLoss} autoFocus /></F>
       <SaveBar busy={busy} disabled={!loss || loss < 0 || loss > c.left(b0 as Batch)} saveLabel={t('Record loss')} onCancel={() => setMode('edit')}
         onSave={() => run(() => api.save<Batch>('nursery_batches', { id: b0.id, lost: (b0.lost ?? 0) + loss!, ...(loss === c.left(b0 as Batch) ? { stage: delivered ? 'done' : 'cancelled' } : {}) }), t('{n} lost', { n: n0(loss) }))} />
@@ -116,7 +116,7 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
     </div>
   }
   return (
-    <Sheet title={isNew ? t('Cuttings taken') : t('{strain} · {gen} batch', { strain: b0.strain, gen: GEN_LABEL[b0.gen ?? 4] })} sub={isNew ? t('One batch per strain per cut day') : `${b0.name ?? ''} · ${t('{n} left', { n: n0(c.left(b0 as Batch)) })} · ${t(STAGE_LABEL[b0.stage ?? 'rooting'])}`} onClose={onClose} wide>
+    <Sheet side title={isNew ? t('Cuttings taken') : t('{strain} · {gen} batch', { strain: b0.strain, gen: GEN_LABEL[b0.gen ?? 4] })} sub={isNew ? t('One batch per strain per cut day') : `${b0.name ?? ''} · ${t('{n} left', { n: n0(c.left(b0 as Batch)) })} · ${t(STAGE_LABEL[b0.stage ?? 'rooting'])}`} onClose={onClose} wide>
       {!isNew && (b0.stage === 'rooting' || b0.stage === 'ready') && <div className="row wrap docact">
         {b0.stage === 'rooting' && <button className="primary" disabled={busy} onClick={() => { setGood(r ?? c.left(b0 as Batch)); setMode('ready') }}>{t('Mark ready…')}</button>}
         {(b0.gen ?? 4) < 4 && <button className="primary" disabled={busy} onClick={() => setMode('plant')}>{t('Plant as {gen} moms…', { gen: GEN_LABEL[b0.gen!] })}</button>}
@@ -182,7 +182,7 @@ function PlantMoms({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx;
     catch (e) { flash(String((e as Error).message ?? e).replace(/duplicate key.*plant_tag.*/, t('That tag is already on another mother lot')), true) } finally { setBusy(false) }
   }
   return (
-    <Sheet title={t('Plant {strain} as {gen} moms', { strain: b.strain, gen: GEN_LABEL[b.gen] })} sub={t('{n} plants left in {batch}. Plant them in one lot, or a few (one tag each).', { n: n0(left), batch: b.name ?? t('this batch') })} onClose={onBack}>
+    <Sheet side title={t('Plant {strain} as {gen} moms', { strain: b.strain, gen: GEN_LABEL[b.gen] })} sub={t('{n} plants left in {batch}. Plant them in one lot, or a few (one tag each).', { n: n0(left), batch: b.name ?? t('this batch') })} onClose={onBack}>
       <div className="grid3">
         <F label={t('Where')}><Pick value={room} options={locs.map(x => ({ v: x.id, l: `${x.name}${x.place !== 'Webb' ? ` (${x.place})` : ''}` }))} onChange={v => { setRoom(v); setBed(null) }} /></F>
         {r?.kind === 'hoop' && <F label={t('Bed')}><Pick value={bed} blank="—" options={(r.beds.length ? r.beds.map(x => x.bed) : ['A', 'B', 'C']).map(x => ({ v: x, l: x }))} onChange={setBed} /></F>}

@@ -105,7 +105,7 @@ function StrainPlanSheet({ d, r, api, flash, onClose, onSaved }: { d: NData; r: 
   }
   const line = (g: GenRow, n: string) => <><span>{n}</span><b>{t('need {n}', { n: n0(g.need) })} · {t('have {n}', { n: n0(g.have) })}{g.rooting ? ` + ${n0(g.rooting)} ${t('rooting')}` : ''} · {t('cut {n} ({trays} trays) by {date}', { n: n0(g.cut), trays: g.trays, date: fmtD(g.cutBy, true) || '—' })}</b></>
   return (
-    <Sheet title={r.strain} sub={`${t('{n} plants ordered', { n: n0(r.orders) })} · ${tn(r.nOrders, '{n} order', '{n} orders')} · ${t('first delivery')} ${fmtD(r.firstDeliver, true) || '—'}`} onClose={onClose}>
+    <Sheet side title={r.strain} sub={`${t('{n} plants ordered', { n: n0(r.orders) })} · ${tn(r.nOrders, '{n} order', '{n} orders')} · ${t('first delivery')} ${fmtD(r.firstDeliver, true) || '—'}`} onClose={onClose}>
       <div className="calcbox">
         <span>{t('G4 production clones')}</span><b>{n0(r.g4.cuttings)} cuttings · {r.g4.trays} {r.g4.trays === 1 ? 'tray' : 'trays'} · cut by {fmtD(r.g4.cutBy, true) || '—'}</b>
         {line(r.g3, 'G3 field moms')}<span>{t('Plant G3 by')}</span><b>{fmtD(r.plantBy, true) || '—'}</b>

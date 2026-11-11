@@ -183,7 +183,7 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
     if (error) flash(error.message, true); else await onSaved(`${t('{n} seeds', { n: n0(n) })}: ${z.strain} x ${x.donor_strain}`)
   }
   return (
-    <Sheet title={x.id ? x.name ?? t('Run') : t('New pollination run')} sub={x.id ? `${x.season} · ${t('{n} receivers', { n: shown.length })} · ${t('{n} plants', { n: n0(sum(shown.map(z => z.plants))) })}` : t('One trailer: one donor, many receivers')} onClose={onClose} wide>
+    <Sheet side title={x.id ? x.name ?? t('Run') : t('New pollination run')} sub={x.id ? `${x.season} · ${t('{n} receivers', { n: shown.length })} · ${t('{n} plants', { n: n0(sum(shown.map(z => z.plants))) })}` : t('One trailer: one donor, many receivers')} onClose={onClose} wide>
       <div className="grid3">
         <F label={t('Name')}><TextIn value={x.name} onChange={v => set({ name: v ?? '' })} placeholder={t('2026 Honey Banana run')} autoFocus={!x.id} /></F>
         <F label={t('Season')}><NumIn value={x.season} onChange={v => set({ season: v ?? new Date().getFullYear() })} /></F>
@@ -281,7 +281,7 @@ function DonorSheet({ sb, d, x0, flash, onClose, onSaved }: { sb: SupabaseClient
     if (error) flash(error.message, true); else { onClose(); await onSaved('Donor batch saved') }
   }
   return (
-    <Sheet title={x.id ? `${x.label}` : t('New donor batch')} sub={x.project} onClose={onClose}>
+    <Sheet side title={x.id ? `${x.label}` : t('New donor batch')} sub={x.project} onClose={onClose}>
       <div className="grid2">
         <F label={t('Name')}><TextIn value={x.label} onChange={v => set({ label: v ?? '' })} placeholder={t('Batch D')} autoFocus={!x.id} /></F>
         <F label={t('Donors')}><TextIn value={x.strains} onChange={v => set({ strains: v })} placeholder={t('Rainbow Guava / Hashburger')} /></F>
@@ -312,7 +312,7 @@ function SeedSheet({ sb, d, s0, flash, onClose, onSaved }: { sb: SupabaseClient;
     if (error) flash(error.message, true); else { onClose(); await onSaved('Seed lot saved') }
   }
   return (
-    <Sheet title={x.id ? `${t('Seed lot')} ${x.code ?? ''}` : t('New seed lot')} sub={t(x.source === 'in-house' ? 'From a pollination run' : 'Bought or traded seeds')} onClose={onClose}>
+    <Sheet side title={x.id ? `${t('Seed lot')} ${x.code ?? ''}` : t('New seed lot')} sub={t(x.source === 'in-house' ? 'From a pollination run' : 'Bought or traded seeds')} onClose={onClose}>
       <div className="grid2">
         <F label={t('Code')}><TextIn value={x.code} onChange={v => set({ code: v })} placeholder={t('HBxP')} /></F>
         <F label={t('Source')}><Pick value={x.source} options={['in-house', 'breeder', 'trade', 'other'].map(s => ({ v: s, l: cap(s) }))} onChange={v => set({ source: v ?? 'breeder' })} /></F>
@@ -348,7 +348,7 @@ function HuntSheet({ sb, d, b, h0, flash, onClose, onSaved }: { sb: SupabaseClie
     if (r.error) flash(r.error.message, true); else { onClose(); await onSaved('Hunt saved', x.id ? undefined : r.data.id) }
   }
   return (
-    <Sheet title={x.id ? x.name ?? t('Hunt') : t('New pheno hunt')} onClose={onClose}>
+    <Sheet side title={x.id ? x.name ?? t('Hunt') : t('New pheno hunt')} onClose={onClose}>
       <div className="grid2">
         <F label={t('Name')}><TextIn value={x.name} onChange={v => set({ name: v ?? '' })} autoFocus={!x.id} placeholder={t('2026 HBxP hunt')} /></F>
         <F label={t('Season')}><NumIn value={x.season} onChange={v => set({ season: v ?? new Date().getFullYear() })} /></F>
@@ -498,7 +498,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, flash, onClose, onSaved }: { sb: 
   const setO = (k: string, v: string | number | null) => setOb(o => ({ ...o, [stage]: { ...(o[stage] ?? {}), [k]: v } }))
   const out = x.status === 'culled' || x.status === 'male'
   return (
-    <Sheet title={x.label ?? `#${x.number}`} sub={`${lot ? cross(lot) + ' · ' : ''}${c.room(x.room_id)}${x.bed ? ' ' + x.bed : ''} · ${tn(scores.length, '{n} score', '{n} scores')} · ${t(PSTATUS[x.status])}${x.cull_reason ? ` (${t(x.cull_reason)})` : ''}${x.keeper_strain ? ` · ${x.keeper_strain}` : ''}`} onClose={onClose} wide>
+    <Sheet side title={x.label ?? `#${x.number}`} sub={`${lot ? cross(lot) + ' · ' : ''}${c.room(x.room_id)}${x.bed ? ' ' + x.bed : ''} · ${tn(scores.length, '{n} score', '{n} scores')} · ${t(PSTATUS[x.status])}${x.cull_reason ? ` (${t(x.cull_reason)})` : ''}${x.keeper_strain ? ` · ${x.keeper_strain}` : ''}`} onClose={onClose} wide>
       {!out && <>
         <h3>{t('Your score')}</h3>
         <div className="scoregrid">{TRAITS.map(([k, l]) => <Fragment key={k}><span>{t(l)}</span>

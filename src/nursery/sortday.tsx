@@ -82,7 +82,7 @@ export function SortDay({ d, api, flash, onClose, onSaved }: { d: NData; api: Nu
   const roomName = (id: number | null) => id == null ? t('No location') : d.rooms.find(r => r.id === id)?.name ?? ''
 
   return (
-    <Sheet title={t('Sort day')} sub={t('Every rooting batch in one trailer. Type the counts, Enter goes down the column.')} onClose={onClose} wide>
+    <Sheet side title={t('Sort day')} sub={t('Every rooting batch in one trailer. Type the counts, Enter goes down the column.')} onClose={onClose} wide>
       <div className="sortday">
         <div className="seg">{rooms.map(r => <button key={r.id} className={room === r.id ? 'on' : ''} onClick={() => pick(r.id)}>{r.name} <span className="muted">{count(r.id)}</span></button>)}
           {unplaced > 0 && <button className={room == null ? 'on' : ''} onClick={() => pick(null)}>{t('No location')} <span className="muted">{unplaced}</span></button>}</div>

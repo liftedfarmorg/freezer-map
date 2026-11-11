@@ -69,7 +69,7 @@ export function OrderSheet({ d, c, o: o0, customers, terms, api, flash, isAdmin,
     onDone={async (m, inv) => { onClose(); await onSaved(m); if (inv) onDoc('invoice', inv) }} />
 
   return (
-    <Sheet title={isNew ? t('New clone order') : `${o0.strain} · ${t('{n} plants', { n: n0(o0.plants) })}`} sub={isNew ? t('For an outside farm, or one of ours') : `${c.to(o0 as NOrder)} · ${o0.so_number ?? t('no SO yet')} · ${t(STATUS_LABEL[o0.status ?? 'planned'])}`} onClose={onClose}>
+    <Sheet side title={isNew ? t('New clone order') : `${o0.strain} · ${t('{n} plants', { n: n0(o0.plants) })}`} sub={isNew ? t('For an outside farm, or one of ours') : `${c.to(o0 as NOrder)} · ${o0.so_number ?? t('no SO yet')} · ${t(STATUS_LABEL[o0.status ?? 'planned'])}`} onClose={onClose}>
       {!edit && o0.id && <>
         <div className="calcbox">
           <span>{t('To')}</span><b>{c.to(o0 as NOrder)}</b>
@@ -165,7 +165,7 @@ function DeliverSheet({ d, c, o, api, flash, onClose, onDone }: { d: NData; c: N
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
   return (
-    <Sheet title={t('Deliver {strain}', { strain: o.strain })} sub={`${c.to(o)} · ${t('{n} plants still owed', { n: n0(owed) })}${o.so_number ? ` · ${o.so_number}` : ''}`} onClose={onClose}>
+    <Sheet side title={t('Deliver {strain}', { strain: o.strain })} sub={`${c.to(o)} · ${t('{n} plants still owed', { n: n0(owed) })}${o.so_number ? ` · ${o.so_number}` : ''}`} onClose={onClose}>
       <div className="grid2">
         <F label={t('Delivered on')}><DateIn value={date} onChange={setDate} /></F>
         <F label={t('METRC manifest #')}><input value={manifest} onChange={e => setManifest(e.target.value)} placeholder={t('Transfer manifest')} /></F>

@@ -95,7 +95,7 @@ function RoomSheet({ d, r, api, busy, run, onClose }: { d: NData; r: Partial<NRo
   const setBed = (i: number, cap: number | null) => set({ beds: beds.map((b, j) => (j === i ? { ...b, cap: cap ?? 0 } : b)) })
   const used = r.id ? d.mothers.some(m => m.room_id === r.id) || d.batches.some(b => b.room_id === r.id) : false
   return (
-    <Sheet title={r.id ? r.name ?? t('Location') : t('New location')} onClose={onClose}>
+    <Sheet side title={r.id ? r.name ?? t('Location') : t('New location')} onClose={onClose}>
       <div className="grid2">
         <F label={t('Name')}><TextIn value={x.name} onChange={v => set({ name: v ?? '' })} autoFocus={!r.id} placeholder={t('Hoop 19')} /></F>
         <F label={t('Place')}><TextIn value={x.place} list="n-places" onChange={v => set({ place: v ?? 'Webb' })} /></F>

@@ -76,7 +76,7 @@ export function MotherSheet({ d, c, m: m0, api, flash, onClose, onSaved }: { d: 
   const fillTag = async () => { const tag = (await api.nextTags(x.site ?? site, 1))[0]; if (tag) set({ plant_tag: tag }); else flash(t('No plant tags loaded for this nursery yet.'), true) }
   const locs = d.rooms.filter(r => (r.active || r.id === x.room_id) && r.kind !== 'trailer')
   return (
-    <Sheet title={isNew ? t('New mother lot') : `${m0.strain} · ${GEN_LABEL[m0.gen ?? 2]}`} sub={isNew ? t('One METRC tag, a count of plants') : `${where(c, m0 as Mother) || t('no location')} · ${t('{n} plants', { n: n0(live(m0 as Mother)) })}`} onClose={onClose}>
+    <Sheet side title={isNew ? t('New mother lot') : `${m0.strain} · ${GEN_LABEL[m0.gen ?? 2]}`} sub={isNew ? t('One METRC tag, a count of plants') : `${where(c, m0 as Mother) || t('no location')} · ${t('{n} plants', { n: n0(live(m0 as Mother)) })}`} onClose={onClose}>
       <F label={t('Strain')}><TextIn value={x.strain} list="n-strains" onChange={v => set({ strain: v ?? '' })} autoFocus={isNew && !m0.strain} /></F>
       <StrainList id="n-strains" names={d.strains} />
       <datalist id="n-sources">{['Internal', 'TC', 'HVN', 'Seed', 'Pheno hunt'].map(v => <option key={v} value={v} />)}</datalist>
