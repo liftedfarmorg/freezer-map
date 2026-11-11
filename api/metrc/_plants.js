@@ -26,6 +26,10 @@ async function harvestByName(license, name, path = '/v2/harvests/active') {
 }
 const isCount = p => /count/i.test(p.unitOfMeasureQuantityType ?? '') || /^(ea|each)$/i.test(p.unitOfMeasureAbbreviation ?? '')
 const strainMatch = (txt, strain) => lc(txt).includes(lc(strain))
+/** a server error / timeout / dropped connection (METRC may or may not have done it), not METRC refusing the data */
+const serverSide = e => Number(e?.status) >= 500 || ['TimeoutError', 'AbortError'].includes(e?.name)
+  || ['ECONNRESET', 'UND_ERR_SOCKET', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(e?.cause?.code ?? e?.code)
+  || (e instanceof TypeError && /fetch failed/i.test(e.message))
 
 // ---------- nursery ----------
 /** a cutting event: one clone package per strain, cut from the strain's mother lot (doesn't lower the lot's count) */
@@ -346,7 +350,17 @@ export async function sendHarvestPlants(job, ctx) {
     if (await stopAsked(job)) throw new Held(`Stopped: ${prog.done} of ${plants} plants harvested into ${name}. Release to carry on.`)
     const n = Math.min(WRITE_MAX, plants - prog.done)   // METRC takes 25 entries per call
     const where = places[at]
-    const src = list(await t3('GET', '/v2/harvests/create/source-plants', { query: { licenseNumber: lic, pageSize: n, filter: [`locationName__eq:${where}`, `strainName__eq:${strain.name}`], filterLogic: 'and', sort: 'label:asc' } }))
+    let got
+    try {
+      got = await t3('GET', '/v2/harvests/create/source-plants', { query: { licenseNumber: lic, pageSize: n, filter: [`locationName__eq:${where}`, `strainName__eq:${strain.name}`], filterLogic: 'and', sort: 'label:asc' } })
+    } catch (e) {
+      // NAPA-6: a read that times out changed nothing in METRC; try again on the next run (5 in a row and it fails)
+      if (!ctx.live || !serverSide(e) || (prog.unconfirmed ?? 0) >= 4) throw e
+      prog.unconfirmed = (prog.unconfirmed ?? 0) + 1
+      await saveProgress(job, prog)
+      throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC didn't answer the plant list ("${String(e?.message ?? e).slice(0, 80)}"); tries again on the next run (${prog.unconfirmed} of 5)`)
+    }
+    const src = list(got)
       .filter(p => Number(p.harvestCount ?? 0) === 0 && lc(p.locationName) === lc(where))
     if (!src.length) {
       if (++at < places.length) continue
@@ -370,20 +384,32 @@ export async function sendHarvestPlants(job, ctx) {
       lastResp = await write(ctx, '/v2/harvests/create', lic, body); lastBody = body
     } catch (e) {
       // ITEM/NAPA-4 (11/11): on a big harvest METRC often takes the plants and then answers with a server error (timeout).
-      // Re-read METRC's own count: if the plants went in, carry on at full speed; if nothing moved, it's a real error.
+      // Re-read METRC's own count: if the plants went in, carry on at full speed.
+      // NAPA-6 (11/11): METRC can take a while to show them, so look up to 3 times (about 3 s, 10 s, 30 s). If it still
+      // doesn't show them and the error was a server error / timeout, wait for the next run (which reads METRC's count
+      // first, so nothing is harvested twice) instead of failing; 5 of those in a row and it fails for real.
       if (!ctx.live) throw e
-      await new Promise(r => setTimeout(r, 3000))
-      const ex = await harvestByName(lic, name)
-      const real = ex ? Number(ex.plantCount ?? 0) - prog.base : -1
-      if (!(real > prog.done)) throw e
+      let ex = null, real = -1
+      for (const ms of [3000, 7000, 20000]) {
+        await new Promise(r => setTimeout(r, ms))
+        ex = await harvestByName(lic, name)
+        real = ex ? Number(ex.plantCount ?? 0) - prog.base : -1
+        if (real > prog.done) break
+      }
+      if (!(real > prog.done)) {
+        if (!serverSide(e) || (prog.unconfirmed ?? 0) >= 4) throw e
+        prog.unconfirmed = (prog.unconfirmed ?? 0) + 1
+        await saveProgress(job, prog)
+        throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC answered "${String(e?.message ?? e).slice(0, 80)}" and its count hasn't moved yet; tries again on the next run (${prog.unconfirmed} of 5)`)
+      }
       prog.done = Math.min(real, plants); prog.wet = r4(Number(ex.totalWetWeight ?? 0) - prog.baseWet)
-      prog.recovered = (prog.recovered ?? 0) + 1
+      prog.recovered = (prog.recovered ?? 0) + 1; prog.unconfirmed = 0
       await saveProgress(job, prog)
       lastBody = body; lastResp = { note: `METRC answered "${String(e?.message ?? e).slice(0, 80)}" but the plants went in (count ${real})` }
       continue
     }
     if (!ctx.live) return { state: 'checked', request: body, response: lastResp, info: `Dry run OK: first ${body.length} of ${plants} plants into ${name} (${per} lb each) from ${loc.location}` }
-    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0))
+    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0)); prog.unconfirmed = 0
     await saveProgress(job, prog)
   }
   if (prog.done < plants) throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}; the rest go on the next run`)
