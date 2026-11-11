@@ -101,7 +101,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
     if (openTag.hunt != null) { setTab('hunts'); setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
     else if (openTag.run != null) { const r = b.runs.find(x => x.id === openTag.run); if (r) { setTab('runs'); setHuntView(null); setRun(r) } }
   }, [b, openTag?.n])
-  const saved = async (m: string) => { await load(); flash(t(m)) }
+  const saved = async (m: string) => { await load(); if (m) flash(t(m)) }  // '' = quiet reload (photo count changed)
   if (err) return <div className="warnbox">{err}</div>
   if (!b) return <p className="muted">{t('Loading…')}</p>
   if (huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView key={`${h.id}-${openPheno ?? ''}`} sb={sb} d={d} c={c} b={b} h={h} me={me} admin={admin} flash={flash} openPheno={openPheno} onBack={() => { setHuntView(null); setOpenPheno(null) }} onSaved={saved} onEdit={() => setHunt(h)} /> }
@@ -444,6 +444,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled' | 'suggested'>('growing')
   // PHENO-PIC-5: Suggested keepers = scored, still in the hunt, group average at or above this, best first
   const [minAvg, setMinAvg] = useState<number>(4)
+  const [withPics, setWithPics] = useState(false)
   const [lotF, setLotF] = useState<number | null>(null)
   const [roomF, setRoomF] = useState<number | null>(null)
   const [q, setQ] = useState('')
@@ -480,11 +481,11 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       const tr = Object.fromEntries(TRAITS.map(([k]) => [k, avg(sc.map(z => z[k]))])) as Record<Trait, number | null>
       return { p, sc, t: tr, total: avg(TRAITS.map(([k]) => tr[k])), mine: sc.some(z => z.scorer === me) }
     })
-    .filter(r => f !== 'suggested' || (r.total != null && r.total >= minAvg))
+    .filter(r => (f !== 'suggested' || (r.total != null && r.total >= minAvg)) && (!withPics || (b.photos.get(r.p.id) ?? 0) > 0))
     .sort((a, z) => (rank === 'pheno' ? (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true }) || a.p.number - z.p.number : 0)
       || (z.total ?? -1) - (a.total ?? -1) || (c.room(a.p.room_id)).localeCompare(c.room(z.p.room_id), undefined, { numeric: true }) || (a.p.label ?? '').localeCompare(z.p.label ?? '', undefined, { numeric: true })),
-  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_, rank, minAvg])
-  useEffect(() => setShown(SHOW), [f, lotF, roomF, ql, minAvg])
+  [ps, f, lotF, roomF, ql, lotOf, scoresBy, me, c, who_, rank, minAvg, withPics, b.photos])
+  useEffect(() => setShown(SHOW), [f, lotF, roomF, ql, minAvg, withPics])
   // PHENO-PIC-5: Excel of these phenos: everyone's scores, notes and photo count
   const exportXlsx = async (list: Pheno[]) => {
     const { default: writeXlsxFile } = await import('write-excel-file/browser')
@@ -532,6 +533,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       {crosses.length > 1 && <Pick value={lotF} blank={t('All crosses')} options={crosses.map(x => ({ v: x.lot.id, l: cross(x.lot) }))} onChange={setLotF} />}
       {rooms.length > 1 && <Pick value={roomF} blank={t('All hoops')} options={rooms.map(r => ({ v: r, l: c.room(r) }))} onChange={setRoomF} />}
       <input className="search" type="search" placeholder={t('Search pheno or tag')} value={q} onChange={e => setQ(e.target.value)} />
+      <div className="seg"><button className={withPics ? 'on' : ''} onClick={() => setWithPics(v => !v)}>📷 {t('With photos')}{withPics ? ` (${rows.length})` : ''}</button></div>
       <div className="seg">{([['pheno', 'By number'], ['score', 'Best score']] as const).map(([k, l]) => <button key={k} className={rank === k ? 'on' : ''} onClick={() => setRank(k)}>{t(l)}</button>)}</div>
       <Pick value={who_} blank={t('Group average')} options={scorers.map(z => ({ v: z, l: z === me ? t('My scorecard') : who(z) }))} onChange={setWho} />
     </div>
@@ -606,7 +608,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
         <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} /></F>
         <button className="primary" disabled={busy || !TRAITS.some(([k]) => sc[k])} onClick={saveScore}>{t(mine ? 'Update my score' : 'Save my score')}</button>
       </>}
-      <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} />
+      <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} onCount={n => { if (n !== (b.photos.get(p.id) ?? 0)) void onSaved('', true) }} />
       {scores.filter(z => z.scorer !== me).length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">
         <thead><tr><th>{t('Who')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l).slice(0, 5)}</th>)}<th>{t('Notes')}</th></tr></thead>
         <tbody>{scores.filter(z => z.scorer !== me).map(z => <tr key={z.id}><td>{who(z.scorer)}</td>{TRAITS.map(([k]) => <td key={k} className="num">{z[k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>

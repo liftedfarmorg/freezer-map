@@ -1206,7 +1206,8 @@ export const ES: Record<string, string> = {
  "Phenos picked as keepers.": "Fenos escogidos como keepers.",
  "No scored phenos at that average yet.": "Todavía no hay fenos calificados con ese promedio.",
  "No photos": "Sin fotos",
- "Download Excel": "Descargar Excel"
+ "Download Excel": "Descargar Excel",
+ "With photos": "Con fotos"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
