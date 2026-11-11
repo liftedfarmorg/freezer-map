@@ -303,7 +303,23 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
     const [a, b] = await Promise.all([sb.from('metrc_stop_checks').select('*').in('stop_id', stopIds), sb.from('metrc_app_transfers').select('*').in('stop_id', stopIds)])
     setChecks((a.data ?? []) as StopCheckRow[]); setXfers((b.data ?? []) as AppTransfer[])
   }
-  useEffect(() => { loadMetrc() }, [loadId, stopIds.join(',')])
+  useEffect(() => { loadMetrc() }, [loadId, stopIds.join(','), ctx.stops.filter(s => s.load_id === loadId).map(s => s.manifest ?? '').join(',')])
+  // ITEM/MAN-1 (11/11): every METRC manifest on a stop, each with the license that made it. A stop with product from both farms
+  // (OHR + GVR, e.g. TSL L-1111-1) has two manifests; the stop row only keeps the first one.
+  const stopManifests = (s: LoadStop, froms: string[]) => {
+    const seen = new Set<string>()
+    const list = xfers.filter(x => x.stop_id === s.id && x.manifest && x.state !== 'voided')
+      .map(x => ({ license: x.license, manifest: x.manifest!.trim() })).filter(m => !seen.has(m.manifest) && seen.add(m.manifest))
+    if (!list.length && s.manifest && /^\d{6,}$/.test(s.manifest.trim())) {
+      const lic = siteLicense(lics, froms[0] ?? '')
+      if (lic) list.push({ license: lic, manifest: s.manifest.trim() })
+    }
+    return list
+  }
+  const printManifest = (m: { license: string; manifest: string }) => {
+    const sb = ctx.api.client()
+    if (sb) openMetrcManifest(sb, m.license, m.manifest).catch(e => ctx.run(() => Promise.reject(e), ''))
+  }
   const lNow = ctx.loads.find(x => x.id === loadId)
   const sig = JSON.stringify([lNow?.status, lNow?.carrier_cost, lNow?.pickup_driver, lNow?.pickup_dl, lNow?.pickup_make, lNow?.pickup_model, lNow?.pickup_plate,
     ctx.items.filter(i => i.load_id === loadId).map(i => [i.id, i.loaded, i.stop_id]),
@@ -460,15 +476,13 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
       {left && (l.status === 'in_transit' || l.status === 'delivered') && (() => {
         const dep = l.departed_at ? new Date(l.departed_at) : new Date()
         const at = (d: Date) => d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-        const stops = ctx.stops.filter(s => s.load_id === l.id && s.manifest && /^\d{6,}$/.test(s.manifest.trim())).sort((a, b) => a.seq - b.seq)
+        const stops = ctx.stops.filter(s => s.load_id === l.id).sort((a, b) => a.seq - b.seq)
+          .flatMap(s => stopManifests(s, ctx.items.filter(i => i.stop_id === s.id).map(i => i.from_site).filter(Boolean) as string[]).map(m => ({ s, m })))
         return <div className="okbox">
           <b>{isPickup(l) ? 'Picked up' : 'Departs'} {at(dep)}.</b> {left.invoices?.length ? <>Invoices made: {left.invoices.map(i => `${i.inv} ${i.customer} ${money(i.total)}`).join(' · ')}. They go to QuickBooks at {at(new Date(dep.getTime() + 30 * 60000))} (30 minutes after departure) unless someone changes them.</> : 'No invoices (transfer only).'}
           {stops.length > 0 && <div className="row wrap" style={{ marginTop: 8, gap: 6 }}>
-            {stops.map(s => <button key={s.id} className="primary small" onClick={() => {
-              const sb = ctx.api.client(); const fr = ctx.items.filter(i => i.stop_id === s.id).map(i => i.from_site).filter(Boolean) as string[]
-              const lic = siteLicense(lics, fr[0] ?? '')
-              if (sb && lic) openMetrcManifest(sb, lic, s.manifest!.trim()).catch(e => ctx.run(() => Promise.reject(e), ''))
-            }}>Print manifest {s.manifest} · stop {s.seq} {ctx.customers.find(c => c.id === s.customer_id)?.name ?? ''}</button>)}
+            {stops.map(({ s, m }) => <button key={`${s.id}-${m.manifest}`} className="primary small" onClick={() => printManifest(m)}>
+              Print manifest {m.manifest} · stop {s.seq} {ctx.customers.find(c => c.id === s.customer_id)?.name ?? ''}{lics.find(x => x.license_no === m.license)?.site ? ` (${lics.find(x => x.license_no === m.license)!.site})` : ''}</button>)}
           </div>}
           {!stops.length && <> Print the METRC manifest from each stop below.</>}
           <div className="row end"><button className="ghost small" onClick={() => setLeft(null)}>OK</button></div></div>
@@ -599,10 +613,8 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
                       <button className="primary small" disabled={!manifestFor.value.trim()} onClick={async () => { if (await ctx.run(() => rpc(ctx.api.client(), 'set_stop_manifest', { p_stop: s.id, p_manifest: manifestFor.value }), 'Manifest # saved (and on the invoice)')) setManifestFor(null) }}>Save</button>
                       <button className="ghost small" onClick={() => setManifestFor(null)}>Cancel</button></span>
                   : <button className="ghost small" onClick={() => setManifestFor({ stop: s.id, value: '' })}>Enter manifest #</button>)}
-                {s.manifest && /^\d{6,}$/.test(s.manifest.trim()) && froms.length > 0 && <button className="ghost small" onClick={() => {
-                  const sb = ctx.api.client(); const lic = siteLicense(lics, froms[0])
-                  if (sb && lic) openMetrcManifest(sb, lic, s.manifest!.trim()).catch(e => ctx.run(() => Promise.reject(e), ''))
-                }}>{['in_transit', 'delivered'].includes(l.status) ? 'Print METRC manifest' : 'METRC manifest'}</button>}
+                {(() => { const ms = stopManifests(s, froms); return ms.map(m => <button key={m.manifest} className="ghost small" onClick={() => printManifest(m)}>
+                  {['in_transit', 'delivered'].includes(l.status) ? 'Print METRC manifest' : 'METRC manifest'}{ms.length > 1 ? ` ${m.manifest} (${lics.find(x => x.license_no === m.license)?.site ?? m.license})` : ''}</button>) })()}
               </div>
             </div>
           )

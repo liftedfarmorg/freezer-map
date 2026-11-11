@@ -250,12 +250,18 @@ export async function adjustReasons(license) {
 }
 
 /** a T3 file (PDF), as base64 */
-export async function t3file(path, query) {
+export async function t3file(path, query, tries = 2) {
   const qs = new URLSearchParams(Object.entries(query || {}).filter(([, v]) => v != null && v !== '')).toString()
   const r = await fetch(`${T3}${path}${qs ? `?${qs}` : ''}`, { headers: { 'X-T3-API-Key': process.env.T3_SECRET_KEY, Accept: 'application/pdf' } })
     .catch(async e => { await tally('t3', 'GET', false); throw e })
   await tally('t3', 'GET', r.ok)
   const buf = Buffer.from(await r.arrayBuffer())
   if (!r.ok) { let m = buf.toString('utf8').slice(0, 400); try { const j = JSON.parse(m); m = j.message || j.error?.message || m } catch { /* text */ } throw new T3Error(m || `T3 answered ${r.status}`, r.status) }
-  return { type: r.headers.get('content-type') || 'application/pdf', base64: buf.toString('base64') }
+  // MAN-1 (11/11): METRC sometimes hands back one of its web pages (session timeout / error screen) instead of the PDF, still as
+  // a success. That opened as a broken METRC page. Only a real PDF goes back; otherwise try once more, then say so.
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    if (tries > 1) { await new Promise(res => setTimeout(res, 1500)); return t3file(path, query, tries - 1) }
+    throw new T3Error('METRC sent back an error page instead of the manifest PDF. Try again in a minute; if it keeps happening, print it from METRC.', 502)
+  }
+  return { type: 'application/pdf', base64: buf.toString('base64') }
 }
