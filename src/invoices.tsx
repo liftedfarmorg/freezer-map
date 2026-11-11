@@ -1,5 +1,5 @@
 import { Select } from './combo'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Backend } from './api'
 import type { Balance, Customer, Invoice, NewOrderLine, PaymentTerm, Product, Strain } from './types'
 import { PRODUCT_LABEL, SALE_PRODUCTS } from './types'
@@ -233,6 +233,27 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   // one entry per product + strain + crop year: lbs typed, price (only kept when changed from the autofill), sample + hold
   type Pick = { product: Product; strain: string; year: number; lbs: string; price?: string; sample?: boolean; hold?: string }
   const [picks, setPicks] = useState<Record<string, Pick>>({})
+  // Msg NO-PHONE-1: Nikki's phone closed the form on Create order and nothing reached the database. What she typed is now kept on
+  // this device as she goes, so a form that closes or a page that reloads comes back with her lines when she opens New order again.
+  const KEEP = 'fm.neworder.keep'
+  const keptTerms = useRef<string | null>(null)
+  useEffect(() => {
+    try {
+      const k = JSON.parse(localStorage.getItem(KEEP) ?? 'null') as { at: number; cust: number | null; picks: Record<string, Pick>; po: string; wanted: string; notes: string; termsCode: string; shipping: string; quoted: boolean } | null
+      if (k && Date.now() - k.at < 24 * 3600_000 && (k.cust != null || Object.keys(k.picks ?? {}).length)) {
+        if (k.cust != null) keptTerms.current = k.termsCode ?? ''
+        setCust(k.cust); setPicks(k.picks ?? {}); setPo(k.po ?? ''); setWanted(k.wanted ?? ''); setNotes(k.notes ?? ''); setShipping(k.shipping ?? ''); setQuoted(!!k.quoted)
+        flash('Picked up the order you hadn\'t saved yet')
+      }
+    } catch { /* private mode: nothing kept */ }
+  }, [])
+  useEffect(() => {
+    try {
+      if (cust == null && !Object.keys(picks).length) localStorage.removeItem(KEEP)
+      else localStorage.setItem(KEEP, JSON.stringify({ at: Date.now(), cust, picks, po, wanted, notes, termsCode, shipping, quoted }))
+    } catch { /* ignore */ }
+  }, [cust, picks, po, wanted, notes, termsCode, shipping, quoted])
+  const forget = () => { try { localStorage.removeItem(KEEP) } catch { /* ignore */ } }
   const stock = useStockByYear(backend)
   const [busy, setBusy] = useState(false)
   useEffect(() => { backend.paymentTerms().then(setTerms).catch(() => {}) }, [])
@@ -241,7 +262,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   useEffect(() => { backend.client()?.from('market_prices').select('crop_year,price_per_lb').eq('finish', 'FF')
     .then(r => setMarket(new Map(((r.data ?? []) as { crop_year: number; price_per_lb: number }[]).map(x => [Number(x.crop_year), Number(x.price_per_lb)]))), () => {}) }, [])
   const c = customers.find(x => x.id === cust)
-  useEffect(() => { setTermsCode(c?.payment_terms ?? '') }, [cust])
+  useEffect(() => { if (keptTerms.current != null && cust != null) { setTermsCode(keptTerms.current); keptTerms.current = null } else setTermsCode(c?.payment_terms ?? '') }, [cust])
   // what the load would charge them on a single-stop box truck run (the load works it out for real at Depart)
   useEffect(() => {
     setEst(null)
@@ -318,6 +339,8 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const ok = cust != null && used.length > 0 && !anyOver
   const setPick = (k: string, base: Omit<Pick, 'lbs'>, ch: Partial<Pick>) => setPicks(ps => ({ ...ps, [k]: Object.assign({ lbs: '' }, base, ps[k], ch) as Pick }))
   async function save(confirm = true) {
+    if (busy) return
+    try { (document.activeElement as HTMLElement | null)?.blur?.() } catch { /* ignore */ }
     setBusy(true)
     try {
       // price goes in only when someone changed it from the autofill; blank = their contract / market price, worked out as before
@@ -336,9 +359,15 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
         const { error } = await backend.client()?.rpc('set_order_shipping', { p_order: o.id, p_amount: Number(shipping), p_quoted: quoted }) ?? { error: null }
         if (error) flash(`Order made, but shipping wasn't saved: ${error.message}`, true)
       }
-      flash(confirm ? `${o.so_number} created` : 'Draft saved. It holds nothing until a Sales Admin confirms it.'); onDone(o.id)
+      forget(); flash(confirm ? `${o.so_number} created` : 'Draft saved. It holds nothing until a Sales Admin confirms it.'); onDone(o.id)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
+  const close = () => {
+    if (busy) return
+    if (used.length && !window.confirm('Close this order without saving it? It is not saved until you tap Create order or Draft.')) return
+    forget(); onClose()
+  }
+  const backdrop = () => { if (!window.matchMedia?.('(max-width: 999px)').matches) close() }
   const ql = cq.trim().toLowerCase()
   const custOpts = customers.filter(x => x.active && x.kind === 'external' && (!ql || x.name.toLowerCase().includes(ql) || (x.address ?? '').toLowerCase().includes(ql))).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12)
   const resLeft = cust == null ? 0 : bal.filter(b => b.customer_id === cust).reduce((a, b) => a + Math.max(0, Number(b.remaining)), 0)
@@ -363,9 +392,9 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
       <button className="ghost no-draft" disabled={busy || !ok} onClick={() => save(false)}>Save as draft</button></div>
   </>
   return (
-    <div className="scrim" onClick={onClose}>
+    <div className="scrim" onClick={backdrop}>
       <div className="sheet form neworder side no2" onClick={e => e.stopPropagation()}>
-        <div className="sheet-h"><h2>New sales order</h2><button className="ghost" onClick={onClose}>✕</button></div>
+        <div className="sheet-h"><h2>New sales order</h2><button className="ghost" onClick={close}>✕</button></div>
         <div className="no-body">
           <div className="no-main">
             <section className="no-sec">
