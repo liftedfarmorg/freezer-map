@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Batch, Delivery, LabTest, License, Mother, NData, NOrder, NRoom, NSite, OStatus, StrainPlan, TagRange } from './types'
+import type { Batch, Delivery, LabTest, License, MPkg, Mother, NData, NDonorBatch, NOrder, NPlanting, NRoom, NRun, NSite, NUse, OStatus, StrainPlan, TagRange } from './types'
 
 function fail(error: { message: string } | null) { if (error) throw new Error(error.message) }
 async function all<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
@@ -23,9 +23,12 @@ export class NurseryApi {
 
   async load(): Promise<NData> {
     const opt = async <T,>(f: () => Promise<T[]>) => { try { return await f() } catch { return [] as T[] } }   // tables from 031 (before it's run)
-    const [strainPlan, tests] = await Promise.all([
+    const [strainPlan, tests, plantings, runs, donorBatches] = await Promise.all([
       opt(() => all<StrainPlan>((a, b) => this.sb.from('nursery_strain_plan').select('*').range(a, b))),
       opt(() => all<LabTest>((a, b) => this.sb.from('nursery_tests').select('*').order('tested_on', { ascending: false }).range(a, b))),
+      opt(() => all<NPlanting>((a, b) => this.sb.from('nursery_plantings').select('*').order('id').range(a, b))),   // 337
+      opt(() => all<NRun>((a, b) => this.sb.from('breed_runs').select('id,name,room_id,status,season,donor_strain').order('id').range(a, b))),
+      opt(() => all<NDonorBatch>((a, b) => this.sb.from('breed_donor_batches').select('id,project,label,room_id').order('id').range(a, b))),
     ])
     const [sites, rooms, mothers, batches, orders, deliveries, licenses, ranges, strains, st] = await Promise.all([
       all<NSite>((a, b) => this.sb.from('nursery_sites').select('*').order('sort').range(a, b)),
@@ -39,10 +42,14 @@ export class NurseryApi {
       all<{ name: string; active: boolean }>((a, b) => this.sb.from('strains').select('name,active').order('name').range(a, b)),
       all<{ key: string; value: string }>((a, b) => this.sb.from('app_settings').select('key,value').like('key', 'nursery.%').range(a, b)),
     ])
+    // the nursery's packages as METRC has them (last pull): item name and count on each package tag
+    const lics = sites.map(x => x.license).filter((x): x is string => !!x)
+    const mp = lics.length ? await opt(() => all<MPkg>((a, b) => this.sb.from('metrc_packages').select('label,item,qty,uom,state').in('license', lics).in('state', ['active', 'intransit']).range(a, b))) : []
+    const mpkgs = new Map(mp.map(p => [p.label.toUpperCase(), { ...p, qty: num(p.qty) }]))
     const s = new Map(st.map(r => [r.key, r.value]))
     const nv = (k: string, d: number) => { const v = Number(s.get(k)); return s.has(k) && isFinite(v) ? v : d }
     return {
-      sites, licenses, ranges, deliveries, tests,
+      sites, licenses, ranges, deliveries, tests, plantings, mpkgs, runs, donorBatches,
       strainPlan: strainPlan.map(p => ({ ...p, cuts_g3: num(p.cuts_g3), cuts_g2: num(p.cuts_g2), cuts_g1: num(p.cuts_g1) })),
       rooms: rooms.map(r => ({ ...r, place: r.place ?? 'Webb', beds: r.beds ?? [], rented: !!r.rented })),
       mothers: mothers.map(m => ({ ...m, qty: m.qty ?? 1, lost: m.lost ?? 0, gen: m.gen ?? 2, cuts_per_plant: num(m.cuts_per_plant) })),
@@ -97,6 +104,14 @@ export class NurseryApi {
   }
   plantMoms(batchId: number, roomId: number | null, bed: string | null, qty: number, tag: string | null, on: string | null) {
     return this.rpc<Mother>('nursery_plant_moms', { p_batch: batchId, p_room: roomId, p_bed: bed, p_qty: qty, p_tag: tag, p_on: on })
+  }
+  /** 337: new package (own tag) split off a package, for a use; goes to METRC right away */
+  split(batchId: number, qty: number, use: NUse, ref: number | null, tag: string, on: string | null) {
+    return this.rpc<number>('nursery_split', { p_batch: batchId, p_qty: qty, p_use: use, p_ref: ref, p_tag: tag, p_on: on })
+  }
+  /** 337: immature plant batches from packages (one per line, up to 100 plants, one plant tag each) */
+  plant(lines: { batch: number; use: NUse; ref?: number | null; receiver_id?: number | null; room?: number | null; bed?: string | null; plants: number; tag: string }[], on: string | null) {
+    return this.rpc<unknown[]>('nursery_plant', { p_lines: lines, p_on: on })
   }
   async saveSite(code: string, v: Partial<NSite>) { const { error } = await this.sb.from('nursery_sites').update(v).eq('code', code); fail(error) }
 

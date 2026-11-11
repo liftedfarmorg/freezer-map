@@ -22,6 +22,10 @@ export const live = (m: Mother) => (m.status === 'active' ? Math.max(0, m.qty - 
 /** rooted so far from the sorts: first sort vigorous + second sort vigorous (the workbook's "Final Qty Rooted") */
 export const rooted = (b: Batch) => (b.sort1_on || b.s1_vigorous != null ? (b.s1_vigorous ?? 0) + (b.s2_vigorous ?? 0) : null)
 export const GEN_LABEL: Record<number, string> = { 1: 'G1', 2: 'G2', 3: 'G3', 4: 'G4' }
+/** 337: what a package is for */
+export const USE_LABEL: Record<string, string> = { g1: 'G1 moms', g2: 'G2 moms', g3: 'G3 moms', g4: 'G4 plants', phenos: 'Phenos', keepers: 'Pheno keepers', trials: 'Trials', receivers: 'Receivers', donors: 'Donors' }
+export const USES = ['g1', 'g2', 'g3', 'g4', 'phenos', 'keepers', 'trials', 'receivers', 'donors'] as const
+export const useOf = (b: Pick<Batch, 'use' | 'gen'>) => b.use ?? (`g${b.gen ?? 4}` as const)
 export const GEN_WHAT: Record<number, string> = { 1: 'G1 starter moms', 2: 'G2 greenhouse moms', 3: 'G3 field moms', 4: 'G4 production clones' }
 
 export function makeCtx(d: NData, customers: Map<number, string>): NCtx {
@@ -32,7 +36,8 @@ export function makeCtx(d: NData, customers: Map<number, string>): NCtx {
   }
   const planted = new Map<number, number>()   // G1-G3 batches planted out as mother lots
   for (const m of d.mothers) if (m.batch_id != null) planted.set(m.batch_id, (planted.get(m.batch_id) ?? 0) + m.qty + m.lost)
-  const left = (b: Batch) => Math.max(0, b.cuttings - b.lost - (fromBatch.get(b.id) ?? 0) - (planted.get(b.id) ?? 0))
+  for (const p of d.plantings ?? []) planted.set(p.batch_id, (planted.get(p.batch_id) ?? 0) + p.plants)   // 337: receivers, donors, phenos, trials
+  const left = (b: Batch) => Math.max(0, b.cuttings - b.lost - (b.split_out ?? 0) - (fromBatch.get(b.id) ?? 0) - (planted.get(b.id) ?? 0))
   const owed = (o: NOrder) => Math.max(0, o.plants - (delivered.get(o.id) ?? 0))
   const isOpen = (o: NOrder) => o.status !== 'cancelled' && o.status !== 'received' && owed(o) > 0
   const rooms = new Map(d.rooms.map(r => [r.id, r.name]))

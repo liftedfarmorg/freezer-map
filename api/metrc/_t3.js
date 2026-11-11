@@ -6,7 +6,7 @@ import { sendAdjust, sendCombine, sendFinish, sendNewPackageCheck, sendRepackage
 import { sendManifestVoid, sendReceive, sendTransfer_ } from './_xfer.js'
 import {
   sendFlower, sendHarvestFinish, sendHarvestPackage, sendHarvestPlants, sendHarvestWaste, sendNurseryClones, sendNurseryLoss,
-  sendNurseryMothers, sendPlantLoss, sendPlanting,
+  sendNurseryMothers, sendNurseryPlant, sendNurserySplit, sendPlantLoss, sendPlanting,
 } from './_plants.js'
 import { sendItemCreate, sendStrainCreate, sendStrainUpdate } from './_setup.js'
 import { sendProcOutput, sendProcUsed, sendRunWaste } from './_proc.js'
@@ -58,7 +58,7 @@ export async function testConnection(by) {
 const SENDERS = {
   adjust: sendAdjust, split: sendSplit, combine: sendCombine, finish: sendFinish, tag: sendTagCheck, new_package: sendNewPackageCheck, retag: sendRetag, repackage: sendRepackage,
   transfer: sendTransfer_, manifest: sendTransfer_, manifest_void: sendManifestVoid, ship_check: sendShipCheck, receive: sendReceive,
-  nursery_clones: sendNurseryClones, nursery_mothers: sendNurseryMothers, nursery_loss: sendNurseryLoss,
+  nursery_clones: sendNurseryClones, nursery_mothers: sendNurseryMothers, nursery_loss: sendNurseryLoss, nursery_split: sendNurserySplit, nursery_plant: sendNurseryPlant,
   planting: sendPlanting, plant_loss: sendPlantLoss, flower: sendFlower,
   harvest_plants: sendHarvestPlants, harvest_package: sendHarvestPackage, harvest_waste: sendHarvestWaste, harvest_finish: sendHarvestFinish,
   strain_create: sendStrainCreate, item_create: sendItemCreate, strain_update: sendStrainUpdate,

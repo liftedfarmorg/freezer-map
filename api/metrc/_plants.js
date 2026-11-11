@@ -3,7 +3,7 @@
 // Every one of these waits for its site's cutover date (Compliance > METRC > Mapping); before that they're done by hand.
 import {
   WRITE_MAX, Held, Skip, Wait, all, db, enc, first, inputs, list, lc, mappedLocation, one, packageByTag, r4, reasonFrom, rpc, setting, strainFor,
-  t3, tagIdFor, uomFrom, up, write, ymd, adjustReasons,
+  t3, tagIdFor, uomFrom, up, write, ymd, adjustReasons, itemId, locationFrom,
 } from './_core.js'
 import { heldRun } from './_tagrange.js'
 
@@ -81,7 +81,7 @@ export async function sendNurseryMothers(job, ctx) {
   const inp = await inputs(ctx, lic, '/v2/plantbatches/create/from-packages/inputs')
   const type = (inp.plantBatchTypes ?? []).find(t => /clone/i.test(t.name))
   if (!type) throw new Error('METRC has no Clone plant batch type here')
-  const strain = await strainFor(d.strain, lic)
+  const strain = await pkgStrain(p, d.strain, lic)
   const loc = await mappedLocation('room', m?.room_id ?? d.room_id, lic)
   if (!loc) throw new Error(`Map nursery room "${d.room ?? m?.room_id ?? '?'}" to a METRC location (Compliance > METRC > Mapping)`)
   const on = day(m?.started_on ?? d.on, job)
@@ -89,6 +89,79 @@ export async function sendNurseryMothers(job, ctx) {
                   plantsCount: qty, strainId: strain.id, ...(isCount(p) ? {} : { quantity: qty, unitOfMeasureId: p.unitOfMeasureId }) }]
   const resp = await write(ctx, '/v2/plantbatches/create/from-packages', lic, body)
   const what = `mother lot ${lotTag}: ${qty} ${strain.name} from ${src} in ${loc.location}`
+  if (!ctx.live) return { state: 'checked', request: body, response: resp, info: `Dry run OK: ${what}` }
+  if (!await plantBatch(lic, lotTag)) throw new Error(`Sent, but METRC doesn't show plant batch ${lotTag} yet. Check it in METRC.`)
+  return { state: 'sent', request: body, response: resp, info: `METRC: ${what}` }
+}
+
+/** the METRC strain of a clone / seed package (its item's strain), so outside genetics made under another strain still plant; else the app strain's map */
+async function pkgStrain(p, appStrain, lic) {
+  const it = p?.item ?? {}
+  if (it.strainId) return { id: it.strainId, name: it.strainName ?? appStrain }
+  if (it.strainName) {
+    const s = await one(`metrc_strains?license=eq.${enc(lic)}&name=eq.${enc(it.strainName)}&archived=is.false&select=id,name`).catch(() => null)
+    if (s?.id) return s
+  }
+  return strainFor(appStrain, lic)
+}
+const NURSERY_USE = { g1: 'G1 moms', g2: 'G2 moms', g3: 'G3 moms', g4: 'G4 plants', phenos: 'phenos', keepers: 'pheno keepers', trials: 'trials', receivers: 'receivers', donors: 'donors' }
+
+/** Split: a new clone (or seed) package from a nursery package, same item, its own tag (the Split button, 337) */
+export async function sendNurserySplit(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const to = up(d.to ?? job.tag), from = up(d.from)
+  const qty = Number(d.qty)
+  if (!to || !from || !(qty > 0)) throw new Error('This split is missing its tags or count')
+  const done = await packageByTag(lic, to)
+  if (done) {
+    if (lc(done.sourcePackageLabels ?? '').includes(lc(from))) throw new Skip(`METRC already has ${to} from ${from}`)
+    throw new Error(`${to} is already a different METRC package (${done.item?.name ?? '?'}). Pick another tag in the app.`)
+  }
+  const src = await packageByTag(lic, from)
+  if (!src) throw new Error(`${from} isn't an active package on ${lic} in METRC`)
+  if (!isCount(src)) throw new Error(`${from} isn't counted in plants (each) in METRC`)
+  if (Number(src.quantity) < qty) throw new Error(`METRC has only ${src.quantity} plants in ${from}; the split takes ${qty}`)
+  const inp = await inputs(ctx, lic, '/v2/packages/create/inputs').catch(() => ({}))
+  const tagId = await tagIdFor(ctx, lic, '/v2/packages/create/source-tags', to)
+  const locationId = locationFrom(inp, src.locationName)
+  const date = day(d.on, job)
+  const body = [{ actualDate: date, ingredients: [{ packageId: src.id, quantity: qty, unitOfMeasureId: src.unitOfMeasureId }],
+                  itemId: itemId(src), useSameItem: true, quantity: qty, tagId, unitOfMeasureId: src.unitOfMeasureId, ...(locationId ? { locationId } : {}),
+                  note: `Lifted app split for ${NURSERY_USE[d.use] ?? d.use ?? '?'}`.slice(0, 250) }]
+  const resp = await write(ctx, '/v2/packages/create', lic, body)
+  const what = `${to}: ${qty} ${d.strain ?? ''} from ${from} (${src.item?.name ?? 'same item'}) for ${NURSERY_USE[d.use] ?? d.use}`
+  if (!ctx.live) return { state: 'checked', request: body, response: resp, info: `Dry run OK: ${what}` }
+  if (!await packageByTag(lic, to)) throw new Error(`Sent, but METRC doesn't show ${to} yet. Check it in METRC.`)
+  return { state: 'sent', request: body, response: resp, info: `METRC: ${what}` }
+}
+
+/** Plant: an immature plant batch (up to 100, named by its plant tag) from a nursery package, in the use's location (receivers, donors, phenos, trials; 337) */
+export async function sendNurseryPlant(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const pl = await one(`nursery_plantings?id=eq.${Number(d.planting_id)}&select=*`)
+  if (!pl) throw new Skip('The planting is gone from the app')
+  const lotTag = up(pl.plant_tag), qty = Number(pl.plants)
+  if (qty > 100) throw new Error(`An immature plant batch holds up to 100 plants (this one is ${qty})`)
+  if (await plantBatch(lic, lotTag)) throw new Skip(`METRC already has plant batch ${lotTag}`)
+  const b = await one(`nursery_batches?id=eq.${Number(pl.batch_id)}&select=package_tag`)
+  const src = up(b?.package_tag ?? d.source_tag)
+  if (!src) throw new Error('The package has no METRC tag in the app')
+  const p = await packageByTag(lic, src)
+  if (!p) throw new Wait(`Package ${src} isn't active on ${lic} yet (a split still going in?)`)
+  if (Number(p.quantity) < qty) throw new Error(`METRC has only ${p.quantity} plants in ${src}; the planting takes ${qty}`)
+  const inp = await inputs(ctx, lic, '/v2/plantbatches/create/from-packages/inputs')
+  const type = (inp.plantBatchTypes ?? []).find(x => (/seed/i.test(p.item?.name ?? '') ? /seed/i : /clone/i).test(x.name))
+  if (!type) throw new Error('METRC has no Clone / Seed plant batch type here')
+  const strain = await pkgStrain(p, pl.strain, lic)
+  const loc = await mappedLocation('room', pl.room_id, lic)
+  if (!loc) throw new Error(`Match nursery location "${d.room ?? pl.room_id}" to a METRC location (Compliance > METRC > Mapping)`)
+  const on = day(pl.planted_on, job)
+  const body = [{ actualDate: on, plantedDate: on, locationId: loc.location_id, packageId: p.id, plantBatchName: lotTag, plantBatchTypeId: type.id,
+                  plantsCount: qty, strainId: strain.id, ...(isCount(p) ? {} : { quantity: qty, unitOfMeasureId: p.unitOfMeasureId }) }]
+  const resp = await write(ctx, '/v2/plantbatches/create/from-packages', lic, body)
+  const what = `${lotTag}: ${qty} ${pl.strain}${lc(strain.name) !== lc(pl.strain) ? ` (METRC ${strain.name})` : ''} ${NURSERY_USE[pl.use] ?? pl.use} from ${src} in ${loc.location}`
   if (!ctx.live) return { state: 'checked', request: body, response: resp, info: `Dry run OK: ${what}` }
   if (!await plantBatch(lic, lotTag)) throw new Error(`Sent, but METRC doesn't show plant batch ${lotTag} yet. Check it in METRC.`)
   return { state: 'sent', request: body, response: resp, info: `METRC: ${what}` }

@@ -17,7 +17,16 @@ export interface Batch {
   gen: 1 | 2 | 3 | 4; season: number | null; mother_id: number | null; trays: number | null; emerged_on: string | null; moved_out_on: string | null
   sort1_on: string | null; s1_vigorous: number | null; s1_minimal: number | null; s1_none: number | null; s1_dead: number | null
   sort2_on: string | null; s2_vigorous: number | null; s2_minimal: number | null; s2_none: number | null; s2_dead: number | null
+  /** 337: a split's parent package, what the package is for, its run / donor batch, plants split off it */
+  parent_id?: number | null; use?: NUse | null; use_ref?: number | null; split_out?: number
 }
+export type NUse = 'g1' | 'g2' | 'g3' | 'g4' | 'phenos' | 'keepers' | 'trials' | 'receivers' | 'donors'
+/** 337: an immature plant batch planted from a package (receivers, donors, phenos, trials; moms are mother lots) */
+export interface NPlanting { id: number; site: string; batch_id: number; use: NUse; use_ref: number | null; receiver_id: number | null; room_id: number | null; bed: string | null; strain: string; plants: number; plant_tag: string; planted_on: string; action_id: number | null }
+/** a nursery package as METRC has it (last pull) */
+export interface MPkg { label: string; item: string; qty: number | null; uom: string | null; state: string }
+export interface NRun { id: number; name: string; room_id: number | null; status: string; season: number; donor_strain: string | null }
+export interface NDonorBatch { id: number; project: string; label: string; room_id: number | null }
 export interface StrainPlan { strain: string; cuts_g3: number | null; cuts_g2: number | null; cuts_g1: number | null; notes: string | null }
 export interface LabTest {
   id: number; site: string; strain: string; mother_id: number | null; room_id: number | null; test: string; round: number; plants: number | null; tested: number | null
@@ -47,5 +56,6 @@ export interface NSettings {
 export interface NData {
   sites: NSite[]; rooms: NRoom[]; mothers: Mother[]; batches: Batch[]; orders: NOrder[]; deliveries: Delivery[]
   licenses: License[]; ranges: TagRange[]; strains: string[]; settings: NSettings; strainPlan: StrainPlan[]; tests: LabTest[]
+  plantings: NPlanting[]; mpkgs: Map<string, MPkg>; runs: NRun[]; donorBatches: NDonorBatch[]
 }
 export type NTab = 'dashboard' | 'receiving' | 'plan' | 'orders' | 'batches' | 'mothers' | 'breeding' | 'logs' | 'invoices' | 'review' | 'activity' | 'settings'

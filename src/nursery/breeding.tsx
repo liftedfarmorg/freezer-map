@@ -4,7 +4,7 @@ import { useBack } from '../nav'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NCtx } from './calc'
-import { GEN_LABEL, fmtD, live, n0, strainKey, sum, today } from './calc'
+import { GEN_LABEL, USE_LABEL, fmtD, live, n0, strainKey, sum, today, useOf } from './calc'
 import type { NData } from './types'
 import { DateIn, F, NumIn, Pick, SaveBar, Sheet, StrainList, TextIn } from '../cult/ui'
 import type { Flash } from '../cult/ui'
@@ -18,7 +18,7 @@ interface Run {
   donor_plants: number | null; donors_cut_on: string | null; donors_flip_on: string | null; receivers_cut_on: string | null; receivers_planted_on: string | null
   flip_on: string | null; pollinated_on: string | null; harvested_on: string | null; status: string; notes: string | null
 }
-interface Receiver { id?: number; run_id?: number; strain: string; mother_id: number | null; batch_id: number | null; plants: number; plant_tag: string | null; notes: string | null; _del?: boolean }
+interface Receiver { id?: number; run_id?: number; strain: string; mother_id: number | null; batch_id: number | null; plants: number; plant_tag: string | null; notes: string | null; planting_id?: number | null; _del?: boolean }
 interface SeedLot {
   id: number; code: string | null; mother_strain: string | null; father_strain: string | null; run_id: number | null; receiver_id: number | null; source: string; breeder: string | null
   harvested_on: string | null; seeds: number | null; germ_pct: number | null; notes: string | null
@@ -152,6 +152,7 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
   const [recs, setRecs] = useState<Receiver[]>(() => b.receivers.filter(z => z.run_id === r0.id))
   const [busy, setBusy] = useState(false)
   const [pick, setPick] = useState(false)
+  const [plantR, setPlantR] = useState(false)
   const set = (v: Partial<Run>) => setX(s => ({ ...s, ...v }))
   const trailers = d.rooms.filter(r => r.kind === 'trailer' && (r.active || r.id === x.room_id || r.id === x.donor_room_id))
   const donorLots = d.mothers.filter(m => m.status === 'active' && x.donor_strain && strainKey(m.strain) === strainKey(x.donor_strain))
@@ -211,7 +212,7 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
         <F label={t('Pollinated (donors in)')}><DateIn value={x.pollinated_on} onChange={v => set({ pollinated_on: v })} /></F>
         <F label={t('Seeds harvested')}><DateIn value={x.harvested_on} onChange={v => set({ harvested_on: v })} /></F>
       </div>
-      <h3 className="row between"><span>{t('Receivers')} <span className="muted small">{shown.length} varieties · {n0(sum(shown.map(z => z.plants)))} plants</span></span><button className="ghost small" onClick={() => setPick(true)}>{t('+ Add receivers…')}</button></h3>
+      <h3 className="row between"><span>{t('Receivers')} <span className="muted small">{shown.length} varieties · {n0(sum(shown.map(z => z.plants)))} plants</span></span><span className="row">{x.id && recs.some(z => z.id && !z._del && !z.planting_id) && <button className="primary small" onClick={() => setPlantR(true)}>{t('Plant receivers…')}</button>}<button className="ghost small" onClick={() => setPick(true)}>{t('+ Add receivers…')}</button></span></h3>
       {shown.length > 0 && <div className="cwrap tight"><table className="ctable">
         <thead><tr><th>{t('Receiver')}</th><th>{t('From')}</th><th className="num">{t('Plants')}</th><th>{t('Tag')}</th><th className="num">{t('Seeds')}</th><th /></tr></thead>
         <tbody>{recs.map((z, i) => z._del ? null : <tr key={z.id ?? `n${i}`}><td>{z.strain}</td>
@@ -224,11 +225,64 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
       <F label={t('Notes')}><TextIn value={x.notes} onChange={v => set({ notes: v })} /></F>
       <SaveBar busy={busy} disabled={!x.name?.trim()} saveLabel={x.id ? 'Save' : 'Add run'} onCancel={onClose} onSave={save}
         onDelete={x.id && !b.seeds.some(s => s.run_id === x.id) ? async () => { const { error } = await sb.from('breed_runs').delete().eq('id', x.id!); if (error) flash(error.message, true); else { onClose(); await onSaved('Run deleted') } } : undefined} />
+      {plantR && x.id && <PlantReceivers sb={sb} d={d} c={c} run={{ ...(r0 as Run), id: x.id }} recs={recs.filter(z => z.id && !z._del && !z.planting_id)} flash={flash}
+        onClose={() => setPlantR(false)} onDone={async m => { setPlantR(false); onClose(); await onSaved(m) }} />}
       {pick && <ReceiverPicker d={d} c={c} have={new Set(shown.map(z => strainKey(z.strain)))} onClose={() => setPick(false)}
         onAdd={(list, plants) => { setRecs(rs => [...rs, ...list.map(l => ({ strain: l.strain, mother_id: l.mother_id, batch_id: l.batch_id ?? null, plants, plant_tag: null, notes: null }))]); setPick(false) }} />}
     </Sheet>
   )
 }
+/** 337: plant a run's receivers into its trailer, a few or all at once: one immature plant batch per variety (its own plant tag) from that variety's package */
+function PlantReceivers({ sb, d, c, run, recs, flash, onClose, onDone }: { sb: SupabaseClient; d: NData; c: NCtx; run: Run; recs: Receiver[]; flash: Flash; onClose: () => void; onDone: (m: string) => Promise<void> }) {
+  const trailer = d.rooms.find(r => r.id === run.room_id)
+  const pkgsFor = (z: Receiver) => d.batches.filter(q => q.package_tag && strainKey(q.strain) === strainKey(z.strain) && (q.stage === 'rooting' || q.stage === 'ready') && c.left(q) > 0)
+    .sort((a, b) => Number(b.use === 'receivers' && b.use_ref === run.id) - Number(a.use === 'receivers' && a.use_ref === run.id) || Number(b.id === z.batch_id) - Number(a.id === z.batch_id))
+  const [rows, setRows] = useState<{ z: Receiver; on: boolean; batch: number | null; plants: number; tag: string }[]>(() => recs.map(z => ({ z, on: false, batch: pkgsFor(z)[0]?.id ?? null, plants: z.plants, tag: z.plant_tag ?? '' })))
+  const [on, setOn] = useState<string | null>(today())
+  const [busy, setBusy] = useState(false)
+  const setRow = (i: number, v: Partial<(typeof rows)[number]>) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...v } : r)))
+  const picked = rows.filter(r => r.on)
+  const fill = async () => {
+    const need = picked.filter(r => !r.tag.trim()).length; if (!need) return
+    const { data, error } = await sb.rpc('nursery_next_tags', { p_site: d.sites[0]?.code ?? '1PN', p_count: need + 10, p_type: 'plant' })
+    if (error) { flash(error.message, true); return }
+    const have = new Set(rows.map(r => r.tag.trim().toUpperCase()).filter(Boolean))
+    const pool = ((data ?? []) as string[]).filter(x => !have.has(x))
+    setRows(rs => rs.map(r => (r.on && !r.tag.trim() ? { ...r, tag: pool.shift() ?? '' } : r)))
+  }
+  const go = async () => {
+    setBusy(true)
+    const lines = picked.map(r => ({ batch: r.batch, use: 'receivers', ref: run.id, receiver_id: r.z.id, plants: r.plants, tag: r.tag.trim().toUpperCase() }))
+    const { error } = await sb.rpc('nursery_plant', { p_lines: lines, p_on: on })
+    setBusy(false)
+    if (error) flash(error.message, true)
+    else await onDone(t('{n} receivers planted in {where}', { n: picked.length, where: trailer?.name ?? '?' }))
+  }
+  const bad = (r: (typeof rows)[number]) => { const q = d.batches.find(y => y.id === r.batch); return !q ? t('no package') : q.stage !== 'ready' ? t('not marked ready') : r.plants > c.left(q) ? t('only {n} left', { n: c.left(q) }) : r.plants > 100 ? t('100 max') : null }
+  const ok = !!trailer && picked.length > 0 && picked.every(r => r.batch && r.tag.trim() && r.plants > 0 && !bad(r))
+  return (
+    <Sheet side title={t('Plant receivers in {where}', { where: trailer?.name ?? '?' })} sub={`${run.name} · ${t('one immature batch per variety, its own plant tag')}`} onClose={onClose}>
+      {!trailer && <p className="warn-t small-note">{t('Set "Receivers flower in" on the run and save it first.')}</p>}
+      <div className="row wrap toolbar"><button className="ghost small" onClick={() => setRows(rs => rs.map(r => ({ ...r, on: true })))}>{t('All')}</button>
+        <button className="ghost small" onClick={() => setRows(rs => rs.map(r => ({ ...r, on: false })))}>{t('None')}</button>
+        <button className="ghost small" onClick={fill} disabled={!picked.length}>{t('Next tags for the picked ones')}</button>
+        <F label={t('Planted on')}><DateIn value={on} onChange={setOn} /></F></div>
+      <div className="cwrap tight"><table className="ctable">
+        <thead><tr><th /><th>{t('Receiver')}</th><th>{t('From package')}</th><th className="num">{t('Plants')}</th><th>{t('Plant tag')}</th></tr></thead>
+        <tbody>{rows.map((r, i) => { const opts = pkgsFor(r.z); const why = r.on ? bad(r) : null
+          return <tr key={r.z.id}><td><input type="checkbox" checked={r.on} onChange={e => setRow(i, { on: e.target.checked })} /></td>
+            <td>{r.z.strain}{why && <div className="warn-t small">{why}</div>}</td>
+            <td>{opts.length ? <Pick value={r.batch} options={opts.map(q => ({ v: q.id, l: `…${(q.package_tag ?? '').slice(-6)} · ${t(USE_LABEL[useOf(q)])} · ${n0(c.left(q))} ${t('left')}${q.stage !== 'ready' ? ` · ${t('rooting')}` : ''}` }))} onChange={v => setRow(i, { batch: v })} />
+              : <span className="warn-t small">{t('no package for this strain')}</span>}</td>
+            <td className="num"><input className="qty" type="number" value={r.plants} onChange={e => setRow(i, { plants: Number(e.target.value) || 0 })} /></td>
+            <td><TagInput compact value={r.tag} onChange={v => setRow(i, { tag: v })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} placeholder={t('METRC tag')} /></td></tr> })}</tbody>
+      </table></div>
+      <p className="muted small-note">{t('Goes to METRC right away: each picked receiver becomes an immature plant batch in {where}.', { where: trailer?.name ?? '?' })}</p>
+      <SaveBar busy={busy} disabled={!ok} saveLabel={t('Plant {n}', { n: picked.length })} onCancel={onClose} onSave={go} />
+    </Sheet>
+  )
+}
+
 const initials = (s: string) => s.split(/[\s#]+/).filter(w => /^[A-Za-z]/.test(w)).map(w => w[0].toUpperCase()).join('').slice(0, 4)
 
 /** pick many receiver varieties at once: from this season's cutting batches (the usual way), the mother lots, or any strain */
