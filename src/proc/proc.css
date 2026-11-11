@@ -35,3 +35,14 @@
 .proc .crewdays th, .proc .crewdays td { padding-left: 8px; padding-right: 8px; }
 .putspot.here { outline: 2px solid var(--brand); }
 .proc .invacts, .sheet .invacts { flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* 333: item picker above each "what came out" line */
+.runitem { margin-top: 10px; margin-bottom: -4px; flex-wrap: nowrap; }
+.runitem > :first-child { flex: 1 1 auto; min-width: 0; }
+.runitem select, .runitem input { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+.runitem-new { margin: 6px 0; }
+.runitem-new .row > * { min-width: 0; }
+@media (max-width: 640px) {
+  .runitem { flex-wrap: wrap; }
+  .runitem > :first-child { flex-basis: 100%; }
+}

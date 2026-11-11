@@ -35,7 +35,7 @@ export interface PData {
   promises: Promise_[]; rates: Rates
   slots: Map<number, Spot>; freezers: Map<number, Box>
 }
-export interface OutRow { product: Product; lbs: number | null; tag: string }
+export interface OutRow { product: Product; lbs: number | null; tag: string; item_id?: number | null }
 
 const PAL_NUM = ['og_weight', 'current_weight'] as const
 
@@ -102,7 +102,8 @@ export class ProcApi {
   }
   cancelRun(run: number) { return this.rpc<void>('proc_cancel_run', { p_run: run }) }
   finishRun(run: number, outputs: OutRow[], mold: number, notes: string, on: string | null) {
-    return this.rpc<string[]>('proc_finish_run', { p_run: run, p_outputs: outputs.filter(o => o.lbs).map(o => ({ product: o.product, lbs: o.lbs, tag: o.tag })), p_mold: mold, p_notes: notes, p_on: on })
+    // 333: the item for each line is picked on screen (blank = the default item); the run takes its inputs' crop year
+    return this.rpc<string[]>('proc_finish_run_items', { p_run: run, p_outputs: outputs.filter(o => o.lbs).map(o => ({ product: o.product, lbs: o.lbs, tag: o.tag, item_id: o.item_id ?? null })), p_mold: mold, p_notes: notes, p_on: on })
   }
   saveRequest(r: Partial<Req>) { return this.rpc<Req>('proc_save_request', { p: r }) }
   requestStatus(id: number, status: Req['status']) { return this.rpc<void>('proc_request_status', { p_id: id, p_status: status }) }

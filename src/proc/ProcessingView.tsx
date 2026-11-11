@@ -6,7 +6,7 @@ import { StrainLink } from '../strainCard'
 import { useBack } from '../nav'
 import '../cult/cult.css'
 import './proc.css'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Backend } from '../api'
 import type { Customer, Pallet, Product, Strain } from '../types'
@@ -528,6 +528,26 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
   const [crew, setCrew] = useState<Awaited<ReturnType<ProcApi['crewOf']>> | null>(null)
   const [filled, setFilled] = useState(false)
   const [touched, setTouched] = useState(false)   // someone typed a weight: stop filling from the crew log
+  // 333 (PROC-ITEM): the item each output goes on. Year always follows the input; farm = the first input's item farm.
+  const year = run.crop_year ?? (() => { const ys = [...new Set(ins.map(x => x.p?.crop_year).filter((y): y is number => !!y))]; return ys.length === 1 ? ys[0] : null })()
+  const [cat, setCat] = useState<{ items: RunItem[]; fins: Record<string, string>; strains: { id: number; name: string }[]; site: string | null } | null>(null)
+  const [newFor, setNewFor] = useState<number | null>(null)
+  const loadCat = useCallback(async () => {
+    const sb = c.sb; if (!sb || !open || !year) return
+    const inItem = ins[0]?.p?.item_id
+    const [f, it, st, ii] = await Promise.all([
+      sb.from('finishes').select('code,pallet_product'),
+      sb.from('items').select('id,metrc_name,strain_id,site,finish,crop_year,metrc_status').eq('crop_year', year).neq('metrc_status', 'retired').order('metrc_name'),
+      sb.from('strains').select('id,name').order('name'),
+      inItem ? sb.from('items').select('site').eq('id', inItem).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+    const fins = Object.fromEntries(((f.data ?? []) as { code: string; pallet_product: string }[]).map(x => [x.pallet_product, x.code]))
+    setCat({ items: (it.data ?? []) as RunItem[], fins, strains: (st.data ?? []) as { id: number; name: string }[],
+      site: (ii.data as { site?: string } | null)?.site ?? (ins[0]?.p?.origin_site ?? '').split('+')[0] ?? null })
+  }, [c.sb, open, year, run.id])
+  useEffect(() => { loadCat() }, [loadCat])
+  const runStrainId = cat?.strains.find(x => x.name.toLowerCase() === (run.strain ?? '').toLowerCase())?.id
+  const defItem = (prod: Product) => cat?.items.find(i => i.strain_id === runStrainId && i.site === cat.site && i.finish === cat.fins[prod])
   const loadCrew = () => c.api.crewOf(run.id).then(setCrew).catch(() => setCrew(null))
   useEffect(() => { loadCrew() }, [run.id])
   // fill what came out from the crew log, so nobody types the same numbers twice. Only while nothing has been typed yet.
@@ -600,13 +620,30 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
       {simple(run.kind) ? <p className="muted small-note">Weigh what came out. {run.kind === 'machine' ? 'The standards are marked machine trimmed in the app only.' : ''}</p>
         : filled ? <p className="muted small-note">Filled in from the crew log ({crew?.days} day{crew?.days === 1 ? '' : 's'}). If the scale says different on a package, change it here.</p>
         : !crew?.people && <p className="muted small-note">Log the crew's days above (Log a day) and these fill in.</p>}
-      {rows.map((r, i) => <div key={i} className="row noline">
-        <Select value={r.product} onChange={e => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, product: e.target.value as Product } : x)) }}>{OUTS[run.kind].map(k => <option key={k} value={k}>{PL(k)}{run.kind === 'buck' && k === 'trim' ? ' (buck trim)' : ''}</option>)}</Select>
+      {!year && <p className="bad-t small-note">The input packages have no crop year, so the app can't pick an item. Set the crop year on the input package first.</p>}
+      {rows.map((r, i) => <Fragment key={i}>
+      {cat && <div className="row noline runitem">
+        <Select value={r.item_id ? String(r.item_id) : ''} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, item_id: e.target.value ? Number(e.target.value) : null } : x))}>
+          {(() => { const fin = cat.fins[r.product]; const d0 = defItem(r.product)
+            const mine = cat.items.filter(x => x.finish === fin && x.strain_id === runStrainId && x.id !== d0?.id)
+            const other = cat.items.filter(x => x.finish === fin && x.strain_id !== runStrainId)
+            return <>
+              <option value="">{d0 ? `${d0.metrc_name} (default)` : `Default: new item card for ${run.strain} ${year} ${PL(r.product)} at ${cat.site ?? '?'}`}</option>
+              {mine.length > 0 && <optgroup label={`${run.strain}, other farms`}>{mine.map(x => <option key={x.id} value={x.id}>{x.metrc_name}</option>)}</optgroup>}
+              {other.length > 0 && <optgroup label="Different strain (mix-up / rename)">{other.map(x => <option key={x.id} value={x.id}>{x.metrc_name}</option>)}</optgroup>}
+            </> })()}
+        </Select>
+        {c.isAdmin && <button className="ghost small" onClick={() => setNewFor(newFor === i ? null : i)}>+ New item</button>}
+      </div>}
+      {cat && newFor === i && year && <NewRunItem c={c} year={year} finish={cat.fins[r.product]} product={r.product} strains={cat.strains} site0={cat.site} strain0={runStrainId}
+        onMade={async id => { await loadCat(); setRows(rs => rs.map((x, j) => j === i ? { ...x, item_id: id } : x)); setNewFor(null) }} onCancel={() => setNewFor(null)} />}
+      <div className="row noline">
+        <Select value={r.product} onChange={e => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, product: e.target.value as Product, item_id: null } : x)) }}>{OUTS[run.kind].map(k => <option key={k} value={k}>{PL(k)}{run.kind === 'buck' && k === 'trim' ? ' (buck trim)' : ''}</option>)}</Select>
         <NumIn value={r.lbs} placeholder="lbs" onChange={v => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, lbs: v } : x)) }} />
         {/* 172: tags for what came out come from the license METRC has the first input package on (e.g. GVR processing for a CCP return) */}
         <TagIn value={r.tag} onChange={v => setRows(rs => rs.map((x, j) => j === i ? { ...x, tag: v } : x))} pallet={ins[0]?.i.pallet_id ?? undefined} purpose="processing" />
         {rows.length > 1 && <button className="ghost small" onClick={() => { setTouched(true); setRows(rs => rs.filter((_, j) => j !== i)) }}>✕</button>}
-      </div>)}
+      </div></Fragment>)}
       <div className="row"><button className="ghost small" onClick={() => { setTouched(true); setRows(rs => [...rs, { product: rs[rs.length - 1]?.product ?? OUTS[run.kind][0], lbs: null, tag: '' }]) }}>+ Another package</button>
         <button className="ghost small" onClick={fill}>Fill next tags</button></div>
       <div className="grid2"><F label="Mold / refuse" hint="(lbs, METRC waste)"><NumIn value={mold} onChange={v => { setTouched(true); setMold(v) }} /></F><F label="Finished"><DateIn value={on} onChange={setOn} /></F></div>
@@ -618,10 +655,40 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
       <div className="row between csave">
         {sure ? <span className="row"><button className="ghost danger" disabled={busy} onClick={cancel}>Yes, cancel run</button><button className="ghost small" onClick={() => setSure(false)}>Keep</button></span>
           : <button className="ghost" disabled={busy} onClick={() => setSure(true)}>Cancel run</button>}
-        <div className="row"><button className="ghost" onClick={onClose}>Close</button><button className="primary" disabled={busy || !out} onClick={finish}>{busy ? 'Saving…' : 'Finish run'}</button></div>
+        <div className="row"><button className="ghost" onClick={onClose}>Close</button><button className="primary" disabled={busy || !out || !year} onClick={finish}>{busy ? 'Saving…' : 'Finish run'}</button></div>
       </div>
     </>}
   </Sheet>
+}
+
+interface RunItem { id: number; metrc_name: string; strain_id: number; site: string; finish: string; crop_year: number; metrc_status: string }
+
+/** 333: Admins make an item card for a run output (any strain, the run's crop year, this product) */
+function NewRunItem({ c, year, finish, product, strains, site0, strain0, onMade, onCancel }: {
+  c: Ctx; year: number; finish: string | undefined; product: Product; strains: { id: number; name: string }[]; site0: string | null; strain0: number | undefined
+  onMade: (id: number) => void; onCancel: () => void
+}) {
+  const [strain, setStrain] = useState<number | null>(strain0 ?? null)
+  const [site, setSite] = useState(site0 ?? 'OHR')
+  const [busy, setBusy] = useState(false)
+  async function make() {
+    if (!c.sb || !strain || !finish) return
+    setBusy(true)
+    try {
+      const { data, error } = await c.sb.rpc('new_item_card', { p_strain: strain, p_year: year, p_site: site, p_finish: finish })
+      if (error) throw error
+      c.flash('Item card made. It goes to METRC when the package is sent.'); onMade(Number(data))
+    } catch (e) { c.flash(errText(e), true) } finally { setBusy(false) }
+  }
+  return <div className="infobox runitem-new">
+    <b>New item card</b> <span className="muted small">{year} · {PL(product)}</span>
+    <div className="row wrap noline">
+      <Select value={strain ? String(strain) : ''} onChange={e => setStrain(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">Strain…</option>{strains.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select>
+      <Select value={site} onChange={e => setSite(e.target.value)}><option value="OHR">OHR</option><option value="GVR">GVR</option></Select>
+      <button className="primary small" disabled={busy || !strain || !finish} onClick={make}>{busy ? 'Making…' : 'Make it'}</button>
+      <button className="ghost small" onClick={onCancel}>Cancel</button>
+    </div></div>
 }
 
 // ---------- Inventory: every dry package, as a table (shared InvTable) ----------
