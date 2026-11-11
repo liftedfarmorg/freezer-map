@@ -1173,7 +1173,18 @@ export const ES: Record<string, string> = {
  "Everything in {m} is on the bar below.": "Todo lo de {m} está en la barra de abajo.",
  "That tag is on a planting from another crop year. Switch the season to see it.": "Esa etiqueta es de una siembra de otro año. Cambia la temporada para verla.",
  "Load departed: record your stops": "Carga salió: registra tus paradas",
- "when a load you drive leaves, with the link to record each stop": "cuando sale una carga que manejas, con el enlace para registrar cada parada"
+ "when a load you drive leaves, with the link to record each stop": "cuando sale una carga que manejas, con el enlace para registrar cada parada",
+ "Photos need 337_pheno_photos.sql run in Supabase.": "Las fotos necesitan 337_pheno_photos.sql en Supabase.",
+ "{n} photos added": "{n} fotos agregadas",
+ "Photo added": "Foto agregada",
+ "Delete this photo?": "¿Borrar esta foto?",
+ "Photo deleted": "Foto borrada",
+ "Take photo": "Tomar foto",
+ "Upload photos": "Subir fotos",
+ "No photos yet. Pick Plant, Jar or Bud, then take a photo.": "Todavía no hay fotos. Escoge Planta, Frasco o Cogollo y toma una foto.",
+ "Jar": "Frasco",
+ "Bud": "Cogollo",
+ "Photos": "Fotos"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
