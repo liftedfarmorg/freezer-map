@@ -622,22 +622,25 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
         : !crew?.people && <p className="muted small-note">Log the crew's days above (Log a day) and these fill in.</p>}
       {!year && <p className="bad-t small-note">The input packages have no crop year, so the app can't pick an item. Set the crop year on the input package first.</p>}
       {rows.map((r, i) => <Fragment key={i}>
+      {cat && (() => { const pick = r.item_id ? cat.items.find(x => x.id === r.item_id) : defItem(r.product)
+        return <div className="runitem-name"><span className="muted small">Item</span> <b>{pick ? pick.metrc_name : `New item card: ${run.strain} ${year ?? ''} ${PL(r.product)} at ${cat.site ?? '?'} (made at Finish)`}</b>
+          {pick && pick.metrc_status === 'to_create' && <span className="muted small"> · not in METRC yet, made when sent</span>}</div> })()}
       {cat && <div className="row noline runitem">
         <Select value={r.item_id ? String(r.item_id) : ''} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, item_id: e.target.value ? Number(e.target.value) : null } : x))}>
           {(() => { const fin = cat.fins[r.product]; const d0 = defItem(r.product)
             const mine = cat.items.filter(x => x.finish === fin && x.strain_id === runStrainId && x.id !== d0?.id)
             const other = cat.items.filter(x => x.finish === fin && x.strain_id !== runStrainId)
             return <>
-              <option value="">{d0 ? `${d0.metrc_name} (default)` : `Default: new item card for ${run.strain} ${year} ${PL(r.product)} at ${cat.site ?? '?'}`}</option>
-              {mine.length > 0 && <optgroup label={`${run.strain}, other farms`}>{mine.map(x => <option key={x.id} value={x.id}>{x.metrc_name}</option>)}</optgroup>}
-              {other.length > 0 && <optgroup label="Different strain (mix-up / rename)">{other.map(x => <option key={x.id} value={x.id}>{x.metrc_name}</option>)}</optgroup>}
+              <option value="">{d0 ? `Default: ${d0.metrc_name.replace(/^Lifted Farms /, '')}` : 'Default (new item card)'}</option>
+              {mine.length > 0 && <optgroup label={`${run.strain}, other farms`}>{mine.map(x => <option key={x.id} value={x.id}>{x.metrc_name.replace(/^Lifted Farms /, '')}</option>)}</optgroup>}
+              {other.length > 0 && <optgroup label="Different strain (mix-up / rename)">{other.map(x => <option key={x.id} value={x.id}>{x.metrc_name.replace(/^Lifted Farms /, '')}</option>)}</optgroup>}
             </> })()}
         </Select>
-        {c.isAdmin && <button className="ghost small" onClick={() => setNewFor(newFor === i ? null : i)}>+ New item</button>}
+        {c.isAdmin && <button className="ghost small nowrap" onClick={() => setNewFor(newFor === i ? null : i)}>+ New item</button>}
       </div>}
       {cat && newFor === i && year && <NewRunItem c={c} year={year} finish={cat.fins[r.product]} product={r.product} strains={cat.strains} site0={cat.site} strain0={runStrainId}
         onMade={async id => { await loadCat(); setRows(rs => rs.map((x, j) => j === i ? { ...x, item_id: id } : x)); setNewFor(null) }} onCancel={() => setNewFor(null)} />}
-      <div className="row noline">
+      <div className="row noline runout">
         <Select value={r.product} onChange={e => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, product: e.target.value as Product, item_id: null } : x)) }}>{OUTS[run.kind].map(k => <option key={k} value={k}>{PL(k)}{run.kind === 'buck' && k === 'trim' ? ' (buck trim)' : ''}</option>)}</Select>
         <NumIn value={r.lbs} placeholder="lbs" onChange={v => { setTouched(true); setRows(rs => rs.map((x, j) => j === i ? { ...x, lbs: v } : x)) }} />
         {/* 172: tags for what came out come from the license METRC has the first input package on (e.g. GVR processing for a CCP return) */}

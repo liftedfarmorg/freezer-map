@@ -46,3 +46,13 @@
   .runitem { flex-wrap: wrap; }
   .runitem > :first-child { flex-basis: 100%; }
 }
+.runitem-name { margin-top: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.runitem-name b { font-weight: 600; }
+.runitem { margin-top: 4px; }
+@media (max-width: 640px) {
+  .runitem { flex-wrap: nowrap; }
+  .runitem > :first-child { flex-basis: auto; }
+  .runout { flex-wrap: wrap; }
+  .runout > :nth-child(1), .runout > :nth-child(2) { flex: 1 1 40%; min-width: 0; }
+  .runout > :nth-child(3) { flex: 1 1 100%; min-width: 0; }
+}
