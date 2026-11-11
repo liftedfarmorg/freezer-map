@@ -5,7 +5,9 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NCtx } from './calc'
 import { GEN_LABEL, USE_LABEL, fmtD, live, n0, strainKey, sum, today, useOf } from './calc'
-import type { NData } from './types'
+import type { NData, NPlanting } from './types'
+import { FlipSheet, MoveSheet, PlantDonors } from './flipmove'
+import type { FlipItem, MoveItem } from './flipmove'
 import { DateIn, F, NumIn, Pick, SaveBar, Sheet, StrainList, TextIn } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
@@ -43,7 +45,7 @@ interface Pheno {
 interface Obs { id: number; pheno_id: number; stage: string; observed_on: string; traits: Record<string, string | number | null>; notes: string | null; observer: string | null }
 interface DonorBatch { id: number; project: string; label: string; strains: string | null; plants: number | null; cut_on: string | null; room_id: number | null; to_room_on: string | null; move_in_on: string | null; notes: string | null }
 interface Score { id: number; pheno_id: number; scorer: string; scored_on: string; vigor: number | null; structure: number | null; aroma: number | null; color: number | null; tackiness: number | null; jar: number | null; notes: string | null }
-interface BData { runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg>; photos: Map<number, number>; pics: Map<number, { path: string; kind: string }[]> }
+interface BData { plantings: NPlanting[]; runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg>; photos: Map<number, number>; pics: Map<number, { path: string; kind: string }[]> }
 
 const TRAITS = [['vigor', 'Vigor'], ['structure', 'Structure'], ['aroma', 'Aroma'], ['color', 'Color'], ['tackiness', 'Tackiness'], ['jar', 'Jar test']] as const
 type Trait = typeof TRAITS[number][0]
@@ -67,7 +69,9 @@ const cross = (s: SeedLot) => [s.mother_strain, s.father_strain].filter(Boolean)
 const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }
 const f1 = (x: number | null) => (x == null ? '' : x.toFixed(1))
 
-export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string; admin?: boolean
+export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refresh }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string; admin?: boolean
+  /** 339: reload the nursery data (packages left after a planting) */
+  refresh?: () => Promise<void>
   /** 281: a scanned plant tag: open its pheno (flowering plant) or its pollination run (flowering planting) */
   openTag?: { pheno?: number; hunt?: number; run?: number; n: number } | null }) {
   const [tab, setTab] = useState<'runs' | 'seeds' | 'hunts'>(() => (lastPheno() ? 'hunts' : 'runs'))
@@ -87,12 +91,13 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
     const want = [...new Set((seeds as SeedLot[]).flatMap(z => z.package_tags ?? []))]
     const pk = want.length ? await sb.from('metrc_packages').select('label,item,qty,uom').in('label', want) : { data: [] }
     const pkgs = new Map(((pk.data ?? []) as SeedPkg[]).map(z => [z.label, z]))
+    const pl = await pageAll((a, z) => sb.from('nursery_plantings').select('*').order('id').range(a, z))   // 339
     // 337: photo count per pheno (before 337 runs there's no table: no counts)
     const ph = await pageAll((a, z) => sb.from('pheno_photos').select('pheno_id,file_path,kind').order('id', { ascending: false }).range(a, z))
     const photos = new Map<number, number>(); const pics = new Map<number, { path: string; kind: string }[]>()
     for (const r of ((ph.error ? [] : ph.data ?? []) as { pheno_id: number; file_path: string; kind: string }[])) {
       photos.set(r.pheno_id, (photos.get(r.pheno_id) ?? 0) + 1); const l = pics.get(r.pheno_id) ?? []; l.push({ path: r.file_path, kind: r.kind }); pics.set(r.pheno_id, l) }
-    setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos, pics }); setErr(null)
+    setB({ plantings: ((pl.error ? [] : pl.data ?? []) as NPlanting[]), runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos, pics }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
   const [openPheno, setOpenPheno] = useState<number | null>(() => lastPheno()?.pheno ?? null)
@@ -101,7 +106,8 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
     if (openTag.hunt != null) { setTab('hunts'); setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
     else if (openTag.run != null) { const r = b.runs.find(x => x.id === openTag.run); if (r) { setTab('runs'); setHuntView(null); setRun(r) } }
   }, [b, openTag?.n])
-  const saved = async (m: string) => { await load(); if (m) flash(t(m)) }  // '' = quiet reload (photo count changed)
+  const saved = async (m: string) => { await Promise.all([load(), m ? refresh?.() : undefined]); if (m) flash(t(m)) }  // '' = quiet reload (photo count changed)
+  const [donorAct, setDonorAct] = useState<{ pj: string; kind: 'plant' | 'move' | 'flip' } | null>(null)
   if (err) return <div className="warnbox">{err}</div>
   if (!b) return <p className="muted">{t('Loading…')}</p>
   if (huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView key={`${h.id}-${openPheno ?? ''}`} sb={sb} d={d} c={c} b={b} h={h} me={me} admin={admin} flash={flash} openPheno={openPheno} onBack={() => { setHuntView(null); setOpenPheno(null) }} onSaved={saved} onEdit={() => setHunt(h)} /> }
@@ -120,7 +126,11 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
       {!b.runs.length ? <p className="muted">{t('No pollination runs yet.')}</p> : [...projects, null].map(pj => { const rr = b.runs.filter(r => (r.project ?? null) === pj); if (!rr.length) return null
         const dbs = pj ? b.donors.filter(x => x.project === pj) : []
         return <Fragment key={pj ?? '-'}>
-        {pj && <h3 className="row between"><span>{pj}</span><button className="ghost small" onClick={() => setDonor({ project: pj, room_id: d.rooms.find(r => r.name === 'Trailer 3')?.id ?? null })}>{t('+ Donor batch')}</button></h3>}
+        {pj && <h3 className="row between wrap"><span>{pj}</span><span className="row wrap">
+          {dbs.some(x => !b.plantings.some(p => p.use === 'donors' && p.use_ref === x.id)) && <button className="ghost small" onClick={() => setDonorAct({ pj, kind: 'plant' })}>{t('Plant donors…')}</button>}
+          {b.plantings.some(p => p.use === 'donors' && dbs.some(x => x.id === p.use_ref)) && <><button className="ghost small" onClick={() => setDonorAct({ pj, kind: 'move' })}>{t('Move donors…')}</button>
+            <button className="ghost small" onClick={() => setDonorAct({ pj, kind: 'flip' })}>{t('Flip donors…')}</button></>}
+          <button className="ghost small" onClick={() => setDonor({ project: pj, room_id: d.rooms.find(r => r.name === 'Trailer 3')?.id ?? null })}>{t('+ Donor batch')}</button></span></h3>}
         <div className="cwrap"><table className="ctable">
         <thead><tr><th>{t('Season')}</th><th>{t('Run')}</th><th>{t('Trailer')}</th><th>{t('Donor')}</th><th className="num">{t('Receivers')}</th><th className="num">{t('Plants')}</th><th>{t('Flipped')}</th><th>{t('Pollinated')}</th><th>{t('Seeds harvested')}</th><th className="num">{t('Seeds')}</th><th>{t('Status')}</th></tr></thead>
         <tbody>{[...rr].sort((x, y) => y.season - x.season || y.id - x.id).map(r => { const rs = b.receivers.filter(z => z.run_id === r.id); const sl = b.seeds.filter(s => s.run_id === r.id)
@@ -129,9 +139,11 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
             <td className="nowrap">{fmtD(r.harvested_on)}</td><td className="num">{sl.length ? n0(sum(sl.map(s => s.seeds ?? 0))) : ''}</td><td><span className="pill">{cap(r.status)}</span></td></tr> })}</tbody>
       </table></div>
         {dbs.length > 0 && <div className="cwrap tight"><table className="ctable">
-          <thead><tr><th>{t('Donor')}</th><th>{t('Batch')}</th><th className="num">{t('Plants')}</th><th>{t('Cut')}</th><th>{t('Flower in')}</th><th>{t('Transplant')}</th><th>{t('Into receiver trailers')}</th></tr></thead>
-          <tbody>{[...dbs].sort((x, y) => (x.strains ?? '').localeCompare(y.strains ?? '') || x.label.localeCompare(y.label)).map(x => <tr key={x.id} className="tap" onClick={() => setDonor(x)}><td><b>{x.strains}</b></td><td>{x.label}</td><td className="num">{n0(x.plants)}</td>
-            <td className="nowrap">{fmtD(x.cut_on)}</td><td>{c.room(x.room_id)}</td><td className="nowrap">{fmtD(x.to_room_on)}</td><td className="nowrap">{fmtD(x.move_in_on)}</td></tr>)}</tbody>
+          <thead><tr><th>{t('Donor')}</th><th>{t('Batch')}</th><th className="num">{t('Plants')}</th><th>{t('Now')}</th><th>{t('Cut')}</th><th>{t('Flower in')}</th><th>{t('Transplant')}</th><th>{t('Into receiver trailers')}</th></tr></thead>
+          <tbody>{[...dbs].sort((x, y) => (x.strains ?? '~').localeCompare(y.strains ?? '~') || x.label.localeCompare(y.label)).map((x, i) => { const pl = b.plantings.find(p => p.use === 'donors' && p.use_ref === x.id)
+            return <tr key={x.id} className="tap" onClick={() => setDonor(x)}><td><b>{x.strains || t('Donor {n}', { n: i + 1 })}</b></td><td>{x.label}</td><td className="num">{n0(x.plants)}</td>
+            <td className="small">{pl ? <>{c.room(pl.room_id)} · <span className="mono">…{pl.plant_tag.slice(-6)}</span>{pl.flipped_on ? ` · ${t('flowering')}` : ''}</> : <span className="muted">{t('not planted')}</span>}</td>
+            <td className="nowrap">{fmtD(x.cut_on)}</td><td>{c.room(x.room_id)}</td><td className="nowrap">{fmtD(x.to_room_on)}</td><td className="nowrap">{fmtD(x.move_in_on)}</td></tr> })}</tbody>
         </table></div>}
         </Fragment> })}
     </>}
@@ -152,6 +164,15 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
           <td className="num">{ps.filter(p => b.scores.some(z => z.pheno_id === p.id)).length}</td><td className="num">{ps.filter(p => p.status === 'keeper').length || ''}</td><td><span className="pill">{cap(h.status)}</span></td></tr> })}</tbody>
     </table></div>)}
     {run && <RunSheet sb={sb} d={d} c={c} b={b} r0={run} flash={flash} onClose={() => setRun(null)} onSaved={saved} />}
+    {donorAct && (() => { const dbs = b.donors.filter(x => x.project === donorAct.pj)
+      const pls = b.plantings.filter(p => p.use === 'donors' && dbs.some(x => x.id === p.use_ref))
+      const name = (p: NPlanting) => { const x = dbs.find(z => z.id === p.use_ref); return `${x?.strains ?? p.strain} · ${x?.label ?? ''}` }
+      const done = async (m: string) => { setDonorAct(null); await saved(m) }
+      if (donorAct.kind === 'plant') return <PlantDonors sb={sb} d={d} c={c} rows={dbs.filter(x => !b.plantings.some(p => p.use === 'donors' && p.use_ref === x.id))} flash={flash} onClose={() => setDonorAct(null)} onDone={done} />
+      if (donorAct.kind === 'move') return <MoveSheet sb={sb} d={d} title={t('Move donors')} items={pls.map(p => ({ planting: p, label: name(p) }) as MoveItem)}
+        suggest={pls.every(p => p.room_id === d.rooms.find(r => r.name === 'Trailer 3')?.id) ? null : d.rooms.find(r => r.name === 'Trailer 3')?.id ?? null} flash={flash} onClose={() => setDonorAct(null)} onDone={done} />
+      return <FlipSheet sb={sb} d={d} title={t('Flip donors to Flowering')} items={pls.filter(p => !p.flipped_on).map(p => ({ key: `p${p.id}`, label: name(p), where: c.room(p.room_id), max: p.plants, planting: p.id }) as FlipItem)} flash={flash} onClose={() => setDonorAct(null)} onDone={done} />
+    })()}
     {lot && <SeedSheet sb={sb} d={d} s0={lot} flash={flash} onClose={() => setLot(null)} onSaved={saved} />}
     {donor && <DonorSheet sb={sb} d={d} x0={donor} flash={flash} onClose={() => setDonor(null)} onSaved={saved} />}
     {hunt && <HuntSheet sb={sb} d={d} b={b} h0={hunt} flash={flash} onClose={() => setHunt(null)} onSaved={async (m, id) => { await saved(m); if (id) setHuntView(id) }} />}
@@ -164,12 +185,14 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
   const [busy, setBusy] = useState(false)
   const [pick, setPick] = useState(false)
   const [plantR, setPlantR] = useState(false)
+  const [recAct, setRecAct] = useState<'move' | 'flip' | null>(null)
   const set = (v: Partial<Run>) => setX(s => ({ ...s, ...v }))
   const trailers = d.rooms.filter(r => r.kind === 'trailer' && (r.active || r.id === x.room_id || r.id === x.donor_room_id))
   const donorLots = d.mothers.filter(m => m.status === 'active' && x.donor_strain && strainKey(m.strain) === strainKey(x.donor_strain))
   const donorBatches = d.batches.filter(z => x.donor_strain && strainKey(z.strain) === strainKey(x.donor_strain) && (z.stage === 'rooting' || z.stage === 'ready' || z.id === x.donor_batch_id))
   const seedsFor = (id?: number) => b.seeds.find(s => s.receiver_id === id)
   const shown = recs.filter(z => !z._del)
+  const recPl = b.plantings.filter(p => p.use === 'receivers' && p.use_ref === x.id)
   async function save() {
     setBusy(true)
     try {
@@ -223,7 +246,9 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
         <F label={t('Pollinated (donors in)')}><DateIn value={x.pollinated_on} onChange={v => set({ pollinated_on: v })} /></F>
         <F label={t('Seeds harvested')}><DateIn value={x.harvested_on} onChange={v => set({ harvested_on: v })} /></F>
       </div>
-      <h3 className="row between"><span>{t('Receivers')} <span className="muted small">{shown.length} varieties · {n0(sum(shown.map(z => z.plants)))} plants</span></span><span className="row">{x.id && recs.some(z => z.id && !z._del && !z.planting_id) && <button className="primary small" onClick={() => setPlantR(true)}>{t('Plant receivers…')}</button>}<button className="ghost small" onClick={() => setPick(true)}>{t('+ Add receivers…')}</button></span></h3>
+      <h3 className="row between"><span>{t('Receivers')} <span className="muted small">{shown.length} varieties · {n0(sum(shown.map(z => z.plants)))} plants</span></span><span className="row wrap">{x.id && recs.some(z => z.id && !z._del && !z.planting_id) && <button className="primary small" onClick={() => setPlantR(true)}>{t('Plant receivers…')}</button>}
+        {x.id && recPl.length > 0 && <button className="ghost small" onClick={() => setRecAct('move')}>{t('Move receivers…')}</button>}
+        {x.id && recPl.some(p => !p.flipped_on) && <button className="ghost small" onClick={() => setRecAct('flip')}>{t('Flip receivers…')}</button>}<button className="ghost small" onClick={() => setPick(true)}>{t('+ Add receivers…')}</button></span></h3>
       {shown.length > 0 && <div className="cwrap tight"><table className="ctable">
         <thead><tr><th>{t('Receiver')}</th><th>{t('From')}</th><th className="num">{t('Plants')}</th><th>{t('Tag')}</th><th className="num">{t('Seeds')}</th><th /></tr></thead>
         <tbody>{recs.map((z, i) => z._del ? null : <tr key={z.id ?? `n${i}`}><td>{z.strain}</td>
@@ -236,6 +261,10 @@ function RunSheet({ sb, d, c, b, r0, flash, onClose, onSaved }: { sb: SupabaseCl
       <F label={t('Notes')}><TextIn value={x.notes} onChange={v => set({ notes: v })} /></F>
       <SaveBar busy={busy} disabled={!x.name?.trim()} saveLabel={x.id ? 'Save' : 'Add run'} onCancel={onClose} onSave={save}
         onDelete={x.id && !b.seeds.some(s => s.run_id === x.id) ? async () => { const { error } = await sb.from('breed_runs').delete().eq('id', x.id!); if (error) flash(error.message, true); else { onClose(); await onSaved('Run deleted') } } : undefined} />
+      {recAct === 'move' && <MoveSheet sb={sb} d={d} title={t('Move receivers')} items={recPl.map(p => ({ planting: p, label: p.strain }) as MoveItem)} suggest={x.room_id ?? null} flash={flash}
+        onClose={() => setRecAct(null)} onDone={async m => { setRecAct(null); onClose(); await onSaved(m) }} />}
+      {recAct === 'flip' && <FlipSheet sb={sb} d={d} title={t('Flip receivers to Flowering')} items={recPl.filter(p => !p.flipped_on).map(p => ({ key: `p${p.id}`, label: p.strain, where: c.room(p.room_id), max: p.plants, planting: p.id }) as FlipItem)} flash={flash}
+        onClose={() => setRecAct(null)} onDone={async m => { setRecAct(null); onClose(); await onSaved(m) }} />}
       {plantR && x.id && <PlantReceivers sb={sb} d={d} c={c} run={{ ...(r0 as Run), id: x.id }} recs={recs.filter(z => z.id && !z._del && !z.planting_id)} flash={flash}
         onClose={() => setPlantR(false)} onDone={async m => { setPlantR(false); onClose(); await onSaved(m) }} />}
       {pick && <ReceiverPicker d={d} c={c} have={new Set(shown.map(z => strainKey(z.strain)))} onClose={() => setPick(false)}
@@ -454,6 +483,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   const [rank, setRankS] = useState<'pheno' | 'score'>(() => { try { return localStorage.getItem('nur.phenoSort') === 'score' ? 'score' : 'pheno' } catch { return 'pheno' } })
   const setRank = (v: 'pheno' | 'score') => { setRankS(v); try { localStorage.setItem('nur.phenoSort', v) } catch { /* private */ } }
   const [tying, setTying] = useState(false)
+  const [flipLots, setFlipLots] = useState(false)   // 339
   const [addN, setAddN] = useState<number | null>(null)
   const [addLot, setAddLot] = useState<number | null>(h.seed_lot_id)
   const [addRoom, setAddRoom] = useState<number | null>(h.room_id)
@@ -538,7 +568,14 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
       <Pick value={who_} blank={t('Group average')} options={scorers.map(z => ({ v: z, l: z === me ? t('My scorecard') : who(z) }))} onChange={setWho} />
     </div>
     {(untagged > 0 || unconf > 0) && <p className="muted small-note">{t('{a} growing phenos without a METRC tag · {b} tags not confirmed yet', { a: n0(untagged), b: n0(unconf) })}
-      {untagged > 0 && <> <button className="ghost small" disabled={tying} onClick={tie}>{t(tying ? 'Tying…' : 'Tie tags from METRC')}</button></>}</p>}
+      {untagged > 0 && <> <button className="ghost small" disabled={tying} onClick={tie}>{t(tying ? 'Tying…' : 'Tie tags from METRC')}</button>
+        <button className="ghost small" onClick={() => setFlipLots(true)}>{t('Flip lots…')}</button></>}</p>}
+    {flipLots && (() => { const g = new Map<string, { lot: string; n: number; room: number | null; seed: number | null }>()
+      for (const p of b.phenos) if (p.hunt_id === h.id && p.lot_tag && !p.plant_tag && ['growing', 'maybe', 'keeper'].includes(p.status)) {
+        const k = p.lot_tag.toUpperCase(); const e = g.get(k) ?? { lot: k, n: 0, room: p.room_id, seed: p.seed_lot_id }; e.n++; g.set(k, e) }
+      const items = [...g.values()].map(e => { const sl = b.seeds.find(z => z.id === e.seed); return { key: e.lot, label: `${sl ? cross(sl) : t('Lot')} · …${e.lot.slice(-6)}`, where: c.room(e.room), max: e.n, hunt: h.id, lot: e.lot } as FlipItem })
+        .sort((a, z) => a.where.localeCompare(z.where) || a.label.localeCompare(z.label))
+      return <FlipSheet sb={sb} d={d} title={t('Flip pheno lots to Flowering')} items={items} flash={flash} onClose={() => setFlipLots(false)} onDone={async m => { setFlipLots(false); await onSaved(m) }} /> })()}
     <details className="addbox"><summary>{t('+ Number phenos')}</summary><span className="row wrap addpheno">
       {!h.seed_lot_id && <Pick value={addLot} blank={t('Cross…')} options={b.seeds.map(z => ({ v: z.id, l: cross(z) }))} onChange={setAddLot} />}
       <Pick value={addRoom} blank={t('Where…')} options={d.rooms.filter(r => r.active).map(r => ({ v: r.id, l: r.name }))} onChange={setAddRoom} />

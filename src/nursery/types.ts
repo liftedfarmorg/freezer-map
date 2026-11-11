@@ -22,7 +22,9 @@ export interface Batch {
 }
 export type NUse = 'g1' | 'g2' | 'g3' | 'g4' | 'phenos' | 'keepers' | 'trials' | 'receivers' | 'donors'
 /** 337: an immature plant batch planted from a package (receivers, donors, phenos, trials; moms are mother lots) */
-export interface NPlanting { id: number; site: string; batch_id: number; use: NUse; use_ref: number | null; receiver_id: number | null; room_id: number | null; bed: string | null; strain: string; plants: number; plant_tag: string; planted_on: string; action_id: number | null }
+export interface NPlanting { id: number; site: string; batch_id: number; use: NUse; use_ref: number | null; receiver_id: number | null; room_id: number | null; bed: string | null; strain: string; plants: number; plant_tag: string; planted_on: string; action_id: number | null
+  /** 339: flipped to Flowering: when, how many, their plant tags */
+  flipped_on?: string | null; flipped_n?: number | null; flower_tags?: string[] }
 /** a nursery package as METRC has it (last pull) */
 export interface MPkg { label: string; item: string; qty: number | null; uom: string | null; state: string }
 export interface NRun { id: number; name: string; room_id: number | null; status: string; season: number; donor_strain: string | null }

@@ -167,6 +167,61 @@ export async function sendNurseryPlant(job, ctx) {
   return { state: 'sent', request: body, response: resp, info: `METRC: ${what}` }
 }
 
+/** Move (339): an immature batch, or once flipped its flowering plants, to the place picked in the app */
+export async function sendNurseryMove(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const loc = await mappedLocation('room', d.room_id, lic)
+  if (!loc) throw new Error(`Match nursery location "${d.room ?? d.room_id}" to a METRC location (Compliance > METRC > Mapping)`)
+  const date = day(d.on, job)
+  if (d.what === 'plants') {
+    const tags = (d.tags ?? []).map(up)
+    if (!tags.length) throw new Error('No plant tags on this move')
+    const body = [], already = []
+    for (const t of tags) {
+      const pl = await first('/v2/plants/flowering', { licenseNumber: lic, filter: `label__eq:${t}` }).catch(() => null)
+      if (!pl || up(pl.label) !== t) throw new Wait(`${t} isn't a flowering plant on ${lic} yet (its flip still going in?)`)
+      if (lc(pl.locationName) === lc(loc.location)) { already.push(t); continue }
+      body.push({ id: pl.id, locationId: loc.location_id, actualDate: date })
+    }
+    if (!body.length) throw new Skip(`All ${tags.length} plants are already in ${loc.location}`)
+    const resp = await write(ctx, '/v2/plants/change-locations', lic, body)
+    const what = `${body.length} flowering plants (${tags[0]}..${tags[tags.length - 1].slice(-6)}) to ${loc.location}`
+    return { state: ctx.live ? 'sent' : 'checked', request: body, response: resp, info: `${ctx.live ? 'METRC' : 'Dry run OK'}: ${what}` }
+  }
+  const lot = up(d.lot_tag ?? job.tag)
+  const b = await plantBatch(lic, lot)
+  if (!b) throw new Wait(`Plant batch ${lot} isn't in METRC on ${lic} yet (its planting still going in?)`)
+  if (lc(b.locationName) === lc(loc.location)) throw new Skip(`${lot} is already in ${loc.location}`)
+  const body = [{ id: b.id, locationId: loc.location_id, actualDate: date }]
+  const resp = await write(ctx, '/v2/plantbatches/change-locations', lic, body)
+  const what = `${lot} (${b.untrackedCount ?? '?'} plants) ${b.locationName ?? '?'} > ${loc.location}`
+  return { state: ctx.live ? 'sent' : 'checked', request: body, response: resp, info: `${ctx.live ? 'METRC' : 'Dry run OK'}: ${what}` }
+}
+
+/** Flip (339): an immature batch to Flowering, one plant tag each from a consecutive run (donors, receivers, pheno hunt lots) */
+export async function sendNurseryFlip(job, ctx) {
+  const d = job.details || {}
+  const lic = job.license
+  const lot = up(d.lot_tag ?? job.tag), n = Number(d.count)
+  const tags = (d.tags ?? []).map(up)
+  if (!(n > 0) || tags.length !== n) throw new Error('This flip is missing its count or tags')
+  const first1 = await first('/v2/plants/flowering', { licenseNumber: lic, filter: `label__eq:${tags[0]}` }).catch(() => null)
+  if (first1 && up(first1.label) === tags[0]) throw new Skip(`METRC already has ${tags[0]} flowering`)
+  const b = await plantBatch(lic, lot)
+  if (!b) throw new Wait(`Plant batch ${lot} isn't in METRC on ${lic} yet (its planting still going in?)`)
+  if (Number(b.untrackedCount) < n) throw new Error(`METRC has ${b.untrackedCount} immature plants in ${lot}; the flip is ${n}`)
+  const loc = await mappedLocation('room', d.room_id, lic)
+  if (!loc) throw new Error(`Match nursery location "${d.room ?? d.room_id}" to a METRC location (Compliance > METRC > Mapping)`)
+  const path = '/v2/plantbatches/promote/source-tags'
+  const [a, z] = await Promise.all([tagIdFor(ctx, lic, path, tags[0]), tagIdFor(ctx, lic, path, tags[n - 1])])
+  if (Number(z) - Number(a) !== n - 1) throw new Error(`METRC's tag ids for ${tags[0]}..${tags[n - 1]} aren't in sequence, so they can't go in one flip. Pick another starting tag.`)
+  const body = [{ growthDate: day(d.on, job), growthPhase: 'Flowering', id: b.id, newLocationId: loc.location_id, plantsCount: n, startingTagId: a, endingTagId: z }]
+  const resp = await write(ctx, '/v2/plantbatches/promote', lic, body)
+  const what = `${n} ${d.strain ?? ''} from ${lot} to Flowering in ${loc.location}, tags ${tags[0]}..${tags[n - 1].slice(-6)}`
+  return { state: ctx.live ? 'sent' : 'checked', request: body, response: resp, info: `${ctx.live ? 'METRC' : 'Dry run OK'}: ${what}` }
+}
+
 async function destroyFromBatch(ctx, lic, batch, count, note, date) {
   const inp = await inputs(ctx, lic, '/v2/plantbatches/destroy/inputs')
   const reason = reasonFrom(inp.actionReasons, await setting('comp.metrc_plant_waste_reason', ''), 'destroying plants', 'Plant loss reason')
