@@ -1,5 +1,5 @@
 import { AddReservesSheet } from './addreserves'
-import { ReserveEditor } from './reseditor'
+import { ReserveEditor, Stepper } from './reseditor'
 import { ListInput, Select } from './combo'
 import { SampleHolds, SampleSheet } from './samples'
 import { CustomerDashboard } from './statement'
@@ -75,6 +75,13 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   // RES-5: By strain table sort + which strain is open
   const [ssort, setSsort] = useState<{ k: 'name' | 'cust' | 'have' | 'pend' | 'left' | 'free'; up: boolean }>({ k: 'name', up: true })
   const [sOpen, setSOpen] = useState<string | null>(null)
+  // RES-13: change reserves right on By strain (Sales Admins). Changes are kept per reserve id across strains,
+  // one Save for all of them, and Save asks for the reason in a pop-up (customers see it in Reserve History).
+  const [sEd, setSEd] = useState<Record<number, number>>({})
+  const [sStep, setSStepRaw] = useState(() => { try { return Number(localStorage.getItem('fm.res.step')) || 10 } catch { return 10 } })
+  const setSStep = (n: number) => { setSStepRaw(n); try { localStorage.setItem('fm.res.step', String(n)) } catch { /* private mode */ } }
+  const [why, setWhy] = useState<string | null>(null)   // null = pop-up closed
+  const [sBusy, setSBusy] = useState(false)
   const [cterms, setCterms] = useState<CustomerTerms[]>([])
   useEffect(() => { backend.listTerms().then(setCterms).catch(() => {}) }, [])
   const [adding, setAdding] = useState<{ preset: number | null } | null>(null)   // RES-1
@@ -97,6 +104,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   const closeCust = () => { setOpen(null); requestAnimationFrame(() => scrollTop(listY.current)) }
   useBack(mode === 'customer' && open != null && open > 0, closeCust)
   useEffect(() => { setOpen(null) }, [mode])
+  useEffect(() => { setSEd({}); setWhy(null) }, [mode, ry, year])
 
   const cust = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers])
   const cname = (id: number) => cust.get(id)?.name ?? `#${id}`
@@ -278,31 +286,119 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
       {mode === 'strain' && !future && (
         <>
           {(() => {
-            const rows = byStrain.map(x => ({ ...x, cust: x.rs.filter(r => Number(r.remaining) > 0 || Number(r.reserved) > 0).length }))
+            // RES-13: what one reserve row can do. min = can't go under shipped + open SOs; a strain's reserves can only
+            // grow by what's free (or by what this batch cuts from other customers on the same strain)
+            const sh = (r: Balance) => Number(r.shipped) + Number(r.pending)
+            const remAfter = (r: Balance) => { const d = sEd[r.id] ?? 0; return d ? Math.max(0, Number(r.reserved) + d - sh(r)) : Number(r.remaining) }
+            const remD = (rs: Balance[]) => rs.reduce((a, r) => a + (sEd[r.id] ? remAfter(r) - Number(r.remaining) : 0), 0)
+            const rows = byStrain.map(x => {
+              const dRem = remD(x.rs)
+              return { ...x, cust: x.rs.filter(r => Number(r.remaining) > 0 || Number(r.reserved) > 0).length, dRem, nFree: x.free - dRem, nLeft: x.left + dRem,
+                over: dRem > Math.max(x.free, 0), nCh: x.rs.filter(r => sEd[r.id]).length }
+            })
             const v = (x: typeof rows[number]) => ssort.k === 'name' ? x.s.toLowerCase() : ssort.k === 'cust' ? x.cust : x[ssort.k]
             rows.sort((a, b) => { const p = v(a), q2 = v(b); const d = typeof p === 'string' ? p.localeCompare(q2 as string) : (p as number) - (q2 as number); return ssort.up ? d : -d })
-            const tot = rows.reduce((t, x) => ({ have: t.have + x.have, pend: t.pend + x.pend, left: t.left + x.left, free: t.free + x.free }), { have: 0, pend: 0, left: 0, free: 0 })
+            const tot = rows.reduce((t, x) => ({ have: t.have + x.have, pend: t.pend + x.pend, left: t.left + x.nLeft, free: t.free + x.nFree }), { have: 0, pend: 0, left: 0, free: 0 })
             const th = (k: typeof ssort.k, label: string, num = true) => <th className={`${num ? 'num ' : ''}sortth${ssort.k === k ? ' on' : ''}`} aria-sort={ssort.k === k ? (ssort.up ? 'ascending' : 'descending') : 'none'}>
               <button className="linkbtn" onClick={() => setSsort(o => ({ k, up: o.k === k ? !o.up : k === 'name' }))}>{label}{ssort.k === k ? (ssort.up ? ' ▲' : ' ▼') : ''}</button></th>
-            return <div className="cwrap"><table className="ctable restbl resstr">
+            const setD = (id: number, n: number) => setSEd(m => { const x = { ...m }; if (n) x[id] = n; else delete x[id]; return x })
+            // every change on the page, with what's wrong with it (if anything)
+            const all = rows.flatMap(x => x.rs.filter(r => sEd[r.id]).map(r => {
+              const d = sEd[r.id], to = Number(r.reserved) + d
+              const err = to < sh(r) && d < 0 ? `Can't go under ${n0(sh(r))} (shipped + open SOs)` : x.over && d > 0 ? `${x.s} only has ${n0(Math.max(x.free, 0))} free` : ''
+              return { x, r, d, to, err }
+            }))
+            const bad = all.filter(c => c.err)
+            const net = all.reduce((a, c) => a + c.d, 0)
+            const nStr = new Set(all.map(c => c.x.s)).size
+            // Spread a strain's shortfall over its customers by what they have left (whole 10 lb boxes)
+            const spread = (x: typeof rows[number]) => {
+              const need = -x.free, rs = x.rs.filter(r => Number(r.remaining) > 0), totRem = rs.reduce((a, r) => a + Number(r.remaining), 0)
+              if (need <= 0 || !totRem) return
+              const cut = new Map(rs.map(r => [r.id, Math.min(Number(r.remaining), Math.floor(Number(r.remaining) / totRem * need / 10) * 10)]))
+              let got = [...cut.values()].reduce((a, b) => a + b, 0)
+              const big = [...rs].sort((a, b) => Number(b.remaining) - Number(a.remaining))
+              while (got < need) {   // top up 10 lbs at a time, biggest left first, until the strain is back to 0 or better
+                let moved = false
+                for (const r of big) {
+                  if (got >= need) break
+                  const c = cut.get(r.id)!, add = Math.min(10, Number(r.remaining) - c)
+                  if (add > 0) { cut.set(r.id, c + add); got += add; moved = true }
+                }
+                if (!moved) break
+              }
+              setSEd(m => { const y = { ...m }; for (const r of x.rs) delete y[r.id]; for (const [id, c] of cut) if (c) y[id] = -c; return y })
+            }
+            return <>
+              {isAdmin && <div className="row toolbar" style={{ alignItems: 'center', gap: 10 }}>
+                <span className="muted small">Open a strain to change its customers' reserves.</span>
+                <div className="rstepset" role="group" aria-label="How much + and − move" style={{ marginLeft: 'auto' }}>
+                  <span>+/− step</span>{[10, 50, 100, 650].map(n => <button key={n} aria-pressed={sStep === n} className={sStep === n ? 'on' : ''} onClick={() => setSStep(n)}>{n}</button>)}<span>lbs</span></div>
+              </div>}
+              <div className="cwrap"><table className="ctable restbl resstr">
               <thead><tr>{th('name', 'Strain', false)}{th('cust', 'Customers')}{th('have', 'On hand')}{th('pend', 'Pending')}{th('left', 'Res. left')}{th('free', 'Free')}</tr></thead>
               <tbody>{rows.map(x => [
                 <tr key={x.s} className={`tap ${sOpen === x.s ? 'open' : ''}`} onClick={() => setSOpen(sOpen === x.s ? null : x.s)}>
-                  <td><span onClick={e => e.stopPropagation()}><StrainLink name={x.s} /></span>{x.hidden && <> <span className="pill old">hidden</span></>}</td>
+                  <td><span onClick={e => e.stopPropagation()}><StrainLink name={x.s} /></span>{x.hidden && <> <span className="pill old">hidden</span></>}
+                    {x.nCh > 0 && <> <span className="pill newp">{x.nCh} change{x.nCh === 1 ? '' : 's'}</span></>}</td>
                   <td className="num c-cu" data-l="customers ">{x.cust || <span className="muted">0</span>}{x.cust > 0 && <span className="muted"> {sOpen === x.s ? '▴' : '▾'}</span>}</td>
-                  <td className="num c-st" data-l="on hand ">{n0(x.have)}</td><td className="num c-st" data-l="pending ">{x.pend ? n0(x.pend) : <span className="muted">0</span>}</td><td className="num c-st" data-l="res. left ">{n0(x.left)}</td>
-                  <td className={`num c-fr ${x.free < 0 ? 'warn-t' : ''}`} data-l="free "><b>{n0(x.free)}</b>{x.held > 0 && <div className="muted small">{n0(x.held)} held</div>}</td>
+                  <td className="num c-st" data-l="on hand ">{n0(x.have)}</td><td className="num c-st" data-l="pending ">{x.pend ? n0(x.pend) : <span className="muted">0</span>}</td>
+                  <td className="num c-st" data-l="res. left ">{x.dRem ? <><span className="muted">{n0(x.left)} →</span> <b>{n0(x.nLeft)}</b></> : n0(x.left)}</td>
+                  <td className={`num c-fr ${x.nFree < 0 ? 'warn-t' : x.dRem ? 'ok-t' : ''}`} data-l="free ">{x.dRem ? <><span className="muted">{n0(x.free)} →</span> <b>{n0(x.nFree)}</b></> : <b>{n0(x.free)}</b>}{x.held > 0 && <div className="muted small">{n0(x.held)} held</div>}</td>
                 </tr>,
                 sOpen === x.s && x.rs.length > 0 ? <tr key={`${x.s}-c`} className="resx"><td colSpan={6}>
-                  {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => <div key={r.id} className="resxr">
-                    <b>{cname(r.customer_id)}</b>
-                    <span className="muted small">{n0(Number(r.reserved))} reserved · {n0(Number(r.shipped))} shipped{Number(r.pending) > 0 ? ` · ${n0(Number(r.pending))} open SO` : ''}</span>
-                    <b className="nw">{n0(Number(r.remaining))} left</b></div>)}
+                  {isAdmin && x.free < 0 && <div className="resxr" style={{ alignItems: 'center' }}>
+                    <span className={`small ${x.nFree < 0 ? 'warn-t' : 'ok-t'}`} style={{ flex: '1 1 200px' }}>{x.nFree < 0 ? `${n0(-x.nFree)} lbs more promised than on hand.` : `Back to ${n0(x.nFree)} free once saved.`}</span>
+                    <button className="ghost small" onClick={() => spread(x)} title="Fills in cuts by how much each customer has left, in 10 lb boxes. Nothing saves until you press Save.">Spread the shortfall</button>
+                    {x.nCh > 0 && <button className="ghost small" onClick={() => setSEd(m => { const y = { ...m }; for (const r of x.rs) delete y[r.id]; return y })}>Clear</button>}
+                  </div>}
+                  {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => { const d = sEd[r.id] ?? 0, to = Number(r.reserved) + d
+                    const e = d ? all.find(c => c.r.id === r.id)?.err ?? '' : ''
+                    const budget = Math.max(x.free, 0) - (x.dRem - (d ? remAfter(r) - Number(r.remaining) : 0))
+                    return <div key={r.id} className={`resxr ${d ? (e ? 'bad' : 'on') : ''}`}>
+                      <b>{cname(r.customer_id)}</b>
+                      <span className="muted small">{d ? <><b className={e ? 'warn-t' : 'ok-t'}>{n0(Number(r.reserved))} → {n0(to)} reserved</b> · </> : `${n0(Number(r.reserved))} reserved · `}{n0(Number(r.shipped))} shipped{Number(r.pending) > 0 ? ` · ${n0(Number(r.pending))} open SO` : ''}
+                        {e && <span className="warn-t"> · {e}</span>}</span>
+                      <b className="nw">{n0(remAfter(r))} left</b>
+                      {isAdmin && <Stepper val={d} step={sStep} min={Math.min(0, sh(r) - Number(r.reserved))} max={Math.max(0, Number(r.remaining) + budget + sh(r) - Number(r.reserved))}
+                        bad={!!e} label={`${cname(r.customer_id)} ${x.s}`} onChange={n => setD(r.id, n)} />}
+                    </div> })}
                 </td></tr> : null])}</tbody>
               <tfoot><tr><td><b>{rows.length} strain{rows.length === 1 ? '' : 's'}</b></td><td /><td className="num"><b>{n0(tot.have)}</b></td><td className="num">{n0(tot.pend)}</td><td className="num">{n0(tot.left)}</td><td className="num"><b>{n0(tot.free)}</b></td></tr></tfoot>
             </table></div>
+              {isAdmin && all.length > 0 && <div className="rdock">
+                <div className="grow"><b>{all.length} change{all.length === 1 ? '' : 's'} on {nStr} strain{nStr === 1 ? '' : 's'} · {net > 0 ? '+' : net < 0 ? '−' : '±'}{n0(Math.abs(net))} lbs</b>
+                  <div className="muted small rdock-sum">{all.slice(0, 3).map(c => `${cname(c.r.customer_id)} ${c.x.s} ${n0(Number(c.r.reserved))} → ${n0(c.to)}`).join(' · ')}{all.length > 3 ? ` +${all.length - 3} more` : ''}
+                    {bad.length > 0 && <span className="warn-t"> · fix the red lines</span>}</div></div>
+                <button className="ghost" disabled={sBusy} onClick={() => setSEd({})}>Cancel</button>
+                <button className="primary" disabled={sBusy || bad.length > 0} onClick={() => setWhy('')}>{bad.length ? 'Fix the red lines' : `Save ${all.length}…`}</button>
+              </div>}
+              {why != null && <div className="scrim" onClick={() => !sBusy && setWhy(null)}>
+                <div className="dialog resWhy" onClick={e => e.stopPropagation()} role="dialog" aria-label="Reason for the reserve changes">
+                  <h3 style={{ marginTop: 0 }}>Why are these reserves changing?</h3>
+                  <p className="muted small" style={{ marginTop: 0 }}>{all.length} change{all.length === 1 ? '' : 's'}, {net > 0 ? '+' : net < 0 ? '−' : '±'}{n0(Math.abs(net))} lbs. Each customer sees this reason in their Reserve History.</p>
+                  <div style={{ maxHeight: 220, overflow: 'auto', margin: '0 0 10px' }}>{all.map(c => <div key={c.r.id} className="small">{cname(c.r.customer_id)} · {c.x.s}: {n0(Number(c.r.reserved))} → <b>{n0(c.to)}</b></div>)}</div>
+                  <div className="rchips" style={{ marginBottom: 8 }}>{['Harvest lower than projected', 'More available than projected', 'Contract change'].map(t =>
+                    <button key={t} className={`rchip ${why === t ? 'on' : ''}`} onClick={() => setWhy(t)}>{t}</button>)}</div>
+                  <textarea autoFocus rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Type the reason" value={why} onChange={e => setWhy(e.target.value)} aria-label="Reason" />
+                  <div className="row end" style={{ marginTop: 10 }}>
+                    <button className="ghost" disabled={sBusy} onClick={() => setWhy(null)}>Back</button>
+                    <button className="primary" disabled={sBusy || !why.trim()} onClick={async () => {
+                      setSBusy(true); let done = 0
+                      try {
+                        for (const c of all) { const y = c.r.crop_year ?? cur; await backend.setReserve(c.r.customer_id, c.r.strain, c.to, why.trim(), y !== cur ? y : undefined); done++ }
+                        flash(`${done} reserve${done === 1 ? '' : 's'} changed`); setSEd({}); setWhy(null)
+                      } catch (e) {
+                        flash(`${done ? `${done} saved, then: ` : ''}${String((e as Error).message ?? e)}`, true)
+                        if (done) { const ids = new Set(all.slice(0, done).map(c => c.r.id)); setSEd(m => Object.fromEntries(Object.entries(m).filter(([id]) => !ids.has(Number(id))))) }
+                      } finally { setSBusy(false); await load() }
+                    }}>{sBusy ? 'Saving…' : !why.trim() ? 'Type a reason' : `Save ${all.length}`}</button>
+                  </div>
+                </div>
+              </div>}
+            </>
           })()}
-          <p className="muted">Free = on hand − confirmed orders − approved reserves not yet shipped − sample holds on confirmed orders. Orders waiting for confirmation and reserve requests don't take anything until they're approved. Customers see Free rounded down to 10 lbs. On hand is what's in the freezers in this app. Negative means more is promised than is in the freezers.</p>
+          <p className="muted">Free = on hand − confirmed orders − approved reserves not yet shipped − sample holds on confirmed orders. Orders waiting for confirmation and reserve requests don't take anything until they're approved. Customers see Free rounded down to 10 lbs. On hand is what's in the freezers in this app. Negative means more is promised than is in the freezers.{isAdmin ? ' Changing a reserve here saves right away (no request); the reason goes to each customer\'s Reserve History.' : ''}</p>
         </>
       )}
 

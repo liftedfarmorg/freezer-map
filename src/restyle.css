@@ -775,6 +775,12 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .resstr tr.resx td { background: var(--empty); padding: 6px 12px 10px; }
 .resxr { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 5px 0; border-bottom: 1px solid var(--line); }
 .resxr:last-child { border-bottom: 0; }
+/* RES-13: reserve changes on By strain */
+.resxr .rstep { margin-left: auto; }
+.resxr.on { background: var(--r-teal-bg); margin: 0 -12px; padding: 5px 12px; }
+.resxr.bad { background: #fdecea; margin: 0 -12px; padding: 5px 12px; }
+.dialog.resWhy { width: min(520px, calc(100vw - 32px)); max-width: 520px; }
+.dialog.resWhy textarea { font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel); color: var(--ink); }
 .resxr .muted { flex: 1 1 200px; }
 /* RES-5: By strain on phones: one row per strain (name + Free on top, the other numbers underneath), no sideways scroll */
 @media (max-width: 640px) {
@@ -865,6 +871,9 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .rdock { bottom: calc(72px + env(safe-area-inset-bottom)); }
   .addres .rdock { bottom: 0; }
   .rdock input[type=text] { flex-basis: 100%; order: 3; }
+  .rdock .rdock-sum { display: none; }  /* RES-13: phones show just the count; the Save pop-up lists every change */
+  .rdock:has(.rdock-sum) .grow { flex-basis: 100%; }
+  .rdock:has(.rdock-sum) button { flex: 1; }
   .rtable tbody td.e { display: none; }
   .rstepset > span { white-space: nowrap; }
 }

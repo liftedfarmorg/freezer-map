@@ -19,7 +19,7 @@ const sign = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${n0(Math.abs(
 interface Row { key: string; strain: string; res: number; ful: number; so: number; rem: number; open: number; has: boolean }
 type SortK = 's' | 'g' | 't' | 'res' | 'ful' | 'so' | 'rem' | 'open'
 
-function Stepper({ val, step, min, max, bad, label, onChange }: { val: number; step: number; min: number; max: number; bad?: boolean; label: string; onChange: (n: number) => void }) {
+export function Stepper({ val, step, min, max, bad, label, onChange }: { val: number; step: number; min: number; max: number; bad?: boolean; label: string; onChange: (n: number) => void }) {
   const [txt, setTxt] = useState<string | null>(null)
   const clamp = (n: number) => Math.min(Math.max(n, min), Math.max(max, min))
   const shown = txt ?? (val ? sign(val).replace('±', '') : '')
