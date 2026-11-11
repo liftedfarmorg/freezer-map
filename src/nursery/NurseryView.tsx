@@ -25,11 +25,14 @@ import { SortDay } from './sortday'
 import { lang, t, tn } from '../i18n'
 import '../cult/cult.css'
 import './nursery.css'
+import { startQueue } from './photoqueue'
+import { PhotoQueuePill } from './phenophotos'
 
 export default function NurseryView({ backend, flash, tab, go, customers, isAdmin, sender, me }: {
   backend: Backend; flash: (t: string, bad?: boolean) => void; tab: NTab; go: (t: NTab) => void; customers: Customer[]; isAdmin: boolean; sender?: string | null; me?: string
 }) {
   const sb = useMemo(() => backend.client(), [backend])
+  useEffect(() => { if (sb) void startQueue(sb) }, [sb])  // PHENO-PIC-7: send photos still waiting on this phone
   const api = useMemo(() => (sb ? new NurseryApi(sb) : null), [sb])
   const [d, setD] = useState<NData | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -75,6 +78,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
   const areas = [...new Set(['Webb', 'GH', ...d.rooms.filter(r => r.active).map(r => r.name), ...d.rooms.map(r => r.place)])]
   return (
     <div className="cult nursery">
+      <PhotoQueuePill />
       {tab !== 'dashboard' && tab !== 'invoices' && <div className="chead">{title}</div>}
       {search && <div className="row toolbar"><input className="search" type="search" placeholder={t('Search strain, tag, farm, notes')} value={q} onChange={e => setQ(e.target.value)} /><ScanButton onScan={setQ} /></div>}
 

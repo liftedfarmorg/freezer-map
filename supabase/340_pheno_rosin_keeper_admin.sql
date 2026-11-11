@@ -1,5 +1,5 @@
--- Migration 339 (Msg PHENO-PIC-5, Aziz 11/11): pheno photos can be tagged Rosin; only a Nursery Admin (or app admin) can make a pheno a
--- Keeper, since that adds the name to the Strains list. App only, nothing to METRC. Safe to re-run. Run after 338.
+-- Migration 340 (Msg PHENO-PIC-5; was 339, renumbered because NUR-12 also used 339, Aziz 11/11): pheno photos can be tagged Rosin; only a Nursery Admin (or app admin) can make a pheno a
+-- Keeper, since that adds the name to the Strains list. App only, nothing to METRC. Safe to re-run. Run after 339.
 set client_min_messages = warning;
 
 alter table pheno_photos drop constraint if exists pheno_photos_kind_check;

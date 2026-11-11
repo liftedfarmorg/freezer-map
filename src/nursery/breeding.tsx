@@ -13,6 +13,7 @@ import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
 import { pageAll } from '../pageAll'
 import { PhenoPhotos } from './phenophotos'
+import { useQueueDone } from './photoqueue'
 
 // PHENO-PIC-3: the open pheno is remembered for 2 hours, so if the phone reloads the app while the camera is open you land back on it
 const LAST_PHENO = 'nur.lastPheno'
@@ -100,6 +101,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
     setB({ plantings: ((pl.error ? [] : pl.data ?? []) as NPlanting[]), runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos, pics }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
+  useQueueDone(useCallback(() => { void load() }, [load]))  // PHENO-PIC-7: a queued photo landed: refresh photo counts
   const [openPheno, setOpenPheno] = useState<number | null>(() => lastPheno()?.pheno ?? null)
   useEffect(() => {
     if (!b || !openTag) return

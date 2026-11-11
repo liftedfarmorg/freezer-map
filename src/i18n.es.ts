@@ -1207,7 +1207,19 @@ export const ES: Record<string, string> = {
  "No scored phenos at that average yet.": "Todavía no hay fenos calificados con ese promedio.",
  "No photos": "Sin fotos",
  "Download Excel": "Descargar Excel",
- "With photos": "Con fotos"
+ "With photos": "Con fotos",
+ "Photo saved on this phone, sending in the background. You can move on.": "Foto guardada en este teléfono, se envía en segundo plano. Puedes seguir.",
+ "Sending…": "Enviando…",
+ "Couldn't save": "No se pudo guardar",
+ "Waiting for signal": "Esperando señal",
+ "Retry now": "Reintentar ahora",
+ "Not saved": "No guardada",
+ "Waiting": "Esperando",
+ "Throw away this photo? It hasn't been sent yet.": "¿Descartar esta foto? Todavía no se ha enviado.",
+ "Nothing sent yet.": "Todavía no se ha enviado nada.",
+ "Sending {n} photo(s)…": "Enviando {n} foto(s)…",
+ "{n} photo(s) couldn't save": "{n} foto(s) no se pudieron guardar",
+ "{n} photo(s) waiting for signal": "{n} foto(s) esperando señal"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
