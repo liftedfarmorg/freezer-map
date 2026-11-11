@@ -366,7 +366,22 @@ export async function sendHarvestPlants(job, ctx) {
       return { actualDate: day(d.metrc_date || h.harvested_on, job), harvestName: name,   // d.metrc_date: push day while catching up (146)
         id: p.id, weight: last ? r4(wet - prog.wet - per * i) : per, dryingLocationId: dry.location_id, unitOfWeightId: lb }
     })
-    lastResp = await write(ctx, '/v2/harvests/create', lic, body); lastBody = body
+    try {
+      lastResp = await write(ctx, '/v2/harvests/create', lic, body); lastBody = body
+    } catch (e) {
+      // ITEM/NAPA-4 (11/11): on a big harvest METRC often takes the plants and then answers with a server error (timeout).
+      // Re-read METRC's own count: if the plants went in, carry on at full speed; if nothing moved, it's a real error.
+      if (!ctx.live) throw e
+      await new Promise(r => setTimeout(r, 3000))
+      const ex = await harvestByName(lic, name)
+      const real = ex ? Number(ex.plantCount ?? 0) - prog.base : -1
+      if (!(real > prog.done)) throw e
+      prog.done = Math.min(real, plants); prog.wet = r4(Number(ex.totalWetWeight ?? 0) - prog.baseWet)
+      prog.recovered = (prog.recovered ?? 0) + 1
+      await saveProgress(job, prog)
+      lastBody = body; lastResp = { note: `METRC answered "${String(e?.message ?? e).slice(0, 80)}" but the plants went in (count ${real})` }
+      continue
+    }
     if (!ctx.live) return { state: 'checked', request: body, response: lastResp, info: `Dry run OK: first ${body.length} of ${plants} plants into ${name} (${per} lb each) from ${loc.location}` }
     prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0))
     await saveProgress(job, prog)
