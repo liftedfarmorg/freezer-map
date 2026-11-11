@@ -12,6 +12,15 @@ import { t, tn } from '../i18n'
 import { pageAll } from '../pageAll'
 import { PhenoPhotos } from './phenophotos'
 
+// PHENO-PIC-3: the open pheno is remembered for 2 hours, so if the phone reloads the app while the camera is open you land back on it
+const LAST_PHENO = 'nur.lastPheno'
+function lastPheno(): { hunt: number; pheno: number } | null {
+  try { const v = JSON.parse(sessionStorage.getItem(LAST_PHENO) ?? 'null'); return v && Date.now() - v.at < 2 * 3600e3 ? v : null } catch { return null }
+}
+function rememberPheno(hunt: number, pheno: number | null) {
+  try { if (pheno == null) sessionStorage.removeItem(LAST_PHENO); else sessionStorage.setItem(LAST_PHENO, JSON.stringify({ hunt, pheno, at: Date.now() })) } catch { /* private window */ }
+}
+
 // Breeding: pollination runs (one donor x many receivers per trailer), seed lots, pheno hunts with group scoring, keepers.
 interface Run {
   id: number; site: string; season: number; name: string; project: string | null; room_id: number | null; donor_strain: string | null; donor_mother_id: number | null; donor_room_id: number | null; donor_batch_id: number | null
@@ -61,13 +70,13 @@ const f1 = (x: number | null) => (x == null ? '' : x.toFixed(1))
 export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string; admin?: boolean
   /** 281: a scanned plant tag: open its pheno (flowering plant) or its pollination run (flowering planting) */
   openTag?: { pheno?: number; hunt?: number; run?: number; n: number } | null }) {
-  const [tab, setTab] = useState<'runs' | 'seeds' | 'hunts'>('runs')
+  const [tab, setTab] = useState<'runs' | 'seeds' | 'hunts'>(() => (lastPheno() ? 'hunts' : 'runs'))
   const [b, setB] = useState<BData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [run, setRun] = useState<Partial<Run> | null>(null)
   const [lot, setLot] = useState<Partial<SeedLot> | null>(null)
   const [hunt, setHunt] = useState<Partial<Hunt> | null>(null)
-  const [huntView, setHuntView] = useState<number | null>(null)
+  const [huntView, setHuntView] = useState<number | null>(() => lastPheno()?.hunt ?? null)
   const [donor, setDonor] = useState<Partial<DonorBatch> | null>(null)
   useBack(huntView != null, () => setHuntView(null))
   const load = useCallback(async () => {
@@ -84,7 +93,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false }: { s
     setB({ runs: runs as Run[], receivers: receivers as Receiver[], seeds: seeds as SeedLot[], hunts: hunts as Hunt[], phenos: phenos as Pheno[], scores: scores as Score[], obs: obs as Obs[], donors: donors as DonorBatch[], pkgs, photos }); setErr(null)
   }, [sb])
   useEffect(() => { load() }, [load])
-  const [openPheno, setOpenPheno] = useState<number | null>(null)
+  const [openPheno, setOpenPheno] = useState<number | null>(() => lastPheno()?.pheno ?? null)
   useEffect(() => {
     if (!b || !openTag) return
     if (openTag.hunt != null) { setTab('hunts'); setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
@@ -427,6 +436,9 @@ function HuntSheet({ sb, d, b, h0, flash, onClose, onSaved }: { sb: SupabaseClie
 /** one hunt: numbered phenos (one cross or many), everyone's scores, the ranking, keepers */
 function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, openPheno }: { sb: SupabaseClient; d: NData; c: NCtx; b: BData; h: Hunt; me: string; admin: boolean; flash: Flash; onBack: () => void; onSaved: (m: string) => Promise<void>; onEdit: () => void; openPheno?: number | null }) {
   const [open, setOpen] = useState<Pheno | null>(() => (openPheno != null ? b.phenos.find(p => p.id === openPheno) ?? null : null))
+  useEffect(() => { rememberPheno(h.id, open?.id ?? null) }, [h.id, open?.id])
+  // after a save the card stays open: point it at the reloaded pheno
+  useEffect(() => { setOpen(o => (o ? b.phenos.find(z => z.id === o.id) ?? o : o)) }, [b.phenos])
   const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled'>('growing')
   const [lotF, setLotF] = useState<number | null>(null)
   const [roomF, setRoomF] = useState<number | null>(null)
@@ -514,11 +526,11 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
         <td className="num">{r.sc.length || ''}{r.mine ? ' ✓' : ''}</td><td className="num">{r.p.cut_qty || ''}</td>
         <td><span className={`pill ${r.p.status === 'keeper' ? 'okp' : r.p.status === 'maybe' ? 'warnp' : ''}`}>{t(PSTATUS[r.p.status])}</span>{r.p.cull_reason ? <span className="muted small"> {t(r.p.cull_reason)}</span> : ''}</td></tr>)}</tbody>
     </table>{rows.length > shown && <p className="row"><button className="ghost" onClick={() => setShown(n => n + SHOW)}>{t('Show more ({n} left)', { n: n0(rows.length - shown) })}</button></p>}</div>}
-    {open && <PhenoSheet sb={sb} d={d} c={c} b={b} p={open} lot={lotOf(open)} me={me} admin={admin} flash={flash} onClose={() => setOpen(null)} onSaved={async m => { setOpen(null); await onSaved(m) }} />}
+    {open && <PhenoSheet sb={sb} d={d} c={c} b={b} p={open} lot={lotOf(open)} me={me} admin={admin} flash={flash} onClose={() => setOpen(null)} onSaved={async (m, keep) => { if (!keep) setOpen(null); await onSaved(m) }} />}
   </div>
 }
 
-function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }: { sb: SupabaseClient; d: NData; c: NCtx; b: BData; p: Pheno; lot: SeedLot | undefined; me: string; admin: boolean; flash: Flash; onClose: () => void; onSaved: (m: string) => Promise<void> }) {
+function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }: { sb: SupabaseClient; d: NData; c: NCtx; b: BData; p: Pheno; lot: SeedLot | undefined; me: string; admin: boolean; flash: Flash; onClose: () => void; onSaved: (m: string, keep?: boolean) => Promise<void> }) {
   const scores = b.scores.filter(z => z.pheno_id === p.id)
   const mine = scores.find(z => z.scorer === me)
   const [sc, setSc] = useState<Partial<Score>>(mine ?? {})
@@ -529,15 +541,15 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
   const obsAll = b.obs.filter(z => z.pheno_id === p.id)
   const obsMine = obsAll.filter(z => z.observer === me)
   const [ob, setOb] = useState<Record<string, Record<string, string | number | null>>>(() => Object.fromEntries(obsMine.map(z => [z.stage, { ...z.traits, _notes: z.notes }])))
-  const run = async (f: () => PromiseLike<{ error: { message: string } | null }>, ok: string) => {
+  const run = async (f: () => PromiseLike<{ error: { message: string } | null }>, ok: string, keep = false) => {
     setBusy(true)
     const { error } = await f()
     setBusy(false)
-    if (error) flash(error.message, true); else await onSaved(ok)
+    if (error) flash(error.message, true); else await onSaved(ok, keep)
   }
   const saveScore = () => run(() => mine
     ? sb.from('pheno_scores').update({ ...Object.fromEntries(TRAITS.map(([k]) => [k, sc[k] ?? null])), notes: sc.notes ?? null, scored_on: today() }).eq('id', mine.id)
-    : sb.from('pheno_scores').insert({ pheno_id: p.id, ...Object.fromEntries(TRAITS.map(([k]) => [k, sc[k] ?? null])), notes: sc.notes ?? null }), 'Score saved')
+    : sb.from('pheno_scores').insert({ pheno_id: p.id, ...Object.fromEntries(TRAITS.map(([k]) => [k, sc[k] ?? null])), notes: sc.notes ?? null }), 'Score saved', true)
   const savePheno = (v: Partial<Pheno>, ok: string) => run(() => sb.from('phenos').update({ label: v.label ?? x.label, plant_tag: v.plant_tag ?? x.plant_tag, room_id: v.room_id ?? x.room_id, bed: v.bed ?? x.bed,
     status: v.status ?? x.status, notes: v.notes ?? x.notes, cut_on: v.cut_on !== undefined ? v.cut_on : x.cut_on, cut_qty: v.cut_qty !== undefined ? v.cut_qty : x.cut_qty,
     cull_reason: v.cull_reason !== undefined ? v.cull_reason : x.cull_reason }).eq('id', p.id), ok)
@@ -546,7 +558,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
     const traits = Object.fromEntries(Object.entries(cur).filter(([k, v]) => k !== '_notes' && v != null && v !== ''))
     const notes = (cur._notes as string | null) || null
     const had = obsMine.find(z => z.stage === stage)
-    return run(() => had ? sb.from('pheno_obs').update({ traits, notes, observed_on: today() }).eq('id', had.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage, traits, notes }), 'Notes saved')
+    return run(() => had ? sb.from('pheno_obs').update({ traits, notes, observed_on: today() }).eq('id', had.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage, traits, notes }), 'Notes saved', true)
   }
   const keeper = async () => {
     const name = prompt(t('Name for this keeper (it goes on the Strains list)'), x.keeper_strain ?? x.label ?? ''); if (name == null) return
