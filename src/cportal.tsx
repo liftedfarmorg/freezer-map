@@ -6,6 +6,7 @@ import type React from 'react'
 import './cportal.css'
 import { downloadStatement } from './statement'
 import type { Backend } from './api'
+import { TYPE_LONG, TYPE_SHORT, tcls } from './strainTypes'
 import type { Balance, Me, QboLine, MenuRow, MyContract, Order, OrderInput, ReserveLineInput, ReserveRequest, SampleHold, Statement, StatementInvoice, Terms } from './types'
 
 /* ---------- helpers ---------- */
@@ -122,10 +123,7 @@ interface Data {
 }
 /** strain grade + type as the menu shows them */
 interface Tag { g: string | null; t: string | null }
-const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
-const TYPE_SHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
 const TYPE_ORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
-const TYPE_LONG: Record<string, string> = { S: 'Sativa', 'S/H': 'Sativa hybrid', H: 'Hybrid', 'I/H': 'Indica hybrid', I: 'Indica' }
 interface ResRow { k: string; s: string; y: number; res: number; used: number; left: number; asked: number | null
   /** desktop table: shipped, on any open SO (approved + submitted), and what's left after both */
   ful: number; so: number; rem: number }

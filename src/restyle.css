@@ -873,24 +873,26 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   --t-h-bg: #dfeaf8; --t-h-ink: #1d5a9e;    /* Hybrid: blue */
   --t-ih-bg: #e8e1f8; --t-ih-ink: #5636a8;  /* Indica Hybrid: violet */
   --t-i-bg: #f4dcf0; --t-i-ink: #7a2270;    /* Indica: plum */
+  --t-a-bg: #e9efd2; --t-a-ink: #566414;    /* Autoflower: olive */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not(:has(.cp)) {
     --t-s-bg: #4a2a14; --t-s-ink: #fdba8c; --t-sh-bg: #4a1f30; --t-sh-ink: #f9a8c9; --t-h-bg: #1b3352; --t-h-ink: #9cc4f4;
-    --t-ih-bg: #2f2552; --t-ih-ink: #c4b5fd; --t-i-bg: #45203f; --t-i-ink: #f0abe4;
+    --t-ih-bg: #2f2552; --t-ih-ink: #c4b5fd; --t-i-bg: #45203f; --t-i-ink: #f0abe4; --t-a-bg: #333a17; --t-a-ink: #d4e08a;
   }
 }
 :root[data-theme="dark"]:not(:has(.cp)) {
   --t-s-bg: #4a2a14; --t-s-ink: #fdba8c; --t-sh-bg: #4a1f30; --t-sh-ink: #f9a8c9; --t-h-bg: #1b3352; --t-h-ink: #9cc4f4;
-  --t-ih-bg: #2f2552; --t-ih-ink: #c4b5fd; --t-i-bg: #45203f; --t-i-ink: #f0abe4;
+  --t-ih-bg: #2f2552; --t-ih-ink: #c4b5fd; --t-i-bg: #45203f; --t-i-ink: #f0abe4; --t-a-bg: #333a17; --t-a-ink: #d4e08a;
 }
 /* the public menu page is always light */
 .om-public, .om-page {
   --t-s-bg: #fde6d4; --t-s-ink: #a8430b; --t-sh-bg: #fbe1eb; --t-sh-ink: #a3234f; --t-h-bg: #dfeaf8; --t-h-ink: #1d5a9e;
-  --t-ih-bg: #e8e1f8; --t-ih-ink: #5636a8; --t-i-bg: #f4dcf0; --t-i-ink: #7a2270;
+  --t-ih-bg: #e8e1f8; --t-ih-ink: #5636a8; --t-i-bg: #f4dcf0; --t-i-ink: #7a2270; --t-a-bg: #e9efd2; --t-a-ink: #566414;
 }
 .t-s.t-s:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-s-bg); color: var(--t-s-ink); }
 .t-sh.t-sh:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-sh-bg); color: var(--t-sh-ink); }
 .t-h.t-h:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-h-bg); color: var(--t-h-ink); }
 .t-ih.t-ih:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-ih-bg); color: var(--t-ih-ink); }
 .t-i.t-i:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-i-bg); color: var(--t-i-ink); }
+.t-a.t-a:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-a-bg); color: var(--t-a-ink); }

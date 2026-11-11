@@ -10,6 +10,7 @@ import type { Backend } from './api'
 import { QboCustomerImport } from './qboImport'
 import { CustomerLogins } from './custlogins'
 import { ItemGeneratorSheet, StrainCodesSheet, StrainMetrcSheet, loadStrainPlan } from './strainMetrc'
+import { STRAIN_TYPES, TYPE_SHORT, tcls } from './strainTypes'
 import type { Customer, CustomerTerms, ListName, ListRow, ReserveYears, Settings, Strain, Vehicle } from './types'
 
 // ---------- column definitions per list ----------
@@ -472,7 +473,7 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     { k: 'ro', l: 'Rooting %', num: true, v: r => n(eff(P(r), 'rooting_pct'), 0) },
     { k: 'cu', l: 'Cuts / mother', num: true, v: r => n(eff(P(r), 'cuts_per_plant'), 0) },
     { k: 'hv', l: 'Harvest', v: r => (eff(P(r), 'harvest_mmdd') as string | null) ?? null, cell: r => { const h = eff(P(r), 'harvest_mmdd'); return h ? `~${mmdd(h as string)}` : null } },
-    { k: 'type', l: 'Type', v: r => S(r).strain_type ?? null, cell: r => S(r).strain_type ? <span className={`pill ttag t-${(TYPE_SHORT5[S(r).strain_type!] ?? '').toLowerCase().replace('/', '')}`} title={S(r).strain_type!}>{TYPE_SHORT5[S(r).strain_type!] ?? S(r).strain_type}</span> : null },
+    { k: 'type', l: 'Type', v: r => S(r).strain_type ?? null, cell: r => S(r).strain_type ? <span className={`pill ttag${tcls(S(r).strain_type)}`} title={S(r).strain_type!}>{TYPE_SHORT5[S(r).strain_type!] ?? S(r).strain_type}</span> : null },
     { k: 'lin', l: 'Lineage', v: r => S(r).lineage ?? null, cell: r => S(r).lineage && <span className="trunc">{S(r).lineage}</span> },
     { k: 'nur', l: 'Nurseries', v: r => S(r).nurseries?.join(', ') || null, cell: r => S(r).nurseries?.length ? <span className="trunc">{S(r).nurseries!.join(', ')}</span> : null },
     { k: 'aka', l: 'Other names', v: r => S(r).aliases?.join(', ') || null, cell: r => S(r).aliases?.length ? <span className="trunc muted">{S(r).aliases.join(', ')}</span> : null },
@@ -538,8 +539,8 @@ function groupsOf(list: ListName, rows: ListRow[], inv: Map<string, number>): [s
 const CUST_TAB: Record<string, string> = { billing_address: 'billing', billing_contact: 'billing', billing_email: 'billing', billing_phone: 'billing',
   ship_to_name: 'shipping', ship_to_address: 'shipping', receiving_contact: 'shipping',
   payment_terms: 'contract', sample_hold_days: 'contract', reserves_enabled: 'contract', price_per_lb: 'contract', contract_lbs: 'contract', monthly_min_lbs: 'contract', deposit_usd: 'contract', storage_fee: 'contract' }
-const STRAIN_TYPES_5 = ['Indica', 'Indica Hybrid', 'Hybrid', 'Sativa Hybrid', 'Sativa']
-const TYPE_SHORT5: Record<string, string> = { Indica: 'I', 'Indica Hybrid': 'I/H', Hybrid: 'H', 'Sativa Hybrid': 'S/H', Sativa: 'S' }
+const STRAIN_TYPES_5 = STRAIN_TYPES
+const TYPE_SHORT5 = TYPE_SHORT
 
 export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers, cats, nurseries, tabExtra, readOnly }: {
   list: ListName; row: Partial<ListRow>; busy: boolean; onClose: () => void; onSave: (r: Partial<ListRow>) => void; extra?: React.ReactNode

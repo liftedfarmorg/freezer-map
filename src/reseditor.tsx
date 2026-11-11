@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Backend } from './api'
 import type { Balance, CustomerTerms, Order } from './types'
-const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
+import { TYPE_LONG, TYPE_ORDER, tcls, typeShort } from './strainTypes'
 import { StrainLink } from './strainCard'
 
 type Flash = (t: string, bad?: boolean) => void
@@ -14,8 +14,6 @@ type Tag = { g: string | null; t: string | null }
 const n0 = (v: number) => Math.round(v).toLocaleString()
 const k = (s: string) => s.trim().toLowerCase()
 const STEPS: [number, string][] = [[10, '10 lbs'], [50, '50 lbs'], [100, '100 lbs'], [650, 'A full pallet']]
-const TYPE_ORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
-const TYPE_LONG: Record<string, string> = { S: 'Sativa', 'S/H': 'Sativa hybrid', H: 'Hybrid', 'I/H': 'Indica hybrid', I: 'Indica' }
 const sign = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${n0(Math.abs(v))}`
 
 interface Row { key: string; strain: string; res: number; ful: number; so: number; rem: number; open: number; has: boolean }
@@ -66,7 +64,7 @@ export function ReserveEditor({ backend, cid, cname, year, cur, flash, onSaved, 
     backend.client()?.rpc('menu_strain_tags').then(({ data }) => {
       const m: Record<string, Tag> = {}
       for (const x of (data ?? []) as { strain: string; aliases: string[] | null; strain_type: string | null; grade: string | null }[])
-        for (const n of [x.strain, ...(x.aliases ?? [])]) if (n && !(k(n) in m)) m[k(n)] = { g: x.grade, t: x.strain_type }
+        for (const n of [x.strain, ...(x.aliases ?? [])]) if (n && !(k(n) in m)) m[k(n)] = { g: x.grade, t: typeShort(x.strain_type) }
       setTags(m)
     }, () => {})
   }, [])

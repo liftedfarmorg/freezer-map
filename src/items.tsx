@@ -26,7 +26,8 @@ const priceText = (r: ItemCard) => r.price_per_lb != null ? `${usd(r.price_per_l
 const n0 = (x: number | null | undefined) => Number(x ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })
 const licLabel = (l: { license: string; site: string | null; kind: string | null }) =>
   `${l.site ?? l.license}${l.kind === 'processor' ? ' proc' : l.kind === 'nursery' ? ' nursery' : ''}`
-export const STRAIN_TYPES = ['Indica', 'Indica Hybrid', 'Hybrid', 'Sativa Hybrid', 'Sativa'] as const
+import { STRAIN_TYPES } from './strainTypes'
+export { STRAIN_TYPES }
 
 export function loadItemCards(sb: SupabaseClient | null) { return rpc<ItemCard[]>(sb, 'item_cards', {}, SQL) }
 

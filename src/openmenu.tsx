@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { TYPE_ORDER, tcls, typeShort } from './strainTypes'
 import './openmenu.css'
 
 // 174: the new open menu. Sales > Open menu (staff) and the public link (lifted-orders.app/menu/<code>, no login).
@@ -20,11 +21,7 @@ const PROD: Record<MenuLine['product'], string> = { FF: 'Fresh Frozen', ST: 'Sta
 const SALES = 'sales@lifted-organics.com'
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 // 196: type short codes (S, S/H, H, I/H, I); grade + type are columns on wide screens, one small pill on phones
-const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
-const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
-const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null
-// TYPE-CHIP-1: each type gets its own chip color (t-s, t-sh, t-h, t-ih, t-i in restyle.css)
-const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
+const tShort = (r: MenuLine) => typeShort(r.strain_type)
 const pct = (v: number | null) => (v == null ? '–' : `${Number(v).toFixed(1)}%`)
 // 325: low–high when both are set and differ, else the one number
 const isRange = (lo: number | null, hi: number | null | undefined) => lo != null && hi != null && Number(hi) !== Number(lo)
@@ -41,7 +38,7 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
   const ql = q.trim().toLowerCase()
   const list = inGroup.filter(r => (year === 'all' || r.crop_year === year) && (!ql || r.strain.toLowerCase().includes(ql)))
   const byName = (a: MenuLine, b: MenuLine) => a.strain.localeCompare(b.strain) || b.crop_year - a.crop_year || a.product.localeCompare(b.product)
-  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : sort.col === 'g' ? ({ SHO: 1, BHO: 2 } as Record<string, number>)[r.grade ?? ''] ?? 9 : sort.col === 't' ? TORDER[tShort(r) ?? ''] ?? 9 : sort.col === 'sho' ? Number(r.sho ?? r.sho_high ?? -1) : sort.col === 'bho' ? Number(r.bho ?? r.bho_high ?? -1) : 0
+  const val = (r: MenuLine) => sort.col === 'y' ? r.crop_year : sort.col === 'open' ? r.open_lbs : sort.col === 'price' ? (r.price ?? 1e9) : sort.col === 'g' ? ({ SHO: 1, BHO: 2 } as Record<string, number>)[r.grade ?? ''] ?? 9 : sort.col === 't' ? TYPE_ORDER[tShort(r) ?? ''] ?? 9 : sort.col === 'sho' ? Number(r.sho ?? r.sho_high ?? -1) : sort.col === 'bho' ? Number(r.bho ?? r.bho_high ?? -1) : 0
   const sorted = [...list].sort((a, b) => sort.col === 's' ? sort.dir * byName(a, b) : sort.col === 'p' ? sort.dir * a.product.localeCompare(b.product) || byName(a, b) : sort.dir * (val(a) - val(b)) || byName(a, b))
   const total = list.reduce((t, r) => t + r.open_lbs, 0)
   const allTotal = inGroup.reduce((t, r) => t + r.open_lbs, 0)
