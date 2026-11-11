@@ -275,7 +275,7 @@ function PlantReceivers({ sb, d, c, run, recs, flash, onClose, onDone }: { sb: S
             <td>{opts.length ? <Pick value={r.batch} options={opts.map(q => ({ v: q.id, l: `…${(q.package_tag ?? '').slice(-6)} · ${t(USE_LABEL[useOf(q)])} · ${n0(c.left(q))} ${t('left')}${q.stage !== 'ready' ? ` · ${t('rooting')}` : ''}` }))} onChange={v => setRow(i, { batch: v })} />
               : <span className="warn-t small">{t('no package for this strain')}</span>}</td>
             <td className="num"><input className="qty" type="number" value={r.plants} onChange={e => setRow(i, { plants: Number(e.target.value) || 0 })} /></td>
-            <td><TagInput compact value={r.tag} onChange={v => setRow(i, { tag: v })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} placeholder={t('METRC tag')} /></td></tr> })}</tbody>
+            <td><TagInput compact value={r.tag} onChange={v => setRow(i, { tag: v })} where={{ site: d.sites[0]?.code ?? '1PN', type: 'plant' }} keep={r.z.plant_tag} placeholder={t('METRC tag')} /></td></tr> })}</tbody>
       </table></div>
       <p className="muted small-note">{t('Goes to METRC right away: each picked receiver becomes an immature plant batch in {where}.', { where: trailer?.name ?? '?' })}</p>
       <SaveBar busy={busy} disabled={!ok} saveLabel={t('Plant {n}', { n: picked.length })} onCancel={onClose} onSave={go} />

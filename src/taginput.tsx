@@ -109,7 +109,7 @@ export function TagInput({ value, onChange, where = {}, keep, disabled, placehol
     return <>{t.slice(0, i)}<b>{t.slice(i, i + q.length)}</b>{t.slice(i + q.length)}</>
   }
   const showList = open && !disabled && list.length > 0 && !(full && list.length === 1 && list[0] === q)
-  const dup = full && others.has(q)
+  const dup = full && others.has(q) && !(keep && clean(keep) === q)
 
   // the list floats over the page (not inside a table or sheet that would cut it off), under the box or above it near the bottom
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxH: number } | null>(null)
