@@ -472,7 +472,7 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     { k: 'ro', l: 'Rooting %', num: true, v: r => n(eff(P(r), 'rooting_pct'), 0) },
     { k: 'cu', l: 'Cuts / mother', num: true, v: r => n(eff(P(r), 'cuts_per_plant'), 0) },
     { k: 'hv', l: 'Harvest', v: r => (eff(P(r), 'harvest_mmdd') as string | null) ?? null, cell: r => { const h = eff(P(r), 'harvest_mmdd'); return h ? `~${mmdd(h as string)}` : null } },
-    { k: 'type', l: 'Type', v: r => S(r).strain_type ?? null, cell: r => S(r).strain_type ? <span className="pill" title={S(r).strain_type!}>{TYPE_SHORT5[S(r).strain_type!] ?? S(r).strain_type}</span> : null },
+    { k: 'type', l: 'Type', v: r => S(r).strain_type ?? null, cell: r => S(r).strain_type ? <span className={`pill ttag t-${(TYPE_SHORT5[S(r).strain_type!] ?? '').toLowerCase().replace('/', '')}`} title={S(r).strain_type!}>{TYPE_SHORT5[S(r).strain_type!] ?? S(r).strain_type}</span> : null },
     { k: 'lin', l: 'Lineage', v: r => S(r).lineage ?? null, cell: r => S(r).lineage && <span className="trunc">{S(r).lineage}</span> },
     { k: 'nur', l: 'Nurseries', v: r => S(r).nurseries?.join(', ') || null, cell: r => S(r).nurseries?.length ? <span className="trunc">{S(r).nurseries!.join(', ')}</span> : null },
     { k: 'aka', l: 'Other names', v: r => S(r).aliases?.join(', ') || null, cell: r => S(r).aliases?.length ? <span className="trunc muted">{S(r).aliases.join(', ')}</span> : null },

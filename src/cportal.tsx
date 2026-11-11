@@ -122,6 +122,7 @@ interface Data {
 }
 /** strain grade + type as the menu shows them */
 interface Tag { g: string | null; t: string | null }
+const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
 const TYPE_SHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
 const TYPE_ORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
 const TYPE_LONG: Record<string, string> = { S: 'Sativa', 'S/H': 'Sativa hybrid', H: 'Hybrid', 'I/H': 'Indica hybrid', I: 'Indica' }
@@ -301,9 +302,9 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   // 196: grade (SHO / BHO) and type (S … I) per strain; desktop gets columns (blank when not set), phones a small pill
   const tagOf = (s: string): Tag => d?.tags[s.toLowerCase().trim()] ?? { g: null, t: null }
   const gradeCell = (s: string) => { const g = tagOf(s).g; return <span className={c('tagcell')}>{g ? <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span> : null}</span> }
-  const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span> : null}</span> }
+  const typeCell = (s: string) => { const t = tagOf(s).t; return <span className={c('tagcell')}>{t ? <span className={c('ttag') + tcls(t)} title={TYPE_LONG[t]}>{t}</span> : null}</span> }
   // phones: the same colored grade chip (SHO teal, BHO gold) and gray type chip as the desktop columns, small and inline
-  const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpair')}>{g && <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span>}{t && <span className={c('ttag')} title={TYPE_LONG[t]}>{t}</span>}</span> : null }
+  const tagPill = (s: string) => { const { g, t } = tagOf(s); return g || t ? <span className={c('tagpair')}>{g && <span className={c(`gtag g-${g.toLowerCase()}`)}>{g}</span>}{t && <span className={c('ttag') + tcls(t)} title={TYPE_LONG[t]}>{t}</span>}</span> : null }
   const lastOrd = useMemo(() => { const m: Record<string, string> = {}
     for (const o of d?.orders ?? []) { if (o.status === 'draft' || o.status === 'cancelled' || !o.order_date) continue
       for (const l of o.order_lines) { const k = l.strain.toLowerCase().trim(); if (!m[k] || o.order_date > m[k]) m[k] = o.order_date } }

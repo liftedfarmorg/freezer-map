@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Backend } from './api'
 import type { Balance, CustomerTerms, Order } from './types'
+const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
 import { StrainLink } from './strainCard'
 
 type Flash = (t: string, bad?: boolean) => void
@@ -116,7 +117,7 @@ export function ReserveEditor({ backend, cid, cname, year, cur, flash, onSaved, 
     <button className="linkbtn" onClick={() => setSrt(o => ({ k: key, up: o.k === key ? !o.up : key === 's' }))}>{label}{srt.k === key ? (srt.up ? ' ▲' : ' ▼') : ''}</button></th>
   const chip = (on: boolean, label: string, f: () => void) => <button key={label} className={`rchip ${on ? 'on' : ''}`} aria-pressed={on} onClick={f}>{label}</button>
   const gradeCell = (s: string) => { const g = tagOf(s).g; return g ? <span className={`gtag g-${g.toLowerCase()}`}>{g}</span> : null }
-  const typeCell = (s: string) => { const ty = tagOf(s).t; return ty ? <span className="ttag" title={TYPE_LONG[ty]}>{ty}</span> : null }
+  const typeCell = (s: string) => { const ty = tagOf(s).t; return ty ? <span className={`ttag${tcls(ty)}`} title={TYPE_LONG[ty]}>{ty}</span> : null }
 
   async function save() {
     if (!changes.length || bad.length) return

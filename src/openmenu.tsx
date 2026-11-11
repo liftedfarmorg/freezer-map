@@ -23,6 +23,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 const TSHORT: Record<string, string> = { Sativa: 'S', 'Sativa Hybrid': 'S/H', Hybrid: 'H', 'Indica Hybrid': 'I/H', Indica: 'I' }
 const TORDER: Record<string, number> = { S: 1, 'S/H': 2, H: 3, 'I/H': 4, I: 5 }
 const tShort = (r: MenuLine) => (r.strain_type && TSHORT[r.strain_type]) || null
+// TYPE-CHIP-1: each type gets its own chip color (t-s, t-sh, t-h, t-ih, t-i in restyle.css)
+const tcls = (t: string | null | undefined) => (t ? ` t-${t.toLowerCase().replace('/', '')}` : '')
 const pct = (v: number | null) => (v == null ? '–' : `${Number(v).toFixed(1)}%`)
 // 325: low–high when both are set and differ, else the one number
 const isRange = (lo: number | null, hi: number | null | undefined) => lo != null && hi != null && Number(hi) !== Number(lo)
@@ -75,7 +77,7 @@ export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff
           <span><button className="om-name" onClick={() => setOpen(r)}>{r.strain}</button>{(() => { const t = tShort(r), g = dry ? null : r.grade; return g || t ? <span className="om-tagpill">{[g, t].filter(Boolean).join(' · ')}</span> : null })()}
             {showY && hasY(r) && <span className="om-ymob">{[r.sho != null || r.sho_high != null ? `SHO ${yld(r.sho, r.sho_high)}` : '', r.bho != null || r.bho_high != null ? `BHO ${yld(r.bho, r.bho_high)}` : ''].filter(Boolean).join(' · ')}</span>}</span>
           {!dry && <span className="om-tc">{r.grade ? <span className={`om-gtag g-${r.grade.toLowerCase()}`}>{r.grade}</span> : null}</span>}
-          <span className="om-tc">{tShort(r) ? <span className="om-ttag" title={r.strain_type ?? ''}>{tShort(r)}</span> : null}</span>
+          <span className="om-tc">{tShort(r) ? <span className={`om-ttag${tcls(tShort(r))}`} title={r.strain_type ?? ''}>{tShort(r)}</span> : null}</span>
           {showY && <><span className="om-tc om-dim">{yld(r.sho, r.sho_high)}</span><span className="om-tc om-dim">{yld(r.bho, r.bho_high)}</span></>}
           {dry && <span className="om-dim">{PROD[r.product]}</span>}
           <span className="om-dim">{r.crop_year}</span><b>{fmt(r.open_lbs)}</b><span className="om-price">{price(r)}</span>
