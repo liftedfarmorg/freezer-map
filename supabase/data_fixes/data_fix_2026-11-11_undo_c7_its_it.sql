@@ -1,8 +1,9 @@
+-- RUN 11/11 by Claude (Aziz OK): W2 -> GVR Staging S5, W2-1 -> S6, C7 archived, #874 skipped.
 -- DATA FIX 2026-11-11 (Msg C7-UNDO-1, Aziz: "we don't want to combine these anymore"). Undo combine C7 (Its It 2025, 640 lb on
 -- ...7207, made 11/5 from W2 ...003002 630 lb + W2-1 ...005159 10 lb). METRC never got it: both sources still active at
 -- 630 / 10 on CCL21-0000679 and ...7207 doesn't exist there. App only; nothing goes to METRC.
---  * The two packages come back as they were: W2 (...003002, 630) and W2-1 (...005159, 10), both in slot 794 (6J, where
---    Leland consolidated them), in_freezer. The old "repackage later in METRC: combine" review flags are cleared.
+--  * The two packages come back as they were: W2 (...003002, 630) and W2-1 (...005159, 10), each in its own spot in GVR
+--    Staging (Aziz 11/11: "put them both in staging"), to be put away from there. Review flags "repackage later: combine" cleared.
 --  * The combined package goes back to its own code C7 and is archived. It keeps tag ...7207 so the app never hands that tag
 --    out again (the label may already be on the pallet).
 --  * METRC to-do #874 (Combine C7) is skipped. Event type 'unmerge' makes no METRC to-do.
@@ -10,7 +11,7 @@
 begin;
 
 do $$
-declare c pallets; a pallets; b pallets; n int;
+declare c pallets; a pallets; b pallets; n int; sp int;
 begin
   select * into c from pallets where id = 2153;
   select * into a from pallets where id = 680;
@@ -26,8 +27,10 @@ begin
   update pallets set code = 'C7', status = 'archived', slot_id = null, current_weight = 0, updated_at = now(),
                      notes = concat_ws(' · ', notes, 'Combine undone 11/11 (Aziz): back to W2 + W2-1, never in METRC')
    where id = 2153;
-  update pallets set code = 'W2', status = 'in_freezer', merged_into = null, slot_id = c.slot_id, needs_review = null, updated_at = now() where id = 680;
-  update pallets set code = 'W2-1', status = 'in_freezer', merged_into = null, slot_id = c.slot_id, needs_review = null, updated_at = now() where id = 2147;
+  sp := staging_next_slot('GVR'); if sp is null then raise exception 'No GVR Staging spot'; end if;
+  update pallets set code = 'W2', status = 'in_freezer', merged_into = null, slot_id = sp, needs_review = null, updated_at = now() where id = 680;
+  sp := staging_next_slot('GVR'); if sp is null then raise exception 'No GVR Staging spot'; end if;
+  update pallets set code = 'W2-1', status = 'in_freezer', merged_into = null, slot_id = sp, needs_review = null, updated_at = now() where id = 2147;
 
   update comp_metrc_actions set status = 'skipped', push_state = null, push_error = null, done_by = 'aziz@lifted-organics.com', done_at = now(),
          note = 'Combine undone in the app 11/11 (Aziz): W2 and W2-1 stay separate. Never reached METRC.'
@@ -40,7 +43,8 @@ begin
     ('aziz@lifted-organics.com', 'unmerge', 2147, 10, 'Back out of C7 (Aziz 11/11)', jsonb_build_object('from', 'C7', 'from_id', 2153));
 end $$;
 
-select id, code, status, right(package_tag, 7) tag, current_weight, slot_id, merged_into from pallets where id in (680, 2147, 2153) order by id;
+select p.id, p.code, p.status, right(p.package_tag, 7) tag, p.current_weight, f.site, f.kind, s.code spot, p.staged_reason
+  from pallets p left join slots s on s.id = p.slot_id left join freezers f on f.id = s.freezer_id where p.id in (680, 2147, 2153) order by p.id;
 select id, status, note from comp_metrc_actions where id = 874;
 
 commit;
