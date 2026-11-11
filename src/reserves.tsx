@@ -313,9 +313,9 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
             const nStr = new Set(all.map(c => c.x.s)).size
             // Spread a strain's shortfall over its customers by what they have left. Aziz (RES-15): each new reserve is
             // rounded DOWN to the nearest 10 lbs, so reserves stay whole boxes and the strain lands at 0 free or a bit over.
-            // Never under shipped + open SOs.
+            // Never under shipped + open SOs. RES-17: customers with a confirmed open SO on the strain are left alone.
             const spread = (x: typeof rows[number]) => {
-              const need = -x.free, rs = x.rs.filter(r => Number(r.remaining) > 0), totRem = rs.reduce((a, r) => a + Number(r.remaining), 0)
+              const need = -x.free, rs = x.rs.filter(r => Number(r.remaining) > 0 && !(Number(r.pending) > 0)), totRem = rs.reduce((a, r) => a + Number(r.remaining), 0)
               if (need <= 0 || !totRem) return
               setSEd(m => {
                 const y = { ...m }; for (const r of x.rs) delete y[r.id]
@@ -347,7 +347,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                 sOpen === x.s && x.rs.length > 0 ? <tr key={`${x.s}-c`} className="resx"><td colSpan={6}>
                   {isAdmin && x.free < 0 && <div className="resxr" style={{ alignItems: 'center' }}>
                     <span className={`small ${x.nFree < 0 ? 'warn-t' : 'ok-t'}`} style={{ flex: '1 1 200px' }}>{x.nFree < 0 ? `${n0(-x.nFree)} lbs more promised than on hand.` : `Back to ${n0(x.nFree)} free once saved.`}</span>
-                    <button className="ghost small" onClick={() => spread(x)} title="Cuts each customer by their share of what they have left; new reserves are rounded down to the nearest 10 lbs. Nothing saves until you press Save.">Spread the shortfall</button>
+                    <button className="ghost small" onClick={() => spread(x)} title="Cuts each customer by their share of what they have left; new reserves are rounded down to the nearest 10 lbs. Customers with an open sales order on this strain are left alone. Nothing saves until you press Save.">Spread the shortfall</button>
                     {x.nCh > 0 && <button className="ghost small" onClick={() => setSEd(m => { const y = { ...m }; for (const r of x.rs) delete y[r.id]; return y })}>Clear</button>}
                   </div>}
                   {[...x.rs].sort((a, b) => Number(b.remaining) - Number(a.remaining)).map(r => { const d = sEd[r.id] ?? 0, to = Number(r.reserved) + d
@@ -376,7 +376,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
                   <h3 style={{ marginTop: 0 }}>Why are these reserves changing?</h3>
                   <p className="muted small" style={{ marginTop: 0 }}>{all.length} change{all.length === 1 ? '' : 's'}, {net > 0 ? '+' : net < 0 ? '−' : '±'}{n0(Math.abs(net))} lbs. Each customer sees this reason in their Reserve History.</p>
                   <div style={{ maxHeight: 220, overflow: 'auto', margin: '0 0 10px' }}>{all.map(c => <div key={c.r.id} className="small">{cname(c.r.customer_id)} · {c.x.s}: {n0(Number(c.r.reserved))} → <b>{n0(c.to)}</b></div>)}</div>
-                  <div className="rchips" style={{ marginBottom: 8 }}>{['Harvest lower than projected', 'More available than projected', 'Contract change'].map(t =>
+                  <div className="rchips" style={{ marginBottom: 8 }}>{['Harvest lower than projected', 'More available than projected', 'Contract change', 'No signed contract'].map(t =>
                     <button key={t} className={`rchip ${why === t ? 'on' : ''}`} onClick={() => setWhy(t)}>{t}</button>)}</div>
                   <textarea autoFocus rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Type the reason" value={why} onChange={e => setWhy(e.target.value)} aria-label="Reason" />
                   <div className="row end" style={{ marginTop: 10 }}>
