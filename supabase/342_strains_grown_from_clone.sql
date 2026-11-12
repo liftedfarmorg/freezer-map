@@ -1,7 +1,7 @@
 -- Migration 342 (Msg STRAIN-INV-5, Aziz 11/11): the rest of the active strains with no "Grown from" are clones from outside nurseries.
 -- Left alone on purpose: Alien OG Auto, Froot By The Foot Auto, Froze Auto, Gas Face Auto, GMO Auto, Tropicanna Cherry S1, MBxBP (Aziz: don't touch),
 -- and the old spreadsheet rows (Subtotal ..., Total, Total / Average), which Aziz is cleaning up himself. Retired strains aren't touched.
--- App only, nothing to METRC. The strains this changes are listed in strains_bak_342. Run after 341.
+-- App only, nothing to METRC. The strains this changes are listed in strains_bak_342. Run after 340 (it does not need 341).
 set client_min_messages = warning;
 
 create table if not exists strains_bak_342 as
