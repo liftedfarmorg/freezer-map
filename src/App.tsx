@@ -7,7 +7,7 @@ import { useScrimBack, useTabHistory, scrollTop } from './nav'
 import { StrainCardHost, StrainLink } from './strainCard'
 import { CompFleet, CrewFleet } from './fleet/Fleet'
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { readSaved, writeSaved } from './saved'
+import { clearDrill, readSaved, writeSaved } from './saved'
 import type { ReactNode } from 'react'
 import { Backend, CONFIG_MISSING, IS_PORTAL, makeBackend, portalUrl } from './api'
 import { FREEZER_STATUSES, PRODUCT_LABEL, PRODUCT_SHORT, FINISH_LABEL } from './types'
@@ -939,7 +939,11 @@ export default function App() {
   if (equipItem) NAV[cur].tail.splice(Math.max(0, NAV[cur].tail.findIndex(x => x.k === 'activity')), 0, equipItem)
   // Msg 310: going to another screen closes the app-wide side cards (new order, package) so they don't squeeze the next screen
   const closeSides = () => { setNewOrder(false); setPalletId(null) }
-  const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); x.go() } })
+  // BACK-1: clicking the tab you're already on takes you back to its top level (like a back button). Filters stay; what's open
+  // (a customer, hunt, load, order, freezer, run…) closes, and the screen reloads from its top.
+  const [navKey, setNavKey] = useState(0)
+  const resetNav = () => { clearDrill(); setFreezerId(null); setFOpen(null); setPalletId(null); setNavKey(k => k + 1); top() }
+  const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); if (x.on) resetNav(); else x.go() } })
   const orderMain = (items: NavItem[]): NavItem[] => {
     if (items.length < 3) return items
     const [first, ...rest] = items
@@ -1116,7 +1120,7 @@ export default function App() {
         </div>
       )}
 
-      <main>
+      <main key={navKey}>
         {!noMods && lv[MOD_KEY[cur]] === 'view' && view !== 'mine' && view !== 'fleet' && view !== 'driver' && <div className="viewbanner">{t('View only: you can look at everything in {m}, but not change anything.', { m: ML(cur) })}</div>}
         {view === 'fleet' && <CrewFleet sb={backend.client()} flash={flash} dept={MOD_DEPT[cur]} title={MOD_DEPT[cur] ? `${ML(cur)} ${cur === 'dist' ? t('vehicles') : t('equipment')}` : undefined} />}
         {view === 'driver' && backend.client() && <DriverHome embedded tab={drvTab} onTab={setDrvTab} sb={backend.client()!} nf={(me?.access?.prefs?.notify ?? {}) as Record<string, boolean>} onLang={l => { backend.setMyPrefs({ ...(me?.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }} />}

@@ -22,3 +22,15 @@ export function useSaved<T>(key: string, init: T | (() => T)): [T, (v: T | ((o: 
   }), [key])
   return [v, set]
 }
+
+/** BACK-1: forget what's open (drill-down) but keep filters: keys ending in .open / .openId, the open hunt, the open pheno, the open order and freezer */
+export function clearDrill() {
+  try {
+    const drop: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i) ?? ''
+      if (/^s\..*\.(open|openId|hunt|freezer|fOpen|screen)$/.test(k) || k === 'nur.lastPheno') drop.push(k)
+    }
+    drop.forEach(k => sessionStorage.removeItem(k))
+  } catch { /* private window */ }
+}
