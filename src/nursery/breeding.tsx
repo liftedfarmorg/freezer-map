@@ -113,7 +113,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
   const projects = [...new Set(b.runs.map(r => r.project).filter((x): x is string => !!x))]
   return <>
     <div className="row toolbar between">
-      <p className="muted small-note">{t(tab === 'runs' ? 'Making seeds: pollination runs, donors, receivers and the seeds they put out.' : tab === 'seeds' ? 'Seed inventory: seeds from our own runs and seeds bought or traded in.' : 'Growing out seed lots to find keepers: phenos, scores and picks.')}</p>
+      <p className="muted small-note">{tab === 'seeds' ? t('Seed inventory: seeds from our own runs and seeds bought or traded in.') : tab === 'hunts' ? t('Growing out seed lots to find keepers: phenos, scores and picks.') : ''}</p>
       {tab === 'runs' && <button className="primary" onClick={() => setRun({ season: new Date().getFullYear(), status: 'planned', room_id: d.rooms.find(r => r.name === 'Trailer 1')?.id ?? null, donor_room_id: d.rooms.find(r => r.name === 'Trailer 3')?.id ?? null })}>{t('+ Pollination run')}</button>}
       {tab === 'seeds' && <button className="primary" onClick={() => setLot({ source: 'breeder' })}>{t('+ Seed lot')}</button>}
       {tab === 'hunts' && <button className="primary" onClick={() => setHunt({ season: new Date().getFullYear(), status: 'sown', sown_on: today() })}>{t('+ Pheno hunt')}</button>}

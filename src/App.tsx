@@ -988,9 +988,11 @@ export default function App() {
     const want = menuDrag && menuDrag.mod === cur ? menuDrag.keys : me?.access?.prefs?.menu_order?.[cur]
     if (!want?.length) return items
     const pos = new Map(want.map((k, i) => [k, i]))
-    // screens in the saved order first; screens added since keep their place after them
-    const known = rest.filter(x => pos.has(x.k)).sort((a, b) => pos.get(a.k)! - pos.get(b.k)!), fresh = rest.filter(x => !pos.has(x.k))
-    return [first, ...known, ...fresh]
+    // screens in the saved order; a screen added since goes right after the screen it follows by default (BREED-SPLIT-1: Seed Lots, Pheno Hunts under Breeding)
+    const out = rest.filter(x => pos.has(x.k)).sort((a, b) => pos.get(a.k)! - pos.get(b.k)!)
+    rest.forEach((x, i) => { if (pos.has(x.k)) return
+      const prev = rest.slice(0, i).reverse().find(y => out.includes(y)); out.splice(prev ? out.indexOf(prev) + 1 : out.length, 0, x) })
+    return [first, ...out]
   }
   const nav = { ...NAV[cur], main: orderMain(NAV[cur].main).map(wrapGo), tail: NAV[cur].tail.map(wrapGo) }
   const saveMenuOrder = (mod: string, keys: string[]) => {
