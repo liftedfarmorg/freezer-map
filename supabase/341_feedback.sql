@@ -7,8 +7,8 @@
 --   * everyone: only their own reports (driver logins too)
 --   * module Admins: their module's reports (driver portal reports -> Distribution Admins), can comment
 --   * triagers (app_users.feedback_triage, Aziz for now): everything; the only ones who change status
--- Notifications: new report -> push to triagers; Ready to test -> the reporter. Nothing else.
--- Also imports the 12 open rows of "Lifted Ops Platform Feedback_Oct 2026 - LIVE.xlsx" as FB-0001..FB-0012.
+-- Notifications: new report -> push to triagers; Needs info (a question) and Ready to test -> the reporter.
+-- Also imports all 21 rows of "Lifted Ops Platform Feedback_Oct 2026 - LIVE.xlsx": FB number = sheet row number.
 -- Safe to run more than once.
 
 begin;
@@ -307,6 +307,12 @@ begin
   if f.id is null then raise exception 'No such report'; end if;
   old := f.status;
   st := coalesce(nullif(p ->> 'status', ''), f.status);
+  if st = 'needs_info' and old <> 'needs_info' and nullif(trim(coalesce(p ->> 'question', '')), '') is null then raise exception 'Write your question for them'; end if;
+  if nullif(trim(coalesce(p ->> 'question', '')), '') is not null then
+    insert into feedback_comments (feedback_id, author_email, author_name, body, internal)
+    select p_id, a.email, coalesce(nullif(trim(a.display_name), ''), split_part(a.email, '@', 1)), trim(p ->> 'question'), false
+      from (select coalesce(nullif(real_email(), ''), 'claude') as email) e left join app_users a on a.email = e.email;
+  end if;
   if st = 'declined' and coalesce(nullif(trim(p ->> 'decision_note'), ''), f.decision_note) is null then raise exception 'Say why it''s declined'; end if;
   if st = 'duplicate' and coalesce((p ->> 'duplicate_of')::bigint, f.duplicate_of) is null then raise exception 'Pick the report it duplicates'; end if;
   if (p ->> 'duplicate_of')::bigint = p_id then raise exception 'It can''t duplicate itself'; end if;
@@ -332,7 +338,12 @@ begin
 
   if st is distinct from old then perform _fb_event(p_id, old, st, nullif(p ->> 'note', '')); end if;
 
-  -- the reporter hears about it only at Ready to test
+  -- the reporter hears about it when asked a question (Needs info) and at Ready to test
+  if st = 'needs_info' and old <> 'needs_info' and f.reporter_email is not null then
+    perform _notify(array[f.reporter_email], f.ref || ': a question for you',
+      left(trim(p ->> 'question'), 160) || ' · Open it to answer',
+      coalesce(url, '') || '?fb=' || f.id, 'feedback_question', jsonb_build_object('feedback_id', f.id));
+  end if;
   if st = 'ready_to_test' and old <> 'ready_to_test' and f.reporter_email is not null then
     perform _notify(array[f.reporter_email], f.ref || ' is ready to test',
       coalesce(f.title, left(f.details, 120)) || ' · Open it and tap Works now or Still broken',
@@ -391,52 +402,98 @@ grant execute on function submit_feedback(jsonb), add_feedback_file(bigint, text
   set_feedback_triage(text, boolean), feedback_brief(bigint), can_see_feedback(bigint), is_feedback_triager(), _fb_can_attach(bigint) to authenticated;
 
 -- =====================================================================================================
--- 7. import: the 12 open rows of the old feedback sheet (only if not imported already)
---    Sheet -> app: New Feature / Change Request / blank = Idea; Bug = Bug. Sheet Priority -> Priority.
---    Open -> New (not triaged here yet). In Progress (row 4, waiting on CCI email access) -> Approved.
---    Production -> cultivation module. Reporter matched to a login by first name when exactly one matches.
+-- 7. import: all 21 rows of the old feedback sheet; FB number = sheet row number (only if not imported already)
+--    Fitted to this feature: New Feature / Change Request / blank = Idea; Bug = Bug. Sheet Priority -> Priority. Menu Item -> screen.
+--    Open -> New. In Progress (row 4, waiting on CCI email access) -> Approved. Closed -> Done.
+--    Production -> cultivation module. Response (+ Notes) -> decision note.
+--    Reporter: Matt and Garrett by the emails Aziz gave; others matched to a login by first name when exactly one matches.
 -- =====================================================================================================
-insert into feedback (type, status, priority, module, screen, title, details, decision_note, reporter_email, reporter_name,
-                      context, source, source_ref, created_at, updated_at, approved_at, approved_by)
-select x.type, x.status, x.priority, x.module, x.screen, x.title, x.details, x.decision_note,
-       (select min(u.email) from app_users u where u.role in ('admin', 'sales', 'crew')
-          and lower(split_part(trim(coalesce(u.display_name, '')), ' ', 1)) = lower(x.who)
-        having count(*) = 1),
+insert into feedback (id, type, status, priority, module, screen, title, details, decision_note, reporter_email, reporter_name,
+                      context, source, source_ref, created_at, updated_at, approved_at, approved_by, done_at)
+overriding system value
+select x.row_no, x.type, x.status, x.priority, x.module, x.screen, x.title, x.details, x.decision_note,
+       coalesce(x.email, (select min(u.email) from app_users u where u.role in ('admin', 'sales', 'crew')
+          and lower(split_part(trim(coalesce(u.display_name, '')), ' ', 1)) = lower(x.who) having count(*) = 1)),
        x.who,
-       jsonb_build_object('imported_from', 'Lifted Ops Platform Feedback_Oct 2026 - LIVE.xlsx', 'sheet_row', x.row_no, 'sheet_status', x.sheet_status),
+       jsonb_build_object('imported_from', 'Lifted Ops Platform Feedback_Oct 2026 - LIVE.xlsx', 'sheet_row', x.row_no,
+                          'sheet_status', x.sheet_status, 'sheet_implemented', x.implemented),
        'sheet', 'sheet row ' || x.row_no,
        (x.on_date::timestamp at time zone 'America/Los_Angeles'), now(),
-       case when x.status = 'approved' then now() end, case when x.status = 'approved' then 'aziz@lifted-organics.com' end
+       case when x.status in ('approved', 'done') then (x.on_date::timestamp at time zone 'America/Los_Angeles') end,
+       case when x.status in ('approved', 'done') then 'aziz@lifted-organics.com' end,
+       case when x.status = 'done' then (coalesce(x.resp_date, x.on_date)::timestamp at time zone 'America/Los_Angeles') end
 from (values
-  (4,  date '2026-10-23', 'Matt',    'idea', 'approved', 'medium', 'accounting',   null,          'Daily email of fulfilled orders for Accounting',
+  (1, date '2026-10-23', 'Beth', null, 'idea', 'done', 'medium', 'sales', 'Reserves', 'Back button from a customer in Reserves',
+       'When I click on a customer in Reserves it takes me to their info, but there is no "back" button to the reserves home page that shows all customers. I need to refresh my page in order to go back and see all customers. Possible to add a "back" button when in a customers reserves screen?',
+       'Back buttons to be implemented on the customer page in reserves, and wherever else this is an issue', 'Closed', 'Yes', date '2026-10-24'),
+  (2, date '2026-10-23', 'Matt', 'matt@lifted-organics.com', 'idea', 'done', 'low', 'sales', 'Dashboard', 'Customer statement and balance on their dashboard',
+       'Let''s add customer Statement their dashboard',
+       'Add customer statement and current balance. Build out customer dashboard on their screen, with information like current balance, lbs left to pick up for month, etc. ', 'Closed', 'Yes', date '2026-10-24'),
+  (3, date '2026-10-23', 'Matt', 'matt@lifted-organics.com', 'idea', 'done', 'low', 'sales', 'Reserves', 'Hold product for customers who get a sample',
+       'Functionality to auto reserve a certain quantity if a customer receives a sample, so we don''t sell it before they have a chance to decide (maybe a 7-14 day timer)',
+       'Sample designation for packages (i.e. a customer designates an order as a sample on their order with a check box, that opens a field for them to place requested MOQ to be put on hold for 10 days.) Reserve should hold for 10 days from shipping of product but should be adjustable in settings (this should be a customer level setting)
+
+Notes: Sales-created orders skip the stock check. Orders made with New order in the app are confirmed the moment they’re created, so you can still enter a sale even if the menu says it’s short. Approving a reserve request isn’t checked against stock. Approving more than what’s open is allowed, and Free just goes negative in By strain like it does today. If you want approvals blocked too, I can add the same check there.', 'Closed', 'Yes', null::date),
+  (4, date '2026-10-23', 'Matt', 'matt@lifted-organics.com', 'idea', 'approved', 'medium', 'accounting', null, 'Daily email of fulfilled orders for Accounting',
        'Let''s send an internal email alert at the end of each day with all orders fulfilled, so accounting knows to send invoices',
-       'From the old sheet (In Progress): Working with CCI on 10/26 to get all the email and sharepoint permissions granted for non-lifted logins, automatic emails, and file back ups. Will have a list of daily, weekly, monthly reports, as well as ones triggered by events.',
-       'In Progress'),
-  (6,  date '2026-10-24', 'Aziz',    'idea', 'new', 'low',    'sales',        null,          'Sales catalog redesign (Mike?)',
-       'Sales catalog needs a lot of work. Should we get Mike to design a template? Anything else we should get him to design?', null, 'Open'),
-  (10, date '2026-10-24', 'Aziz',    'idea', 'new', null,     'nursery',      'Logs',        'Leachate % formulas to match real recordkeeping',
-       'Leachate Percentages formulas need to be put in line with actual recordkeeping practices', null, 'Open'),
-  (11, date '2026-10-25', 'Jordan',  'idea', 'new', 'medium', 'cultivation',  'Harvest',     'Harvest module improvements (Jordan''s Word doc)',
-       'Harvest Module Improvements - Sent via word doc to Aziz', null, 'Open'),
-  (12, date '2026-10-27', 'Rama',    'idea', 'new', 'low',    'sales',        'Orders',      'Set one price for a whole order',
-       'Set price for whole order ie. add 10 items then mark all cost $X. Found out that customers have set prices but still could be good for new/ non regular customers', null, 'Open'),
-  (13, date '2026-10-27', 'Garrett', 'idea', 'new', null,     'cultivation',  'Schedule',    'Schedule broken into days; edit expected date on main screen',
-       'Break up the week into individual days w/ details of each day (estimated FF lbs, plants, etc.). Enable ability to edit expected date on the main screen without having to manually enter it into individual strain windows.', null, 'Open'),
-  (14, date '2026-10-27', 'Rama',    'idea', 'new', 'low',    'sales',        'Orders',      'Discount option on orders',
-       'Discount option', null, 'Open'),
-  (16, date '2026-10-27', 'Rama',    'idea', 'new', 'low',    'distribution', 'Transit',     'Manifest: package tags in ascending order',
-       'Manifest should sort package tags into ascending order. Easier to collect correct tags and verify that correct tags are used', null, 'Open'),
-  (17, date '2026-11-03', 'Rama',    'bug',  'new', 'medium', 'distribution', 'Map',         'Can''t move stacked pallets to other freezers',
-       'Cannot move stacked pallets to other freezers. Menu for movement doesn''t come up', null, 'Open'),
-  (19, date '2026-11-06', 'Rama',    'idea', 'new', 'medium', 'distribution', 'Fulfillment', 'Lois plans freezer fulfillment (multiple orders)',
-       'Have Lois decide a freezer fulfilment plan, possibly for multiple orders. Variables to consider: Multiple strains in one freezer, clearing out smaller pallets, leaving short pallets behind full pallets,', null, 'Open'),
-  (20, date '2026-11-06', 'Rama',    'idea', 'new', 'low',    'sales',        'Orders',      'Alert when a customer places or changes an order',
-       'Email update when a customer places an order or especially if customer changes an order. Currently a customers order reverts to unconfirmed when its changed but how about after its started or has been fulfilled?', null, 'Open'),
-  (21, date '2026-11-06', 'Rama',    'idea', 'new', 'low',    'distribution', 'Map',         'Map search card: show weight; F# vs spot labels confusing',
-       'See notes for photo. Pallet info that comes up from search in map doesn''t show weight. also, in example shown it''s Pallet # Strain Location Freezer# FreezerLocation. Freezer # is F# and is easy to confuse with Freezer spot which is #LocationCode. (Imported: the photo in the sheet''s Notes didn''t come across; ask Rama to attach it.)', null, 'Open')
-) as x(row_no, on_date, who, type, status, priority, module, screen, title, details, decision_note, sheet_status)
+       'From the old sheet (In Progress): Working with CCI on 10/26 to get all the email and sharepoint permissions granted for non-lifted logins, automatic emails, and file back ups. Will have a list of daily, weekly, monthly reports, as well as ones triggered by events.', 'In Progress', 'No', null::date),
+  (5, date '2026-10-23', 'Beth', null, 'idea', 'done', 'low', 'compliance', null, 'Insurance, registrations, equipment records in Compliance',
+       'In future versions, it could be helpful to include insurance policies, vehicle registrations and equipment records & inspections in the compliance section',
+       'Easy add. Will probably develop into more but we''ll get the basic functionality developed and then let it evolve from there. Vehicle Insurance Policies, Registrations, Maintenance Logging, Inspection Reports, and Incident Reports will be the starting point. Insurance policies and Registrations will have an upload function and camera access to record photos. Maintenance logs, inspection reports, and incident reports will all be filled out in the app and have upload and camera access to record photos.', 'Closed', 'Yes', date '2026-10-24'),
+  (6, date '2026-10-24', 'Aziz', null, 'idea', 'new', 'low', 'sales', null, 'Sales catalog redesign (Mike?)',
+       'Sales catalog needs a lot of work. Should we get Mike to design a template? Anything else we should get him to design?',
+       null, 'Open', 'No', null::date),
+  (7, date '2026-10-24', 'Aziz', null, 'idea', 'done', 'medium', 'nursery', 'Logs', 'Leachate % auto-calculates',
+       'Leachate Percentage needs to auto-calculate',
+       'Closed in the old sheet.', 'Closed', 'Yes', date '2026-10-24'),
+  (8, date '2026-10-24', 'Aziz', null, 'idea', 'done', 'low', null, null, 'Strain card from any inventory of that strain',
+       'Strain settings card should be accessible from any inventory of that strain.',
+       'Closed in the old sheet.', 'Closed', 'Yes', date '2026-10-24'),
+  (9, date '2026-10-24', 'Aziz', null, 'idea', 'done', 'medium', 'cultivation', 'Harvest', 'Harvests: show the 7 days after the date picked',
+       'Harvests should show harvests scheduled for 7 days after the date selected, not just the date selected.',
+       'Closed in the old sheet.', 'Closed', 'Yes', date '2026-10-24'),
+  (10, date '2026-10-24', 'Aziz', null, 'idea', 'new', null, 'nursery', 'Logs', 'Leachate % formulas to match real recordkeeping',
+       'Leachate Percentages formulas need to be put in line with actual recordkeeping practices',
+       null, 'Open', 'No', null::date),
+  (11, date '2026-10-25', 'Jordan', null, 'idea', 'new', 'medium', 'cultivation', 'Harvest', 'Harvest module improvements (Jordan''s Word doc)',
+       'Harvest Module Improvements - Sent via word doc to Aziz',
+       null, 'Open', 'No', null::date),
+  (12, date '2026-10-27', 'Rama', null, 'idea', 'new', 'low', 'sales', 'Orders', 'Set one price for a whole order',
+       'Set price for whole order ie. add 10 items then mark all cost $X. Found out that customers have set prices but still could be good for new/ non regular customers',
+       null, 'Open', 'No', null::date),
+  (13, date '2026-10-27', 'Garrett', 'garrett@lifted-organics.com', 'idea', 'new', null, 'cultivation', 'Schedule', 'Schedule broken into days; edit expected date on main screen',
+       'Break up the week into individual days w/ details of each day (estimated FF lbs, plants, etc.). Enable ability to edit expected date on the main screen without having to manually enter it into individual strain windows.',
+       null, 'Open', 'No', null::date),
+  (14, date '2026-10-27', 'Rama', null, 'idea', 'new', 'low', 'sales', 'Orders', 'Discount option on orders',
+       'Discount option',
+       null, 'Open', 'No', null::date),
+  (15, date '2026-10-27', 'Rama', null, 'idea', 'done', 'low', 'distribution', 'Transit', 'Manifest defaults to the driver phone number',
+       'Manifest should default to phone number. I think driver phone number',
+       'Closed in the old sheet.', 'Closed', 'No', null::date),
+  (16, date '2026-10-27', 'Rama', null, 'idea', 'new', 'low', 'distribution', 'Transit', 'Manifest: package tags in ascending order',
+       'Manifest should sort package tags into ascending order. Easier to collect correct tags and verify that correct tags are used',
+       null, 'Open', 'No', null::date),
+  (17, date '2026-11-03', 'Rama', null, 'bug', 'new', 'medium', 'distribution', 'Map', 'Can''t move stacked pallets to other freezers',
+       'Cannot move stacked pallets to other freezers. Menu for movement doesn''t come up',
+       null, 'Open', 'No', null::date),
+  (18, date '2026-11-03', 'Rama', null, 'bug', 'done', 'medium', 'distribution', 'Map', 'Moving part of a stack on tablet: error and signed out',
+       'When moving part of stacked pallets in tablet error msg shows and signs out',
+       'Closed in the old sheet.', 'Closed', 'No', null::date),
+  (19, date '2026-11-06', 'Rama', null, 'idea', 'new', 'medium', 'distribution', 'Fulfillment', 'Lois plans freezer fulfillment (multiple orders)',
+       'Have Lois decide a freezer fulfilment plan, possibly for multiple orders. Variables to consider: Multiple strains in one freezer, clearing out smaller pallets, leaving short pallets behind full pallets,',
+       null, 'Open', 'No', null::date),
+  (20, date '2026-11-06', 'Rama', null, 'idea', 'new', 'low', 'sales', 'Orders', 'Alert when a customer places or changes an order',
+       'Email update when a customer places an order or especially if customer changes an order. Currently a customers order reverts to unconfirmed when its changed but how about after its started or has been fulfilled?',
+       null, 'Open', 'No', null::date),
+  (21, date '2026-11-06', 'Rama', null, 'idea', 'new', 'low', 'distribution', 'Map', 'Map search card: show weight; F# vs spot labels confusing',
+       'See notes for photo. Pallet info that comes up from search in map doesn''t show weight. also, in example shown it''s Pallet # Strain Location Freezer# FreezerLocation. Freezer # is F# and is easy to confuse with Freezer spot which is #LocationCode. (Imported: the photo in the sheet''s Notes didn''t come across; ask Rama to attach it.)',
+       null, 'Open', 'No', null::date)
+) as x(row_no, on_date, who, email, type, status, priority, module, screen, title, details, decision_note, sheet_status, implemented, resp_date)
 where not exists (select 1 from feedback where source = 'sheet')
 order by x.row_no;
+
+-- app reports start after the imported numbers
+select setval(pg_get_serial_sequence('feedback', 'id'), greatest((select coalesce(max(id), 0) from feedback), 1), (select count(*) > 0 from feedback));
 
 insert into feedback_events (feedback_id, actor_email, from_status, to_status, note, created_at)
 select f.id, 'import', null, f.status, 'Imported from the old feedback sheet (' || f.source_ref || ')', f.created_at
