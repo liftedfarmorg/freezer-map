@@ -920,3 +920,8 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 18l-6-6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
 .backbtn2:hover { background: color-mix(in srgb, var(--brand) 16%, var(--panel, #fff)); }
 .backbtn2:active { transform: translateY(1px); }
+/* INV-TBL-1: invoice table */
+.ctable.invtbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.ctable.invtbl tbody tr.tap { cursor: pointer; }
+.ctable.invtbl tbody tr.tap:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+@media (max-width: 700px) { .ctable.invtbl .hide-s { display: none; } }

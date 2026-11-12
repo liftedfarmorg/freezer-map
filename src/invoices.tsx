@@ -129,6 +129,16 @@ function LineRow({ l, busy, onPrice, onRemove }: { l: SalesDoc['lines'][number];
   )
 }
 
+const INV_COLS: [string, string, string][] = [['num', 'Invoice #', ''], ['status', 'Status', ''], ['cust', 'Customer', ''], ['date', 'Date', ''], ['terms', 'Terms', 'hide-s'], ['due', 'Due', ''],
+  ['po', 'PO', 'hide-s'], ['sent', 'Emailed', 'hide-s'], ['qb', 'QuickBooks', 'hide-s'], ['total', 'Total', 'num']]
+function cmpInv(a: Invoice, b: Invoice, k: string, cname: (id: number) => string, overdue: (i: Invoice) => boolean): number {
+  const v = (i: Invoice): string | number => k === 'num' ? i.inv_number : k === 'status' ? (overdue(i) ? 'a' : i.status) : k === 'cust' ? cname(i.customer_id).toLowerCase()
+    : k === 'date' ? i.invoice_date : k === 'terms' ? i.terms_label ?? '' : k === 'due' ? i.due_date ?? '' : k === 'po' ? i.po_number ?? '' : k === 'sent' ? i.sent_at ?? ''
+      : k === 'qb' ? i.acct_status : Number(i.total)
+  const x = v(a), y = v(b)
+  return typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true }) || a.id - b.id
+}
+
 /** Sales > Invoices */
 export function InvoicesView({ backend, customers, flash, isAdmin, sender, scope = 'sales' }: { backend: Backend; customers: Customer[]; flash: Flash; isAdmin: boolean; sender?: string | null; scope?: 'sales' | 'nursery' }) {
   const [rows, setRows] = useState<Invoice[] | null>(null)
@@ -136,6 +146,8 @@ export function InvoicesView({ backend, customers, flash, isAdmin, sender, scope
   const [f, setF] = useSaved<'open' | 'overdue' | 'paid' | 'void' | 'all'>('invoices.InvoicesView.f', 'open')
   const [q, setQ] = useSaved('invoices.InvoicesView.q', '')
   const [open, setOpen] = useSaved<number | null>('invoices.InvoicesView.open', null)
+  // INV-TBL-1: invoices as a table, click a header to sort
+  const [sort, setSort] = useSaved<{ k: string; dir: 1 | -1 }>('invoices.InvoicesView.sort', { k: 'date', dir: -1 })
   const load = () => backend.listInvoices(scope).then(r => { setRows(r); setErr(null) }).catch(e => setErr(String(e?.message ?? e)))
   useEffect(() => { load() }, [])
   const cname = useMemo(() => { const m = new Map(customers.map(c => [c.id, c.name])); return (id: number) => m.get(id) ?? `#${id}` }, [customers])
@@ -161,13 +173,23 @@ export function InvoicesView({ backend, customers, flash, isAdmin, sender, scope
         <input className="search" type="search" placeholder="Invoice #, customer or PO" value={q} onChange={e => setQ(e.target.value)} />
       </div>
       {!shown.length && <p className="muted">{scope === 'nursery' ? 'No invoices here. A clone invoice is made each time plants are delivered on an order.' : 'No invoices here. Invoices are made when an order\'s stop is delivered, or from the order with "Make invoice".'}</p>}
-      {shown.map(i => (
-        <button key={i.id} className="li setrow" onClick={() => setOpen(i.id)}>
-          <div className="grow"><div><b>{i.inv_number}</b> <span className={`pill inv-${overdue(i) ? 'overdue' : i.status}`}>{overdue(i) ? 'Overdue' : STATUS[i.status]}</span></div>
-            <div className="muted">{cname(i.customer_id)} · {dfmt(i.invoice_date)} · {i.terms_label}{i.due_date ? ` · due ${dfmt(i.due_date)}` : ''}{i.sent_at ? ' · emailed' : ''}</div></div>
-          <b className="num">{money(i.total)}</b>
-        </button>
-      ))}
+      {shown.length > 0 && <div className="cwrap"><table className="ctable invtbl">
+        <thead><tr>{INV_COLS.map(([k, l, cls]) => <th key={k} className={`sortable ${cls}`} onClick={() => setSort(o => ({ k, dir: o.k === k ? (o.dir === 1 ? -1 : 1) : (k === 'total' || k === 'date' || k === 'due' ? -1 : 1) }))}>
+          {l}{sort.k === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}</tr></thead>
+        <tbody>{[...shown].sort((x, y) => sort.dir * cmpInv(x, y, sort.k, cname, overdue)).map(i => <tr key={i.id} className="tap" onClick={() => setOpen(i.id)}>
+          <td className="nowrap"><b>{i.inv_number}</b></td>
+          <td><span className={`pill inv-${overdue(i) ? 'overdue' : i.status}`}>{overdue(i) ? 'Overdue' : STATUS[i.status]}</span></td>
+          <td>{cname(i.customer_id)}</td>
+          <td className="nowrap">{dfmt(i.invoice_date)}</td>
+          <td className="hide-s">{i.terms_label ?? ''}</td>
+          <td className={`nowrap ${overdue(i) ? 'bad-t' : ''}`}>{i.due_date ? dfmt(i.due_date) : ''}</td>
+          <td className="hide-s">{i.po_number ?? ''}</td>
+          <td className="hide-s">{i.sent_at ? 'Emailed' : ''}</td>
+          <td className="hide-s">{i.acct_status === 'sent' ? 'In QB' : i.acct_status === 'error' ? <span className="bad-t">Error</span> : i.acct_status === 'pending' ? <span className="muted">Waiting</span> : ''}</td>
+          <td className="num"><b>{money(i.total)}</b></td>
+        </tr>)}</tbody>
+        <tfoot><tr><td colSpan={9}><b>{shown.length} invoice{shown.length === 1 ? '' : 's'}</b></td><td className="num"><b>{money(sum(shown))}</b></td></tr></tfoot>
+      </table></div>}
       {open != null && <DocSheet backend={backend} kind="invoice" id={open} flash={flash} onClose={() => setOpen(null)} onChanged={load} canEdit canVoid={isAdmin} sender={sender} />}
     </div>
   )
