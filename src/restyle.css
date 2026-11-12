@@ -954,3 +954,4 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .sw-car { display: inline-block; width: 16px; color: var(--muted); font-size: 12px; }
 .sw-kid td { font-size: 13px; background: color-mix(in srgb, var(--line) 18%, transparent); }
 .sw-kid1 { padding-left: 34px !important; color: var(--muted); white-space: nowrap; }
+.sw-prod td:first-child { white-space: nowrap; }

@@ -91,10 +91,15 @@ async function loadWhere(sb: SupabaseClient, names: string[]): Promise<Data> {
   }
   // field: plants still in the ground (no finished harvest yet) and harvests still in progress. Finished harvests are in Inventory now.
   const isDone = (h: (typeof hvs)[number]) => h.status === 'done' || !!h.harvested_on
-  const harvestedPl = new Set<number>(), harvestedField = new Set<string>()
-  for (const h of hvs.filter(isDone)) { if (h.planting_id != null) harvestedPl.add(h.planting_id); else harvestedField.add(`${h.site}|${h.field_id}`) }
+  // a finished harvest of this strain on a block covers every planting of it there planted before the harvest (a block can have more than one planting)
+  const harvestedPl = new Set<number>()
+  for (const h of hvs.filter(isDone)) {
+    if (h.planting_id != null) harvestedPl.add(h.planting_id)
+    for (const p of pls) if (p.site === h.site && p.field_id === h.field_id && (!p.planted_on || !h.harvested_on || p.planted_on <= h.harvested_on)) harvestedPl.add(p.id)
+  }
+  const harvestedField = new Set<string>()
   for (const p of pls) {
-    if (harvestedPl.has(p.id) || harvestedField.has(`${p.site}|${p.field_id}`)) continue
+    if (harvestedPl.has(p.id)) continue
     rows.push({ sec: 'fld', stage: p.flipped_on ? 'Flowering' : 'Planted', tone: 'veg', where: `${p.site} · ${fieldName(p.field_id) || '—'}`, qty: `${n0((p.plants ?? 0) - (p.plant_loss ?? 0))} plants`,
       details: [`${year} crop`, p.trial ? 'Trial' : ''].filter(Boolean).join(' · '), since: p.flipped_on ? `Flipped ${md(p.flipped_on)}` : p.planted_on ? `Planted ${md(p.planted_on)}` : '', sort: `2a${p.planted_on ?? ''}` })
   }
