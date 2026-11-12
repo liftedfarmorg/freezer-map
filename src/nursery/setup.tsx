@@ -10,6 +10,7 @@ import { t } from '../i18n'
 import { Fold } from '../fold'
 import { ModulePeople } from '../users'
 import { TagRanges } from '../licenses'
+import { ContainersPanel } from './pots'
 import type { PaymentTerm } from '../types'
 
 const KIND: Record<RoomKind, string> = { bench: 'Greenhouse bench', greenhouse: 'Greenhouse', hoop: 'Hoop', trailer: 'Rooting trailer', veg: 'Veg', other: 'Other' }
@@ -69,6 +70,8 @@ export function SetupTab({ d, sb, api, terms, flash, onSaved }: { d: NData; sb: 
               <b>{r.name}</b><span className="muted">{r.kind === 'hoop' ? `${n0(inRoom(r.id))} / ${n0(r.capacity)}` : r.kind === 'trailer' ? t('{n} trays', { n: n0(r.trays) }) : inRoom(r.id) ? t('{n} moms', { n: n0(inRoom(r.id)) }) : t(KIND[r.kind])}</span></button>)}</div>
           </div>) })}
       </Fold>
+
+      <Fold id="nset.containers" title={t('Containers')} count={d.containers.filter(x => x.active).length}><ContainersPanel d={d} sb={sb} flash={flash} onSaved={onSaved} /></Fold>
 
       <Fold id="nset.sites" title={t('Nursery sites')} count={d.sites.length}>
         <div className="dlist">{d.sites.map(s => { const l = d.licenses.find(x => x.license_no === s.license)

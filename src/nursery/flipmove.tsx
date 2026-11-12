@@ -8,6 +8,7 @@ import type { NData, NPlanting } from './types'
 import { DateIn, F, Pick, SaveBar, Sheet } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { t } from '../i18n'
+import { PotChips, potPlanted, potsReady } from './pots'
 
 const site = (d: NData) => d.sites[0]?.code ?? '1PN'
 const num = (tag: string) => { const m = tag.match(/([0-9]+)$/); return m ? { head: tag.slice(0, tag.length - m[1].length), n: Number(m[1]), w: m[1].length } : null }
@@ -119,6 +120,7 @@ export function PlantDonors({ sb, d, c, rows: rows0, flash, onClose, onDone }: {
   const [rows, setRows] = useState<{ x: DonorRow; on: boolean; batch: number | null; plants: number; tag: string }[]>(() => rows0.map(x => ({ x, on: true, batch: pk(x.strains)[0]?.id ?? null, plants: x.plants ?? 0, tag: '' })))
   const [room, setRoom] = useState<number | null>(d.rooms.find(r => r.name === 'Greenhouse')?.id ?? null)
   const [on, setOn] = useState<string | null>(today())
+  const [pot, setPot] = useState<number | null>(null)   // POT-2
   const [busy, setBusy] = useState(false)
   const set = (i: number, v: Partial<(typeof rows)[number]>) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...v } : r)))
   const picked = rows.filter(r => r.on)
@@ -131,17 +133,19 @@ export function PlantDonors({ sb, d, c, rows: rows0, flash, onClose, onDone }: {
   const bad = (r: (typeof rows)[number]) => { const q = d.batches.find(y => y.id === r.batch); return !q ? t('no package') : q.stage !== 'ready' ? t('package not marked ready') : r.plants > c.left(q) ? t('only {n} left', { n: c.left(q) }) : r.plants > 100 ? t('100 max') : null }
   const go = async () => {
     setBusy(true)
-    const { error } = await sb.rpc('nursery_plant', { p_lines: picked.map(r => ({ batch: r.batch, use: 'donors', ref: r.x.id, room, plants: r.plants, tag: r.tag.trim().toUpperCase() })), p_on: on })
+    const { data, error } = await sb.rpc('nursery_plant', { p_lines: picked.map(r => ({ batch: r.batch, use: 'donors', ref: r.x.id, room, plants: r.plants, tag: r.tag.trim().toUpperCase() })), p_on: on })
+    if (!error) await potPlanted(sb, data, pot, on).catch(e => flash((e as Error).message, true))
     setBusy(false)
     if (error) flash(error.message, true); else await onDone(t('{n} donor batches planted', { n: picked.length }))
   }
-  const ok = !!room && picked.length > 0 && picked.every(r => r.batch && r.tag.trim() && r.plants > 0 && !bad(r))
+  const ok = !!room && picked.length > 0 && picked.every(r => r.batch && r.tag.trim() && r.plants > 0 && !bad(r)) && (!potsReady(d) || pot != null)
   return (
     <Sheet side title={t('Plant donors')} sub={t('One immature batch per donor batch, from its strain\'s package. Goes to METRC right away.')} onClose={onClose}>
       <div className="grid3">
         <F label={t('Where they are now')}><Pick value={room} blank="—" options={d.rooms.filter(x => x.active && x.site === site(d)).map(x => ({ v: x.id, l: x.name }))} onChange={setRoom} /></F>
         <F label={t('Planted on')}><DateIn value={on} onChange={setOn} /></F>
       </div>
+      {potsReady(d) && <F label={t('Planted into')}><PotChips d={d} value={pot} onChange={setPot} /></F>}
       <div className="row wrap toolbar"><button className="ghost small" onClick={() => setRows(rs => rs.map(r => ({ ...r, on: true })))}>{t('All')}</button><button className="ghost small" onClick={() => setRows(rs => rs.map(r => ({ ...r, on: false })))}>{t('None')}</button>
         <button className="ghost small" disabled={!picked.length} onClick={fill}>{t('Next tags for the picked ones')}</button></div>
       <div className="cwrap tight"><table className="ctable">

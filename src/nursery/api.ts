@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Batch, Delivery, LabTest, License, MPkg, Mother, NData, NDonorBatch, NOrder, NPlanting, NRoom, NRun, NSite, NUse, OStatus, StrainPlan, TagRange } from './types'
+import type { Batch, NContainer, Delivery, LabTest, License, MPkg, Mother, NData, NDonorBatch, NOrder, NPlanting, NRoom, NRun, NSite, NUse, OStatus, StrainPlan, TagRange } from './types'
 
 function fail(error: { message: string } | null) { if (error) throw new Error(error.message) }
 async function all<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
@@ -19,16 +19,17 @@ export interface OrderInput {
 }
 
 export class NurseryApi {
-  constructor(private sb: SupabaseClient) {}
+  constructor(readonly sb: SupabaseClient) {}
 
   async load(): Promise<NData> {
     const opt = async <T,>(f: () => Promise<T[]>) => { try { return await f() } catch { return [] as T[] } }   // tables from 031 (before it's run)
-    const [strainPlan, tests, plantings, runs, donorBatches] = await Promise.all([
+    const [strainPlan, tests, plantings, runs, donorBatches, containers] = await Promise.all([
       opt(() => all<StrainPlan>((a, b) => this.sb.from('nursery_strain_plan').select('*').range(a, b))),
       opt(() => all<LabTest>((a, b) => this.sb.from('nursery_tests').select('*').order('tested_on', { ascending: false }).range(a, b))),
       opt(() => all<NPlanting>((a, b) => this.sb.from('nursery_plantings').select('*').order('id').range(a, b))),   // 337
       opt(() => all<NRun>((a, b) => this.sb.from('breed_runs').select('id,name,room_id,status,season,donor_strain').order('id').range(a, b))),
       opt(() => all<NDonorBatch>((a, b) => this.sb.from('breed_donor_batches').select('id,project,label,strains,room_id').order('id').range(a, b))),
+      opt(() => all<NContainer>((a, b) => this.sb.from('nursery_containers').select('*').order('size_rank').order('id').range(a, b))),   // 343
     ])
     const [sites, rooms, mothers, batches, orders, deliveries, licenses, ranges, strains, st] = await Promise.all([
       all<NSite>((a, b) => this.sb.from('nursery_sites').select('*').order('sort').range(a, b)),
@@ -49,7 +50,7 @@ export class NurseryApi {
     const s = new Map(st.map(r => [r.key, r.value]))
     const nv = (k: string, d: number) => { const v = Number(s.get(k)); return s.has(k) && isFinite(v) ? v : d }
     return {
-      sites, licenses, ranges, deliveries, tests, plantings, mpkgs, runs, donorBatches,
+      sites, licenses, ranges, deliveries, tests, plantings, mpkgs, runs, donorBatches, containers,
       strainPlan: strainPlan.map(p => ({ ...p, cuts_g3: num(p.cuts_g3), cuts_g2: num(p.cuts_g2), cuts_g1: num(p.cuts_g1) })),
       rooms: rooms.map(r => ({ ...r, place: r.place ?? 'Webb', beds: r.beds ?? [], rented: !!r.rented })),
       mothers: mothers.map(m => ({ ...m, qty: m.qty ?? 1, lost: m.lost ?? 0, gen: m.gen ?? 2, cuts_per_plant: num(m.cuts_per_plant) })),
@@ -71,6 +72,11 @@ export class NurseryApi {
     if (error && /schema cache|does not exist/.test(error.message)) throw new Error('Run the latest nursery SQL (028, 031) in Supabase first')
     fail(error); return data as T
   }
+  /** 343: pot at planting ('planted') or up pot; p_room = moved to (mother lots; plantings move through nursery_move) */
+  pot(items: { kind: 'mother' | 'planting'; id: number; plants?: number }[], to: number, what: 'planted' | 'up_pot', on?: string | null, note?: string | null, room?: number | null) {
+    return this.rpc<number>('nursery_pot', { p_items: items, p_to: to, p_what: what, p_on: on ?? null, p_note: note ?? null, p_room: room ?? null })
+  }
+  async saveContainer(c: Partial<NContainer>) { const { error } = c.id ? await this.sb.from('nursery_containers').update(c).eq('id', c.id) : await this.sb.from('nursery_containers').insert(c); fail(error) }
   saveOrder(o: OrderInput) { return this.rpc<NOrder>('nursery_save_order', { p: o }) }
   setStatus(id: number, status: OStatus, note?: string) { return this.rpc<NOrder>('nursery_order_status', { p_order: id, p_status: status, p_note: note ?? null }) }
   /** Ship: make the METRC transfer from 1PN right away; if METRC refuses it, the server takes the delivery back */

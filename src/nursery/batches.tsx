@@ -8,6 +8,8 @@ import { DateIn, F, NumIn, Pick, SaveBar, Sheet, StrainList, TextIn } from '../c
 import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
 import { useSaved } from '../saved'
+import { LifeCycle, PotChips, UpPotSheet, potText, potsReady, upMother, upPlanting } from './pots'
+import type { UpItem } from './pots'
 
 const stagePill = (b: Batch) => {
   const late = b.stage === 'rooting' && b.ready_on && b.ready_on < today()
@@ -54,14 +56,19 @@ const nextSeason = (gen: number, cut: string) => { const y = Number(cut.slice(0,
 export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: NData; c: NCtx; b: Partial<Batch>; api: NurseryApi; flash: Flash; onClose: () => void; onSaved: (m: string) => Promise<void> }) {
   const isNew = !b0.id
   const site = b0.site ?? d.sites[0]?.code ?? '1PN'
-  const tray = d.settings.tray || 72
-  const [x, setX] = useState<Partial<Batch>>(() => ({ site, cut_on: today(), tags: [], lost: 0, gen: 4,
+  const defTray = d.containers.find(z => z.kind === 'tray' && z.active)?.id ?? null   // POT-2: cuttings always go into a tray (72c)
+  const [x, setX] = useState<Partial<Batch>>(() => ({ site, cut_on: today(), tags: [], lost: 0, gen: 4, container_id: isNew ? defTray : null,
     room_id: isNew ? d.rooms.find(r => r.active && r.kind === 'trailer')?.id ?? null : null, ...b0 }))
   const [busy, setBusy] = useState(false)
   const [good, setGood] = useState<number | null>(null)
   const [mode, setMode] = useState<'edit' | 'ready' | 'loss' | 'plant' | 'split'>('edit')
   const [loss, setLoss] = useState<number | null>(null)
   const set = (v: Partial<Batch>) => setX(s => ({ ...s, ...v }))
+  const tray = d.containers.find(z => z.id === (x.container_id ?? defTray))?.cells ?? (d.settings.tray || 72)
+  const [up, setUp] = useState<UpItem[] | null>(null)
+  const [life, setLife] = useState<UpItem | null>(null)
+  const kids = b0.id ? [...d.mothers.filter(m => m.batch_id === b0.id && m.status === 'active').map(m => upMother(m)),
+    ...d.plantings.filter(p => p.batch_id === b0.id).map(p => upPlanting(p, `${p.strain} · ${t(USE_LABEL[p.use])}`))] : []
   const delivered = b0.id ? c.fromBatch.get(b0.id) ?? 0 : 0
   const autoName = x.strain && x.cut_on ? batchName(x.site ?? site, x.cut_on, x.strain) + (x.gen && x.gen < 4 ? `-G${x.gen}` : '') : ''
   const gen = x.gen ?? 4
@@ -76,7 +83,7 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
     id: x.id, site: x.site ?? site, room_id: x.room_id ?? null, strain: x.strain!.trim(), name: (x.name ?? '').trim() || autoName || null, order_id: gen === 4 ? x.order_id ?? null : null,
     cut_on: x.cut_on!, cuttings: x.cuttings!, lost: x.lost ?? 0, ready_on: x.ready_on ?? (x.cut_on ? addDays(x.cut_on, d.settings.rootDays) : null), stage: x.stage ?? 'rooting', tags: x.tags ?? [], use: x.use ?? null, package_tag: (x.package_tag ?? '').trim().toUpperCase() || null, notes: x.notes ?? null,
     gen, season: x.season ?? (x.cut_on ? nextSeason(gen, x.cut_on) : null), mother_id: x.mother_id ?? null, trays: x.trays ?? (x.cuttings ? Math.round(x.cuttings / tray * 10) / 10 : null),
-    emerged_on: x.emerged_on ?? null, moved_out_on: x.moved_out_on ?? null,
+    emerged_on: x.emerged_on ?? null, moved_out_on: x.moved_out_on ?? null, ...(potsReady(d) ? { container_id: x.container_id ?? null } : {}),
     sort1_on: x.sort1_on ?? null, s1_vigorous: x.s1_vigorous ?? null, s1_minimal: x.s1_minimal ?? null, s1_none: x.s1_none ?? null, s1_dead: x.s1_dead ?? null,
     sort2_on: x.sort2_on ?? null, s2_vigorous: x.s2_vigorous ?? null, s2_minimal: x.s2_minimal ?? null, s2_none: x.s2_none ?? null, s2_dead: x.s2_dead ?? null,
   }), isNew ? t('{n} {strain} {gen} cuttings added', { n: n0(x.cuttings), strain: x.strain, gen: GEN_LABEL[gen] }) : t('Saved'))
@@ -97,6 +104,9 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
     </Sheet>
   )
   if (mode === 'plant' && b0.id) return <PlantSheet d={d} c={c} b={b0 as Batch} api={api} flash={flash} onBack={() => setMode('edit')} onDone={async m => { onClose(); await onSaved(m) }} />
+  if (up) return <UpPotSheet sb={api.sb} d={d} items={up} flash={flash} onClose={() => setUp(null)} onDone={async m => { setUp(null); onClose(); await onSaved(m) }} />
+  if (life) { const lot = life.kind === 'mother' ? d.mothers.find(m => m.id === life.id) : d.plantings.find(p => p.id === life.id)
+    if (lot) return <Sheet side title={life.label} sub={t('Life cycle')} onClose={() => setLife(null)}><LifeCycle sb={api.sb} d={d} c={c} kind={life.kind} lot={lot} batch={b0 as Batch} /></Sheet> }
   if (mode === 'split' && b0.id) return <SplitSheet d={d} c={c} b={b0 as Batch} api={api} flash={flash} onBack={() => setMode('edit')} onDone={async m => { onClose(); await onSaved(m) }} />
 
   const sortRow = (n: 1 | 2) => {
@@ -121,6 +131,7 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
         <F label={t('Strain')}><TextIn value={x.strain} list="n-strains" onChange={v => set({ strain: v ?? '' })} autoFocus={isNew && !b0.strain} /></F>
         <F label={t('Cut on')}><DateIn value={x.cut_on} onChange={v => set({ cut_on: v ?? today() })} /></F>
         <F label={t('Cuttings')}><NumIn value={x.cuttings} onChange={v => set({ cuttings: v ?? undefined })} /></F>
+        {potsReady(d) && <F label={t('Tray')}><Pick value={x.container_id ?? defTray} options={d.containers.filter(z => z.kind === 'tray' && (z.active || z.id === x.container_id)).map(z => ({ v: z.id, l: z.name }))} onChange={v => set({ container_id: v })} /></F>}
         <F label={t('Trays')} hint={t('({n} per tray)', { n: tray })}><NumIn value={x.trays ?? (x.cuttings ? Math.round(x.cuttings / tray * 10) / 10 : null)} onChange={v => set({ trays: v })} /></F>
         <F label={t('Rooting in')}><Pick value={x.room_id} blank="—" options={d.rooms.filter(r => r.active || r.id === x.room_id).map(r => ({ v: r.id, l: `${r.name}${r.place !== 'Webb' ? ` (${r.place})` : ''}` }))} onChange={v => set({ room_id: v })} /></F>
         <F label={t('Cut from')} hint={gen === 1 ? '' : t('({gen} lots)', { gen: GEN_LABEL[gen - 1] })}><Pick value={x.mother_id} blank="—" options={moms.map(m => ({ v: m.id, l: `${m.strain} ${GEN_LABEL[m.gen]} · ${[c.room(m.room_id), m.bed].filter(Boolean).join(' ') || t('no location')} · ${live(m)}` }))} onChange={v => set({ mother_id: v })} /></F>
@@ -130,6 +141,16 @@ export function BatchSheet({ d, c, b: b0, api, flash, onClose, onSaved }: { d: N
       </div>
       <StrainList id="n-strains" names={[...new Set([...d.mothers.filter(m => m.status === 'active').map(m => m.strain), ...d.strains])]} />
       <F label={t('METRC batch name')}><TextIn value={x.name} placeholder={autoName} onChange={v => set({ name: v })} /></F>
+      {kids.length > 0 && <>
+        <h3 className="row between"><span>{t('Planted from this package')}</span>{potsReady(d) && kids.length > 1 && kids.some(k => k.live > (k.up_n ?? 0)) && <button className="primary small" onClick={() => setUp(kids.filter(k => k.live > (k.up_n ?? 0)))}>{t('Up pot all…')}</button>}</h3>
+        <div className="cwrap tight"><table className="ctable">
+          <thead><tr><th>{t('Lot')}</th><th>{t('Where')}</th><th className="num">{t('Plants')}</th><th>{t('Pot')}</th><th /></tr></thead>
+          <tbody>{kids.map(k => <tr key={`${k.kind}${k.id}`} className="tap" onClick={() => setLife(k)}><td>{k.label}{k.tag ? <span className="muted small mono"> …{k.tag.slice(-6)}</span> : ''}</td>
+            <td className="small">{c.room(k.room_id)}</td><td className="num">{n0(k.live)}</td><td className="small">{potText(d, k, k.live) || <span className="muted">—</span>}</td>
+            <td className="nowrap">{potsReady(d) && k.live > (k.up_n ?? 0) && <button className="ghost small" onClick={e => { e.stopPropagation(); setUp([k]) }}>{t('Up pot…')}</button>}</td></tr>)}</tbody>
+        </table></div>
+        <p className="muted small-note">{t('Tap a lot for its life cycle.')}</p>
+      </>}
       <h3>{t('METRC package')}</h3>
       {x.parent_id ? <p className="small-note muted">{t('Split from')} {(() => { const pb = d.batches.find(z => z.id === x.parent_id); return pb ? `${pb.name ?? pb.strain} · …${(pb.package_tag ?? '').slice(-6)}` : '#' + x.parent_id })()}</p> : null}
       <div className="grid3">
@@ -175,6 +196,7 @@ function PlantSheet({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx
   const [qty, setQty] = useState<number | null>(left)
   const [tags, setTags] = useState<string[]>([])
   const [on, setOn] = useState<string | null>(today())
+  const [pot, setPot] = useState<number | null>(null)   // POT-2: no default, they pick
   const [busy, setBusy] = useState(false)
   const run = use === 'receivers' ? d.runs.find(r => r.id === ref) : undefined
   const donor = use === 'donors' ? d.donorBatches.find(x => x.id === ref) : undefined
@@ -192,12 +214,14 @@ function PlantSheet({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx
   const go = async () => {
     setBusy(true)
     try {
-      await api.plant(lines.map((p, i) => ({ batch: b.id, use: use!, ref: use === 'receivers' || use === 'donors' ? ref : null, room: where, bed, plants: p, tag: (tags[i] ?? '').trim().toUpperCase() })), on)
+      const out = await api.plant(lines.map((p, i) => ({ batch: b.id, use: use!, ref: use === 'receivers' || use === 'donors' ? ref : null, room: where, bed, plants: p, tag: (tags[i] ?? '').trim().toUpperCase() })), on)
+      if (pot) { const items = (out as { mother_id?: number; planting_id?: number }[]).flatMap((o): { kind: 'mother' | 'planting'; id: number }[] => o.mother_id ? [{ kind: 'mother', id: o.mother_id }] : o.planting_id ? [{ kind: 'planting', id: o.planting_id }] : [])
+        if (items.length) await api.pot(items, pot, 'planted', on).catch(e => flash(t('Planted, but the pot wasn\'t saved: {e}', { e: (e as Error).message }), true)) }
       await onDone(t('{n} {strain} planted as {use}', { n: n0(qty), strain: b.strain, use: t(USE_LABEL[use!]) }) + (r ? ` · ${r.name}` : ''))
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
   }
   const ready = b.stage === 'ready'
-  const ok = ready && use && use !== 'g4' && (qty ?? 0) > 0 && (qty ?? 0) <= left && where != null && (use !== 'receivers' || ref != null) && tags.slice(0, n).filter(x => x.trim()).length === n
+  const ok = ready && use && use !== 'g4' && (qty ?? 0) > 0 && (qty ?? 0) <= left && where != null && (use !== 'receivers' || ref != null) && tags.slice(0, n).filter(x => x.trim()).length === n && (!potsReady(d) || pot != null)
   return (
     <Sheet side title={t('Plant {strain}', { strain: b.strain })} sub={`…${(b.package_tag ?? '').slice(-6)} · ${t('{n} plants left', { n: n0(left) })} · ${t('one immature batch per plant tag (up to 100)')}`} onClose={onBack}>
       {!ready && <p className="warn-t small-note">{t('Mark the package ready first (Mark ready… on the batch).')}</p>}
@@ -211,6 +235,7 @@ function PlantSheet({ d, c, b, api, flash, onBack, onDone }: { d: NData; c: NCtx
         <F label={t('Plants')}><NumIn value={qty} onChange={setQty} /></F>
         <F label={t('Planted on')}><DateIn value={on} onChange={setOn} /></F>
       </div>
+      {potsReady(d) && <F label={t('Planted into')}><PotChips d={d} value={pot} onChange={setPot} /></F>}
       <h3 className="row between"><span>{t('Plant tags')} <span className="muted small">{tn(n, '{n} immature batch', '{n} immature batches')}</span></span><button type="button" className="ghost small" onClick={fill} disabled={busy}>{t('Next tags')}</button></h3>
       {lines.map((p, i) => <div key={i} className="row"><span className="muted small" style={{ minWidth: 70 }}>{t('{n} plants', { n: n0(p) })}</span>
         <TagInput value={tags[i] ?? ''} onChange={v => setTags(s => { const z = [...s]; z[i] = v; return z })} where={{ site: b.site, type: 'plant' }} disabled={busy} /></div>)}

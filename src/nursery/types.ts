@@ -9,6 +9,8 @@ export interface Mother {
   id: number; site: string; room_id: number | null; strain: string; plant_tag: string | null; started_on: string | null
   status: 'active' | 'retired' | 'destroyed'; ended_on: string | null; notes: string | null; created_at: string
   qty: number; lost: number; gen: 1 | 2 | 3; season: number | null; bed: string | null; pot: string | null; cuts_per_plant: number | null; batch_id: number | null; source?: string | null
+  /** 343: what the lot is in; up_n plants already up-potted into up_to (part of the lot) */
+  container_id?: number | null; up_n?: number | null; up_to?: number | null
 }
 export type Stage = 'rooting' | 'ready' | 'done' | 'cancelled'
 export interface Batch {
@@ -19,14 +21,20 @@ export interface Batch {
   sort2_on: string | null; s2_vigorous: number | null; s2_minimal: number | null; s2_none: number | null; s2_dead: number | null
   /** 337: a split's parent package, what the package is for, its run / donor batch, plants split off it */
   parent_id?: number | null; use?: NUse | null; use_ref?: number | null; split_out?: number
+  /** 343: the tray the cuttings are in */
+  container_id?: number | null
 }
 export type NUse = 'g1' | 'g2' | 'g3' | 'g4' | 'phenos' | 'keepers' | 'trials' | 'receivers' | 'donors'
 /** 337: an immature plant batch planted from a package (receivers, donors, phenos, trials; moms are mother lots) */
 export interface NPlanting { id: number; site: string; batch_id: number; use: NUse; use_ref: number | null; receiver_id: number | null; room_id: number | null; bed: string | null; strain: string; plants: number; plant_tag: string; planted_on: string; action_id: number | null
   /** 339: flipped to Flowering: when, how many, their plant tags */
-  flipped_on?: string | null; flipped_n?: number | null; flower_tags?: string[] }
+  flipped_on?: string | null; flipped_n?: number | null; flower_tags?: string[]
+  /** 343 */
+  container_id?: number | null; up_n?: number | null; up_to?: number | null }
 /** a nursery package as METRC has it (last pull) */
 export interface MPkg { label: string; item: string; qty: number | null; uom: string | null; state: string }
+/** 343: trays and pots, smallest first (size_rank); up-potting only goes up */
+export interface NContainer { id: number; name: string; short: string | null; kind: 'tray' | 'pot'; cells: number; size_rank: number; active: boolean }
 export interface NRun { id: number; name: string; room_id: number | null; status: string; season: number; donor_strain: string | null }
 export interface NDonorBatch { id: number; project: string; label: string; strains: string | null; room_id: number | null }
 export interface StrainPlan { strain: string; cuts_g3: number | null; cuts_g2: number | null; cuts_g1: number | null; notes: string | null }
@@ -59,5 +67,6 @@ export interface NData {
   sites: NSite[]; rooms: NRoom[]; mothers: Mother[]; batches: Batch[]; orders: NOrder[]; deliveries: Delivery[]
   licenses: License[]; ranges: TagRange[]; strains: string[]; settings: NSettings; strainPlan: StrainPlan[]; tests: LabTest[]
   plantings: NPlanting[]; mpkgs: Map<string, MPkg>; runs: NRun[]; donorBatches: NDonorBatch[]
+  containers: NContainer[]
 }
 export type NTab = 'dashboard' | 'receiving' | 'plan' | 'orders' | 'batches' | 'mothers' | 'breeding' | 'seedlots' | 'phenohunts' | 'logs' | 'invoices' | 'review' | 'activity' | 'settings'
