@@ -1,5 +1,5 @@
 -- Migration 340 (Msg PHENO-PIC-5; was 339, renumbered because NUR-12 also used 339, Aziz 11/11): pheno photos can be tagged Rosin; only a Nursery Admin (or app admin) can make a pheno a
--- Keeper, since that adds the name to the Strains list. Also (PHENO-SCORE-1) Leafiness score + pheno harvested_on. App only, nothing to METRC. Safe to re-run. Run after 339.
+-- Keeper, since that adds the name to the Strains list. Also (PHENO-SCORE-1) Leafiness score + pheno harvested_on, (STRAIN-INV-3) strains.grown_from seed/clone. App only, nothing to METRC. Safe to re-run. Run after 339.
 set client_min_messages = warning;
 
 alter table pheno_photos drop constraint if exists pheno_photos_kind_check;
@@ -32,4 +32,9 @@ grant execute on function pheno_keeper(bigint, text) to authenticated;
 alter table pheno_scores add column if not exists leafiness smallint check (leafiness between 1 and 5);
 alter table phenos add column if not exists harvested_on date;
 
-select 'rosin + keeper admin + leafiness ready' as done;
+-- STRAIN-INV-3 (11/11): strains can be marked as grown from Seed or Clone (one, like Type)
+alter table strains add column if not exists grown_from text;
+alter table strains drop constraint if exists strains_grown_from_chk;
+alter table strains add constraint strains_grown_from_chk check (grown_from is null or grown_from in ('seed', 'clone'));
+
+select 'rosin + keeper admin + leafiness + seed/clone ready' as done;

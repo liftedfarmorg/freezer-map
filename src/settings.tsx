@@ -607,7 +607,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
     // STRAIN-LOCK-1: a rename keeps the old name under Other names, so old pallets, reserves, orders and METRC still match
     if (renamed && !(out.aliases as string[]).some(a => a.toLowerCase() === oldName.toLowerCase())) out.aliases = [...(out.aliases as string[]), oldName]
     // the new fields (296) only go out once they exist or someone set them
-    for (const k of ['product_categories', 'lineage', 'nurseries']) if (!(k in row) && !touched.has(k)) delete out[k]
+    for (const k of ['product_categories', 'lineage', 'nurseries', 'grown_from']) if (!(k in row) && !touched.has(k)) delete out[k]
     onSave(out as Partial<ListRow>)
   }
   const fieldFor = (c: typeof COLS[ListName][number]) => (
@@ -688,6 +688,11 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
             <label>Type <span className="muted">(one; shows on the menus in the app and the customer portal)</span></label>
             <div className="mpick">{STRAIN_TYPES_5.map(t => { const on = r.strain_type === t
               return <button type="button" key={t} className={`mpick-b ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => set('strain_type', on ? null : t)}><i>{on ? '✓' : ''}</i>{t} ({TYPE_SHORT5[t]})</button> })}</div></div>
+          {/* STRAIN-INV-3: grown from seed or clone (one) */}
+          <div className="field fsec">
+            <label>Source <span className="muted">(one; grown from seed or from clones)</span></label>
+            <div className="mpick">{([['seed', 'Seed'], ['clone', 'Clone']] as const).map(([k, l]) => { const on = r.grown_from === k
+              return <button type="button" key={k} className={`mpick-b ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => set('grown_from', on ? null : k)}><i>{on ? '✓' : ''}</i>{l}</button> })}</div></div>
           <div className="fgrid">
             <div className="field"><label>Lineage <span className="muted">(parents or cross, for example Gelato 41 x Mule Fuel)</span></label>
               <input value={String(r.lineage ?? '')} placeholder="Mother x Father" onChange={e => set('lineage', e.target.value)} /></div>
@@ -700,6 +705,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
         {!colorOk && <div className="warn-t">Color must look like #A1B2C3</div>}
         {!isCust && list !== 'strains' && carrier}
         {strainTabs ? <StrainTab.Provider value={stab}>{extra}</StrainTab.Provider> : extra}
+        {strainTabs && stab === 'details' && <StrainWhere compact onOpen={() => setStab('where')} sb={sb ?? null} name={String(row.name ?? '')} aliases={(row as Strain).aliases ?? []} />}
         {locked && <p className="muted">{String(row.name)} is a Lifted site. You can edit its details but not rename or retire it.</p>}
         {readOnly ? <div className="row between fbar"><span className="muted">View only</span><button className="ghost" onClick={onClose}>Close</button></div> : <div className="row between fbar">
           {row.id && !locked

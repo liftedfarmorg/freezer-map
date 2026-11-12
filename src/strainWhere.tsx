@@ -120,7 +120,7 @@ async function loadWhere(sb: SupabaseClient, names: string[]): Promise<Data> {
     last: { n: arch.length, lbs: arch.reduce((a, p) => a + Number(p.current_weight ?? 0), 0) } }
 }
 
-export function StrainWhere({ sb, name, aliases }: { sb: SupabaseClient | null; name: string; aliases: string[] }) {
+export function StrainWhere({ sb, name, aliases, compact, onOpen }: { sb: SupabaseClient | null; name: string; aliases: string[]; compact?: boolean; onOpen?: () => void }) {
   const [d, setD] = useState<Data | null>(null)
   const [openP, setOpenP] = useState<Set<string>>(new Set())
   const flip = (k: string) => setOpenP(o => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -133,6 +133,13 @@ export function StrainWhere({ sb, name, aliases }: { sb: SupabaseClient | null; 
     return () => { on = false }
   }, [sb, key])
   if (!sb) return null
+  // STRAIN-INV-3: the Details tab shows just the summary; tap it for the full Where it is tab
+  if (compact) return <button type="button" className="sw-mini" onClick={onOpen} title="See where it is">
+    {!d ? <span className="muted small">{err ? `Couldn't load: ${err}` : 'Loading where it is…'}</span> : <>
+      <span><b>{n0(d.lbs)} lb</b> inventory · {d.pallets} pallet{d.pallets === 1 ? '' : 's'}</span>
+      <span><b>{n0(d.moms)}</b> mothers</span><span><b>{n0(d.rooting)}</b> rooting</span><span><b>{n0(d.field)}</b> in field</span>
+      <span className="sw-mini-go">Where it is ›</span></>}
+  </button>
   return (
     <div className="swhere">
       <h3>Where it is now</h3>
