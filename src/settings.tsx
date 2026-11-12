@@ -222,6 +222,8 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const nurseries = useCatList(backend, NURSERIES_KEY, DEFAULT_NURSERIES).list
   const [pickOpen, setPickOpen] = useState(false)
   const [catF, setCatF] = useSaved(`settings.${focus}.${title ?? ''}.catF`, '')
+  // STRAIN-INV-3: Grown from filter (Any / Seed / Clone)
+  const [grownF, setGrownF] = useSaved<'' | 'seed' | 'clone'>(`settings.${focus}.${title ?? ''}.grown`, '')
   const [where, setWhere] = useSaved<StrainWhere>(`settings.${focus}.${title ?? ''}.where`, 'all')
   // strains in the nursery (active mothers) and in the field (this crop year's plantings). Outside nurseries = the strain card's Nurseries.
   // STRAIN-TBL-1: also trials (nursery batches used for Trials), seed (active METRC seed packages + seed lots with seed left) and selected phenotypes (pheno keepers)
@@ -302,7 +304,7 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
     : w === 'seed' ? names(r).some(n => grow?.seed.has(n))
     : w === 'pheno' ? names(r).some(n => grow?.keepers.has(n))
     : ((r as Strain).nurseries ?? []).some(x => !/^1PN$/i.test(x.trim()))
-  const inWhere = (r: ListRow) => tab !== 'strains' || isWhere(r, where === ('out' as string) ? 'all' : where)
+  const inWhere = (r: ListRow) => tab !== 'strains' || (isWhere(r, where === ('out' as string) ? 'all' : where) && (!grownF || (r as Strain).grown_from === grownF))
   const whereOf = (r: ListRow) => STRAIN_WHERE.slice(1).filter(([k]) => isWhere(r, k)).map(([, , short]) => short).join(' · ')
   const shown = rows.filter(r => (showRetired || r.active) && inWhere(r) && (tab !== 'customers' || !catF || ((r as Customer).product_categories ?? []).includes(catF))
     && (!q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())))
@@ -416,6 +418,9 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
       {tab === 'strains' && <div className="seg setf" role="group" aria-label="Where">{STRAIN_WHERE.map(([k, l]) => {
         const n = rows.filter(r => (showRetired || r.active) && isWhere(r, k)).length
         return <button key={k} className={where === k ? 'on' : ''} onClick={() => setWhere(k)}>{l} <span className="segn">{n}</span></button> })}</div>}
+      {tab === 'strains' && <div className="seg setf" role="group" aria-label="Grown from">{([['', 'Any'], ['seed', 'Grown from seed'], ['clone', 'Grown from clone']] as const).map(([k, l]) => {
+        const n = rows.filter(r => (showRetired || r.active) && (!k || (r as Strain).grown_from === k)).length
+        return <button key={k || 'any'} className={grownF === k ? 'on' : ''} onClick={() => setGrownF(k)}>{l} <span className="segn">{n}</span></button> })}</div>}
       {tab === 'strains' && shown.length > 0 && <SetTable list={tab} rows={shown} terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} sel={edit?.id ?? null} whereOf={whereOf} />}
       {tab === 'customers' && shown.length > 0 && (() => { const ext = (shown as Customer[]).filter(c => c.active && c.kind !== 'internal')
         return <div className="seg setf" role="group" aria-label="Ordering">{([['all', 'All', ext.length], ['res', 'Reserves on', ext.filter(c => c.reserves_enabled).length], ['menu', 'Menu only', ext.filter(c => !c.reserves_enabled).length]] as const).map(([k, l, n]) =>
@@ -690,7 +695,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
               return <button type="button" key={t} className={`mpick-b ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => set('strain_type', on ? null : t)}><i>{on ? '✓' : ''}</i>{t} ({TYPE_SHORT5[t]})</button> })}</div></div>
           {/* STRAIN-INV-3: grown from seed or clone (one) */}
           <div className="field fsec">
-            <label>Source <span className="muted">(one; grown from seed or from clones)</span></label>
+            <label>Grown from <span className="muted">(one: a cross grown from seed, or clones such as a selected pheno #)</span></label>
             <div className="mpick">{([['seed', 'Seed'], ['clone', 'Clone']] as const).map(([k, l]) => { const on = r.grown_from === k
               return <button type="button" key={k} className={`mpick-b ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => set('grown_from', on ? null : k)}><i>{on ? '✓' : ''}</i>{l}</button> })}</div></div>
           <div className="fgrid">

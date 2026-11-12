@@ -1,5 +1,5 @@
 -- Migration 340 (Msg PHENO-PIC-5; was 339, renumbered because NUR-12 also used 339, Aziz 11/11): pheno photos can be tagged Rosin; only a Nursery Admin (or app admin) can make a pheno a
--- Keeper, since that adds the name to the Strains list. Also (PHENO-SCORE-1) Leafiness score + pheno harvested_on, (STRAIN-INV-3) strains.grown_from seed/clone. App only, nothing to METRC. Safe to re-run. Run after 339.
+-- Keeper, since that adds the name to the Strains list. Also (PHENO-SCORE-1) Leafiness score + pheno harvested_on, (STRAIN-INV-3) strains.grown_from seed/clone + fill-in. App only, nothing to METRC. Safe to re-run. Run after 339.
 set client_min_messages = warning;
 
 alter table pheno_photos drop constraint if exists pheno_photos_kind_check;
@@ -21,6 +21,8 @@ begin
     values (nm, nullif(concat_ws(' x ', s.mother_strain, s.father_strain), ''), coalesce(s.breeder, case when s.source = 'in-house' then 'Lifted (in house)' end), true,
             'Keeper from pheno hunt ' || h.name || ', ' || coalesce(p.label, '#' || p.number));
   end if;
+  -- STRAIN-INV-3: a pheno keeper is kept as clones
+  update strains set grown_from = 'clone' where name = coalesce(canonical_strain(nm), nm) and grown_from is null;
   update phenos set status = 'keeper', keeper_strain = coalesce(canonical_strain(nm), nm) where id = p.id returning * into p;
   return p;
 end $$;
@@ -37,4 +39,18 @@ alter table strains add column if not exists grown_from text;
 alter table strains drop constraint if exists strains_grown_from_chk;
 alter table strains add constraint strains_grown_from_chk check (grown_from is null or grown_from in ('seed', 'clone'));
 
-select 'rosin + keeper admin + leafiness + seed/clone ready' as done;
+-- Fill in Grown from where it's blank (Aziz 11/11): a pheno number in the name (#18) = clone; else a cross (" x ") = seed;
+-- else a pheno hunt keeper or a strain with nursery mothers = clone; anything else stays blank. Old values kept in strains_bak_340.
+create table if not exists strains_bak_340 as select id, grown_from from strains;
+update strains s set grown_from = case
+    when s.name ~ '#\s*\d' then 'clone'
+    when s.name ~* '\sx\s' then 'seed'
+    when exists (select 1 from phenos p where p.status = 'keeper' and lower(p.keeper_strain) = lower(s.name))
+      or exists (select 1 from nursery_mothers m where lower(m.strain) = lower(s.name) or lower(m.strain) = any(select lower(a) from unnest(s.aliases) a)) then 'clone'
+    else null end
+ where s.grown_from is null;
+
+select 'rosin + keeper admin + leafiness + grown from ready' as done,
+  (select count(*) from strains where grown_from = 'seed') as seed, (select count(*) from strains where grown_from = 'clone') as clone,
+  (select count(*) from strains where grown_from is null) as blank;
+-- undo the fill-in: update strains s set grown_from = b.grown_from from strains_bak_340 b where b.id = s.id;
