@@ -949,3 +949,8 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .s-root { background: #fbf1dc; color: #8a5a12; } .s-veg { background: #e6f4ea; color: #2b6a3f; } .s-hv { background: #eceeec; color: #4d524f; }
 .sw-foot { margin: 6px 2px 0; }
 @media (max-width: 700px) { .sw-t .hide-s { display: none; } .sw-chip { flex: 1 1 40%; min-width: 0; } }
+/* STRAIN-INV-2: item-type rows fold open */
+.sw-prod { cursor: pointer; } .sw-prod:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.sw-car { display: inline-block; width: 16px; color: var(--muted); font-size: 12px; }
+.sw-kid td { font-size: 13px; background: color-mix(in srgb, var(--line) 18%, transparent); }
+.sw-kid1 { padding-left: 34px !important; color: var(--muted); white-space: nowrap; }
