@@ -220,16 +220,28 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const nurseries = useCatList(backend, NURSERIES_KEY, DEFAULT_NURSERIES).list
   const [pickOpen, setPickOpen] = useState(false)
   const [catF, setCatF] = useSaved(`settings.${focus}.${title ?? ''}.catF`, '')
-  const [where, setWhere] = useSaved<'all' | 'inv' | 'nurs' | 'field' | 'out'>(`settings.${focus}.${title ?? ''}.where`, 'all')
+  const [where, setWhere] = useSaved<StrainWhere>(`settings.${focus}.${title ?? ''}.where`, 'all')
   // strains in the nursery (active mothers) and in the field (this crop year's plantings). Outside nurseries = the strain card's Nurseries.
-  const [grow, setGrow] = useState<{ moms: Set<string>; field: Set<string> } | null>(null)
+  // STRAIN-TBL-1: also trials (nursery batches used for Trials), seed (active METRC seed packages + seed lots with seed left) and selected phenotypes (pheno keepers)
+  const [grow, setGrow] = useState<{ moms: Set<string>; field: Set<string>; trials: Set<string>; seed: Set<string>; keepers: Set<string> } | null>(null)
   useEffect(() => {
     if (!lists.includes('strains') || !sb) return
     const y = new Date().getFullYear()
-    Promise.all([sb.from('nursery_mothers').select('strain').eq('status', 'active'), sb.from('cult_plantings').select('strain').gte('crop_year', y)]).then(([m, p]) => {
-      const lc = (x: string) => x.trim().toLowerCase()
-      const pl = (p.data ?? []) as { strain: string }[]
-      setGrow({ moms: new Set(((m.data ?? []) as { strain: string }[]).map(r => lc(r.strain))), field: new Set(pl.map(r => lc(r.strain))) })
+    const lc = (x: string | null | undefined) => (x ?? '').trim().toLowerCase()
+    const safe = <T,>(p: PromiseLike<{ data: T[] | null }>) => Promise.resolve(p).then(r => r.data ?? [], () => [] as T[])
+    Promise.all([
+      safe<{ strain: string }>(sb.from('nursery_mothers').select('strain').eq('status', 'active')),
+      safe<{ strain: string }>(sb.from('cult_plantings').select('strain').gte('crop_year', y)),
+      safe<{ strain: string }>(sb.from('nursery_batches').select('strain').eq('use', 'trials').neq('stage', 'cancelled')),
+      safe<{ item: string | null }>(sb.from('metrc_packages').select('item').eq('state', 'active').ilike('item', '%seed%')),
+      safe<{ code: string | null; mother_strain: string | null; father_strain: string | null; seeds: number | null }>(sb.from('seed_lots').select('code,mother_strain,father_strain,seeds')),
+      safe<{ keeper_strain: string | null }>(sb.from('phenos').select('keeper_strain').eq('status', 'keeper')),
+    ]).then(([m, p, tr, sp, sl, kp]) => {
+      const seed = new Set<string>()
+      for (const r of sp) { const parts = (r.item ?? '').split(' - ').map(x => x.trim()); const nm = parts.length >= 3 ? parts.slice(1, -1).join(' - ') : parts[0]; if (nm) seed.add(lc(nm.replace(/\s*seeds?$/i, ''))) }
+      for (const r of sl) if ((r.seeds ?? 0) > 0) { if (r.mother_strain && r.father_strain) seed.add(lc(`${r.mother_strain} x ${r.father_strain}`)); if (r.code) seed.add(lc(r.code)) }
+      setGrow({ moms: new Set(m.map(r => lc(r.strain))), field: new Set(p.map(r => lc(r.strain))), trials: new Set(tr.map(r => lc(r.strain))), seed,
+        keepers: new Set(kp.map(r => lc(r.keeper_strain)).filter(Boolean)) })
     }).catch(() => {})
   }, [])
   // customer balances: QuickBooks' balance when production is connected, else the app's open invoices
@@ -272,11 +284,16 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
 
   const rows = (data?.[tab] ?? []) as ListRow[]
   const names = (r: ListRow) => [r.name, ...(((r as Strain).aliases) ?? [])].map(x => x.trim().toLowerCase())
-  const inWhere = (r: ListRow) => tab !== 'strains' || where === 'all' ? true
-    : where === 'inv' ? palletsOf(r as Strain, inventoryStrains) > 0
-    : where === 'nurs' ? names(r).some(n => grow?.moms.has(n))
-    : where === 'field' ? names(r).some(n => grow?.field.has(n))
+  const isWhere = (r: ListRow, w: StrainWhere) => w === 'all' ? true
+    : w === 'inv' ? palletsOf(r as Strain, inventoryStrains) > 0
+    : w === 'nurs' ? names(r).some(n => grow?.moms.has(n))
+    : w === 'field' ? names(r).some(n => grow?.field.has(n))
+    : w === 'trials' ? names(r).some(n => grow?.trials.has(n))
+    : w === 'seed' ? names(r).some(n => grow?.seed.has(n))
+    : w === 'pheno' ? names(r).some(n => grow?.keepers.has(n))
     : ((r as Strain).nurseries ?? []).some(x => !/^1PN$/i.test(x.trim()))
+  const inWhere = (r: ListRow) => tab !== 'strains' || isWhere(r, where === ('out' as string) ? 'all' : where)
+  const whereOf = (r: ListRow) => STRAIN_WHERE.slice(1).filter(([k]) => isWhere(r, k)).map(([, , short]) => short).join(' · ')
   const shown = rows.filter(r => (showRetired || r.active) && inWhere(r) && (tab !== 'customers' || !catF || ((r as Customer).product_categories ?? []).includes(catF))
     && (!q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())))
 
@@ -386,12 +403,14 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
 
       {shown.length === 0 && <p className="muted">Nothing here yet. Add one, or import a spreadsheet.</p>}
       {tab === 'customers' && <div className="seg setf" role="group" aria-label="What they buy">{['', ...cats].map(k => <button key={k || 'any'} className={catF === k ? 'on' : ''} onClick={() => setCatF(k)}>{k || 'Any category'}</button>)}</div>}
-      {tab === 'strains' && <div className="seg setf" role="group" aria-label="Where">{([['all', 'All'], ['inv', 'In inventory'], ['nurs', 'In the nursery'], ['field', 'In the field'], ['out', 'Outside nurseries']] as const).map(([k, l]) =>
-        <button key={k} className={where === k ? 'on' : ''} onClick={() => setWhere(k)}>{l}</button>)}</div>}
+      {tab === 'strains' && <div className="seg setf" role="group" aria-label="Where">{STRAIN_WHERE.map(([k, l]) => {
+        const n = rows.filter(r => (showRetired || r.active) && isWhere(r, k)).length
+        return <button key={k} className={where === k ? 'on' : ''} onClick={() => setWhere(k)}>{l} <span className="segn">{n}</span></button> })}</div>}
+      {tab === 'strains' && shown.length > 0 && <SetTable list={tab} rows={shown} terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} sel={edit?.id ?? null} whereOf={whereOf} />}
       {tab === 'customers' && shown.length > 0 && (() => { const ext = (shown as Customer[]).filter(c => c.active && c.kind !== 'internal')
         return <div className="seg setf" role="group" aria-label="Ordering">{([['all', 'All', ext.length], ['res', 'Reserves on', ext.filter(c => c.reserves_enabled).length], ['menu', 'Menu only', ext.filter(c => !c.reserves_enabled).length]] as const).map(([k, l, n]) =>
           <button key={k} className={ordF === k ? 'on' : ''} onClick={() => setOrdF(k)}>{l} <span className="segn">{n}</span></button>)}</div> })()}
-      {groupsOf(tab, shown, inventoryStrains).map(([gk, gl, gr]) => gr.length > 0 && (
+      {tab !== 'strains' && groupsOf(tab, shown, inventoryStrains).map(([gk, gl, gr]) => gr.length > 0 && (
         <Fold key={gk} id={`set.${tab}.${gk}`} title={gl} count={gr.length} open={gk === 'main'} force={!!q || (!!home && gk === 'main')}>
           <SetTable list={tab} rows={gr.filter(r => tab !== 'customers' || gk !== 'main' || ordF === 'all' || ((r as Customer).reserves_enabled ? 'res' : 'menu') === ordF)}
             terms={terms} profiles={profiles} inv={inventoryStrains} focus={focus} onOpen={r => setEdit(structuredClone(r))} bal={bal} last={last} sel={edit?.id ?? null} />
@@ -489,8 +508,10 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
   const keep = ['name', 'code', 'status', ...BY[focus]]
   return keep.map(k => all.find(x => x.k === k)!).filter(Boolean).map(x => (x.k === 'code' || x.k === 'type' ? { ...x, slim: true } : x))
 }
-function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, last, sel }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; last?: Map<number, string>; sel?: number | null }) {
-  const cols = setCols(list, terms, profiles, inv, focus, bal, last)
+function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, last, sel, whereOf }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; last?: Map<number, string>; sel?: number | null; whereOf?: (r: ListRow) => string }) {
+  const cols0 = setCols(list, terms, profiles, inv, focus, bal, last)
+  // STRAIN-TBL-1: a Where column (inventory / nursery / field / trial / seed / pheno) right after the name
+  const cols = whereOf ? [cols0[0], { k: 'where', l: 'Where', v: (r: ListRow) => whereOf(r) || null, slim: true } as (typeof cols0)[number], ...cols0.slice(1)] : cols0
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 }>({ k: 'name', dir: 1 })
   const c = cols.find(x => x.k === sort.k) ?? cols[0]
   const sorted = [...rows].sort((a, b) => {
@@ -519,6 +540,10 @@ const initials = (n: string) => (n.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/
 const hueOf = (n: string) => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
 
 /** one strain in the Settings list: photo (or initials), name and tags, then the numbers that matter in this module */
+
+type StrainWhere = 'all' | 'inv' | 'nurs' | 'field' | 'trials' | 'seed' | 'pheno'
+const STRAIN_WHERE: [StrainWhere, string, string][] = [['all', 'All', ''], ['inv', 'In inventory', 'Inventory'], ['nurs', 'In nursery', 'Nursery'], ['field', 'In field', 'Field'],
+  ['trials', 'Trials', 'Trial'], ['seed', 'In seed', 'Seed'], ['pheno', 'Selected phenotypes', 'Pheno']]
 
 /** the folds a list splits into: [key, title, rows] */
 function groupsOf(list: ListName, rows: ListRow[], inv: Map<string, number>): [string, string, ListRow[]][] {
