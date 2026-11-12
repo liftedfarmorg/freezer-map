@@ -578,6 +578,10 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
   const set = (k: string, v: unknown) => { setR(x => ({ ...x, [k]: v })); setTouched(t => new Set(t).add(k)) }
   const locked = list === 'customers' && row.id != null && LOCKED.has(String(row.name).toLowerCase())
   const [aliasText, setAliasText] = useState(((row as Strain).aliases ?? []).join(', '))
+  // STRAIN-LOCK-1: an existing strain's name is locked; tap the lock to rename (a safety step, same people can do it)
+  const oldName = String(row.name ?? '').trim()
+  const [nameLocked, setNameLocked] = useState(list === 'strains' && row.id != null)
+  const renamed = list === 'strains' && row.id != null && !!oldName && String(r.name ?? '').trim().toLowerCase() !== oldName.toLowerCase()
   const colorOk = !r.color || /^#[0-9a-f]{6}$/i.test(String(r.color))
   const [ctab, setCtab] = useState('overview')
   const isCust = list === 'customers', ext = isCust && r.kind !== 'internal'
@@ -585,6 +589,8 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
     const out: Record<string, unknown> = { ...r, name: String(r.name ?? '').trim() }
     for (const k of Object.keys(out)) if (typeof out[k] === 'string' && k !== 'name') out[k] = (out[k] as string).trim() || null
     if (list === 'strains') out.aliases = parseAliases(aliasText)
+    // STRAIN-LOCK-1: a rename keeps the old name under Other names, so old pallets, reserves, orders and METRC still match
+    if (renamed && !(out.aliases as string[]).some(a => a.toLowerCase() === oldName.toLowerCase())) out.aliases = [...(out.aliases as string[]), oldName]
     // the new fields (296) only go out once they exist or someone set them
     for (const k of ['product_categories', 'lineage', 'nurseries']) if (!(k in row) && !touched.has(k)) delete out[k]
     onSave(out as Partial<ListRow>)
@@ -620,6 +626,16 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
       ) : c.kind === 'int' ? (
         <input type="number" min="1" step="1" value={String(r[c.key] ?? '')} onChange={e => set(c.key, e.target.value === '' ? null : parseInt(e.target.value, 10))} />
       ) : (
+        c.key === 'name' && list === 'strains' && row.id != null ? <>
+          <div className="row namelock">
+            <input value={String(r[c.key] ?? '')} disabled={nameLocked} autoFocus={!nameLocked} onChange={e => set(c.key, e.target.value)} />
+            <button type="button" className={`ghost lockbtn ${nameLocked ? '' : 'open'}`} title={nameLocked ? 'Unlock to rename this strain' : 'Lock the name again'} aria-label={nameLocked ? 'Unlock to rename' : 'Lock the name'}
+              onClick={() => { if (!nameLocked) set('name', oldName); setNameLocked(l => !l) }}>{nameLocked ? '🔒' : '🔓'}</button>
+          </div>
+          {!nameLocked && <p className="muted small renamenote">{renamed
+            ? <>Renaming <b>{oldName}</b> to <b>{String(r.name ?? '').trim() || '…'}</b>. "{oldName}" will be kept under Other names so old pallets, reserves, orders and METRC still match. Records keep showing the old name. METRC isn't renamed.</>
+            : 'Name unlocked. Type the new name, then Save. The lock puts it back.'}</p>}
+        </> :
         <input value={String(r[c.key] ?? '')} disabled={locked && c.key === 'name'} autoFocus={c.key === 'name'} onChange={e => set(c.key, e.target.value)} />
       )}
     </div>

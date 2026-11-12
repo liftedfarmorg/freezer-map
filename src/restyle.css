@@ -925,3 +925,10 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .ctable.invtbl tbody tr.tap { cursor: pointer; }
 .ctable.invtbl tbody tr.tap:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
 @media (max-width: 700px) { .ctable.invtbl .hide-s { display: none; } }
+/* STRAIN-LOCK-1: locked strain name */
+.namelock { gap: 6px; flex-wrap: nowrap; align-items: stretch; }
+.namelock input { flex: 1; min-width: 0; }
+.namelock input:disabled { opacity: 1; background: color-mix(in srgb, var(--line) 35%, transparent); cursor: not-allowed; }
+.lockbtn { flex: 0 0 auto; width: 44px; padding: 0; font-size: 18px; }
+.lockbtn.open { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.renamenote { margin: 6px 0 0; }
