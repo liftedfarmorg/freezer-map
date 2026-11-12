@@ -959,3 +959,5 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .sw-mini { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; width: 100%; text-align: left; margin: 2px 0 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--brand) 5%, var(--panel, #fff)); cursor: pointer; font: inherit; font-size: 14px; color: inherit; }
 .sw-mini:hover { border-color: color-mix(in srgb, var(--brand) 45%, transparent); }
 .sw-mini-go { margin-left: auto; color: var(--brand); font-weight: 700; }
+/* STRAIN-INV-6: Grown from pill */
+.pill.gf-seed { background: #fbf1dc; color: #8a5a12; } .pill.gf-clone { background: #e6f4ea; color: #2b6a3f; }

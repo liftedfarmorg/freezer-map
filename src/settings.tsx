@@ -509,6 +509,7 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     { k: 'cu', l: 'Cuts / mother', num: true, v: r => n(eff(P(r), 'cuts_per_plant'), 0) },
     { k: 'hv', l: 'Harvest', v: r => (eff(P(r), 'harvest_mmdd') as string | null) ?? null, cell: r => { const h = eff(P(r), 'harvest_mmdd'); return h ? `~${mmdd(h as string)}` : null } },
     { k: 'type', l: 'Type', v: r => S(r).strain_type ?? null, cell: r => S(r).strain_type ? <span className={`pill ttag${tcls(S(r).strain_type)}`} title={S(r).strain_type!}>{TYPE_SHORT5[S(r).strain_type!] ?? S(r).strain_type}</span> : null },
+    { k: 'grown', l: 'Grown from', v: r => S(r).grown_from ?? null, cell: r => S(r).grown_from ? <span className={`pill gf-${S(r).grown_from}`}>{S(r).grown_from === 'seed' ? 'Seed' : 'Clone'}</span> : null },   // STRAIN-INV-6
     { k: 'lin', l: 'Lineage', v: r => S(r).lineage ?? null, cell: r => S(r).lineage && <span className="trunc">{S(r).lineage}</span> },
     { k: 'nur', l: 'Nurseries', v: r => S(r).nurseries?.join(', ') || null, cell: r => S(r).nurseries?.length ? <span className="trunc">{S(r).nurseries!.join(', ')}</span> : null },
     { k: 'aka', l: 'Other names', v: r => S(r).aliases?.join(', ') || null, cell: r => S(r).aliases?.length ? <span className="trunc muted">{S(r).aliases.join(', ')}</span> : null },
@@ -518,10 +519,10 @@ function setCols(list: ListName, terms: { code: string; label: string }[], profi
     dist: ['pallets', 'hv', 'type', 'aka'],
     sales: ['pallets', 'sl', 'hc', 'type', 'lin'],
     cult: ['y', 'hv', 'type', 'lin', 'nur'],
-    nurs: ['ro', 'cu', 'type', 'lin', 'nur'],
+    nurs: ['ro', 'cu', 'grown', 'lin', 'nur'],   // STRAIN-INV-6: Grown from instead of Type in the Nursery
   }
   const keep = ['name', 'code', 'status', ...BY[focus]]
-  return keep.map(k => all.find(x => x.k === k)!).filter(Boolean).map(x => (x.k === 'code' || x.k === 'type' ? { ...x, slim: true } : x))
+  return keep.map(k => all.find(x => x.k === k)!).filter(Boolean).map(x => (x.k === 'code' || x.k === 'type' || x.k === 'grown' ? { ...x, slim: true } : x))
 }
 function SetTable({ list, rows, terms, profiles, inv, focus, onOpen, bal, last, sel, whereOf }: { list: ListName; rows: ListRow[]; terms: { code: string; label: string }[]; profiles: Map<number, StrainProfile>; inv: Map<string, number>; focus: StrainFocus; onOpen: (r: ListRow) => void; bal?: Map<number, number>; last?: Map<number, string>; sel?: number | null; whereOf?: (r: ListRow) => string }) {
   const cols0 = setCols(list, terms, profiles, inv, focus, bal, last)
