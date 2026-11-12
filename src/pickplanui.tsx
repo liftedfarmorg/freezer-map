@@ -3,6 +3,7 @@
 // assigns it (Use this plan) or walks it on a phone (Walk this plan: scan each pallet, swap with a reason, assign
 // what you picked at the end). Assigning uses the same calls as + Assign pallets (pick_pallet / pick_part).
 // Pallets in Staging are left out (Aziz PICK-2: that's usually not where they really are).
+// PICK-12: closest to the freezer door first, then fewest freezers; Print makes a full pick sheet (printPickSheet).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Backend } from './api'
 import type { FLine, FOrder, Pallet } from './types'
@@ -16,7 +17,7 @@ const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
 const w = (p: Pallet) => Number(p.current_weight ?? 0)
 const got = (l: FLine) => l.picks.reduce((a, p) => a + Number(p.lbs), 0)
 const MODES: { k: Mode; label: string }[] = [
-  { k: 'freezers', label: 'Fewest freezers' }, { k: 'oldest', label: 'Oldest harvest first' }, { k: 'splits', label: 'Fewest splits' }]
+  { k: 'freezers', label: 'Closest to the door, then fewest freezers' }, { k: 'oldest', label: 'Oldest harvest first' }, { k: 'splits', label: 'Fewest splits' }]
 const REASONS = ['Not there', 'Buried', 'Damaged', 'Other']
 /** a mixed pallet's strains, short: "A, B and 13 more" */
 const mixList = (cs: Pallet[]) => { const n = [...new Set(cs.map(c => c.strain).filter(Boolean))] as string[]; return n.length > 3 ? `${n.slice(0, 2).join(', ')} and ${n.length - 2} more` : n.join(', ') || `${cs.length} packages` }
@@ -29,6 +30,65 @@ type Saved = { rows: { lineId: number; id: number; lbs: number; whole: boolean; 
 const store = {
   get(k: string): Saved | null { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) as Saved : null } catch { return null } },
   set(k: string, v: Saved | null) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k) } catch { /* private mode: walk still works, just isn't kept */ } },
+}
+
+/** PICK-12: print a real pick sheet (every freezer, every pallet, full METRC tags, check boxes, sign-off) in its own
+ *  page instead of window.print() on the app screen, which only printed what was on screen. */
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+export function printPickSheet(o: {
+  title: string; sub?: string; site: string | null; orders: FOrder[]; groups: [number, RRow[]][]; loc: (p: Pallet) => Loc
+  pallet: (id: number) => Pallet | undefined; contents: (id: number) => Pallet[]; tagOf?: (lineId: number) => Tag | undefined
+  lineOf: (id: number) => FLine | undefined; lines: PLine[]; short: Map<number, number>; splits: number; inWay: number
+}) {
+  const { groups, loc } = o
+  const nPal = groups.reduce((a, [, rs]) => a + rs.length, 0)
+  const picked = new Set(groups.flatMap(([, rs]) => rs.map(r => r.pallet.id)))
+  const planned = (id: number) => groups.reduce((a, [, rs]) => a + rs.filter(r => r.lineId === id).reduce((b, r) => b + r.lbs, 0), 0)
+  const who = (id: number) => { const t = o.tagOf?.(id); return t ? `<span class="tag" style="background:${esc(t.color)}">${esc(t.label)}</span> ` : '' }
+  const orderHead = o.orders.map(x => `<div><b>${esc(x.so ?? `Order ${x.id}`)}</b> ${esc(x.customer)}${x.po ? ` · PO ${esc(x.po)}` : ''}${x.wanted_date ? ` · wanted ${esc(x.wanted_date)}` : ''}${x.stop ? ` · ${esc(x.stop.load)}` : ''}</div>`).join('')
+  const lineRows = o.orders.flatMap(x => x.lines.filter(l => !l.cant_fill).map(l => {
+    const pl = o.lines.find(z => z.id === l.id), need = pl?.need ?? 0, already = Number(l.lbs) - need, short = o.short.get(l.id)
+    return `<tr><td>${who(l.id)}${esc(l.strain)}${l.crop_year ? ` <span class="m">${esc(l.crop_year)}</span>` : ''}</td><td class="n">${n0(l.lbs)}</td><td class="n">${already > 0.5 ? n0(already) : ''}</td><td class="n">${n0(planned(l.id))}</td><td class="n ${short ? 'bad' : ''}">${short ? `${n0(short)} short` : ''}</td></tr>` })).join('')
+  const fzHtml = groups.map(([, rs], gi) => {
+    const L0 = loc(rs[0].pallet)
+    const way = new Map<number, Pallet>()
+    for (const r of rs) for (const id of loc(r.pallet).inFront) if (!picked.has(id)) { const p = o.pallet(id); if (p) way.set(id, p) }
+    const body = rs.map(r => {
+      const L = loc(r.pallet), p = r.pallet, mix = p.kind === 'mixed' ? o.contents(p.id) : []
+      const what = mix.length ? `Mixed pallet: ${mix.length} packages<div class="mix">${mix.map(c => `${esc(c.package_tag ?? '')} ${esc(c.strain ?? '')} ${n0(w(c))} lbs`).join('<br>')}</div>` : esc(p.strain ?? '')
+      return `<tr><td class="ck">☐</td><td><b>${esc(L.spot)}</b><div class="m">${esc(L.side)}${L.side ? (L.front === 1 ? ', at the door' : `, ${L.front} back`) : ''}</div></td>
+        <td><b>${esc(p.code)}</b></td><td class="tagc">${esc(p.package_tag ?? '')}</td><td>${who(r.lineId)}${what}</td>
+        <td class="n"><b>${n0(r.lbs)}</b></td><td class="n">${n0(w(p))}</td><td>${r.held ? 'Assigned' : r.whole ? 'Whole' : `<b>Split</b>${boxes(r.lbs)}`}</td><td class="note"></td></tr>` }).join('')
+    return `<section><h2>${gi + 1}. ${esc(L0.fzLabel)} <span class="m">${rs.length} pallet${rs.length === 1 ? '' : 's'}</span></h2>
+      ${way.size ? `<p class="way">Move out of the way first: ${[...way.values()].map(p => `${esc(p.code)} (${esc(loc(p).spot)})`).join(', ')}</p>` : ''}
+      <table><thead><tr><th></th><th>Spot</th><th>Pallet</th><th>METRC tag</th><th>Strain</th><th class="n">Take lbs</th><th class="n">Pallet lbs</th><th>Do</th><th>Notes</th></tr></thead><tbody>${body}</tbody></table></section>` }).join('')
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(o.title)} pick sheet</title><style>
+    @page { size: letter; margin: 0.45in; }
+    body { font: 11px/1.35 system-ui, -apple-system, "Segoe UI", Arial, sans-serif; color: #111; margin: 0; }
+    h1 { font-size: 18px; margin: 0 0 2px; } h2 { font-size: 13.5px; margin: 14px 0 4px; } .m { color: #666; font-weight: 400; font-size: 10px; }
+    .top { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 8px; }
+    .sum { font-weight: 600; margin: 4px 0; } table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #bbb; padding: 3px 5px; text-align: left; vertical-align: top; }
+    th { background: #eee; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; } .n { text-align: right; white-space: nowrap; }
+    .ck { width: 16px; font-size: 15px; text-align: center; } .tagc { font-family: ui-monospace, Consolas, monospace; font-size: 10px; white-space: nowrap; }
+    .note { width: 90px; } .mix { font-size: 9.5px; color: #333; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; }
+    .tag { display: inline-block; padding: 0 5px; border-radius: 3px; color: #fff; font-size: 9.5px; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bad { color: #b00020; font-weight: 600; } .way { margin: 2px 0 4px; font-weight: 600; } section { break-inside: auto; } tr { break-inside: avoid; }
+    .sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; } .sign div { border-top: 1px solid #111; padding-top: 3px; }
+  </style></head><body>
+    <div class="top"><div><h1>Pick sheet: ${esc(o.title)}</h1>${o.sub ? `<div>${esc(o.sub)}</div>` : ''}${orderHead}</div>
+      <div style="text-align:right"><div><b>${esc(o.site ?? '')}</b></div><div>Printed ${esc(new Date().toLocaleString())}</div></div></div>
+    <div class="sum">${groups.length} freezer${groups.length === 1 ? '' : 's'} · ${nPal} pallet${nPal === 1 ? '' : 's'} · ${o.splits} split${o.splits === 1 ? '' : 's'}${o.inWay ? ` · ${o.inWay} to move out of the way` : ''} · closest to the door first</div>
+    <table><thead><tr><th>Line</th><th class="n">Ordered lbs</th><th class="n">Already picked</th><th class="n">On this sheet</th><th class="n">Short</th></tr></thead><tbody>${lineRows}</tbody></table>
+    ${fzHtml}
+    <div class="sign"><div>Picked by</div><div>Checked by</div><div>Date / time</div></div>
+  </body></html>`
+  const f = document.createElement('iframe')
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+  document.body.appendChild(f)
+  const d = f.contentDocument!
+  d.open(); d.write(html); d.close()
+  const go = () => { f.contentWindow?.focus(); f.contentWindow?.print(); setTimeout(() => f.remove(), 60000) }
+  if (d.readyState === 'complete') setTimeout(go, 50); else f.onload = go
 }
 
 export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, reload, flash, back, title, sub, tagOf, held = [], walkKey, backLabel }: {
@@ -188,7 +248,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
         <div className="row wrap pmp-act">
           <button className="primary" disabled={busy || !routeRows.length} onClick={() => { startWalk(); setWalking(true) }}>Walk this plan ›</button>
           {plan.rows.length > 0 && <button className="ghost" disabled={busy} onClick={async () => { if (await assign(plan.rows)) back() }}>{busy ? 'Assigning…' : 'Use this plan now'}</button>}
-          <button className="ghost" onClick={() => { scrollTop(); window.print() }}>Print</button>
+          <button className="ghost" onClick={() => printPickSheet({ title, sub, site: st, orders, groups, loc, pallet, contents, tagOf, lineOf, lines, short: plan.short, splits: plan.splits, inWay })}>Print pick sheet</button>
         </div>
         <p className="muted small">Walk this plan: scan each pallet as it comes out, swap any that aren't there, and assign what you picked at the end. Use this plan now: assigns and holds these pallets right away, same as + Assign pallets. Either way, splits get a pending tag until the new label goes on.</p>
       </>}

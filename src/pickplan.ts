@@ -1,4 +1,4 @@
-// Plan my pick (Msg PICK-1): picks pallets for a whole order so the crew opens as few freezers as possible.
+// Plan my pick (Msg PICK-1, PICK-12): picks pallets for a whole order: closest to the freezer door first, then fewest freezers.
 // Pure functions, no database calls. The UI (pickplanui.tsx) turns a plan into order_picks with the same
 // pick_pallet / pick_part calls as + Assign pallets.
 import type { Pallet } from './types'
@@ -21,6 +21,30 @@ export interface Plan { rows: PRow[]; short: Map<number, number>; freezers: numb
 
 const w = (p: Pallet) => Number(p.current_weight ?? 0)
 const hd = (p: Pallet) => p.harvest_date ?? '9999'
+
+/** PICK-12 (default mode): closest to the door first. Take from the pallets with the fewest still in the way
+ *  (pallets already picked for this order don't count as in the way); inside that, a whole pallet that matches,
+ *  then the biggest one that fits whole, then split the smallest one that covers what's left. Only go deeper
+ *  when the front ones run out. */
+function fillFront(need: number, pool: Pallet[], tol: number, loc: (p: Pallet) => Loc, used: Set<number>, lineId: number): PRow[] {
+  const rows: PRow[] = []
+  let left = need
+  const depth = (p: Pallet) => loc(p).inFront.filter(id => !used.has(id)).length
+  while (left > tol) {
+    const avail = pool.filter(p => !used.has(p.id) && w(p) > 0)
+    if (!avail.length) break
+    const d = Math.min(...avail.map(depth))
+    const lvl = avail.filter(p => depth(p) === d).sort((a, b) => loc(a).front - loc(b).front)
+    const exact = lvl.find(p => Math.abs(w(p) - left) <= tol)
+    const fits = lvl.filter(p => w(p) <= left + tol).sort((a, b) => w(b) - w(a))[0]
+    const big = lvl.filter(p => w(p) > left + tol).sort((a, b) => w(a) - w(b))[0]
+    const p = exact ?? fits ?? big
+    used.add(p.id)
+    if (p === big && !exact && !fits) { rows.push({ lineId, pallet: p, lbs: round(left), whole: false }); left = 0 }
+    else { rows.push({ lineId, pallet: p, lbs: w(p), whole: true }); left -= w(p) }
+  }
+  return rows
+}
 
 /** pallets for one line out of a pool, in the order the mode prefers */
 function fillLine(need: number, pool: Pallet[], tol: number, mode: Mode, loc: (p: Pallet) => Loc, used: Set<number>, lineId: number): PRow[] {
@@ -81,7 +105,7 @@ function plain(lines: PLine[], tol: number, mode: Mode, loc: (p: Pallet) => Loc,
   const rows: PRow[] = []
   for (const l of [...lines].sort((a, b) => b.need - a.need)) {
     const pool = allow ? l.cands.filter(p => allow.has(loc(p).fz ?? -1)) : l.cands
-    rows.push(...fillLine(l.need, pool, tol, mode, loc, used, l.id))
+    rows.push(...(mode === 'freezers' ? fillFront(l.need, pool, tol, loc, used, l.id) : fillLine(l.need, pool, tol, mode, loc, used, l.id)))
   }
   return score(lines, rows, loc)
 }
@@ -96,27 +120,33 @@ export function makePlan(lines: PLine[], tol: number, mode: Mode, loc: (p: Palle
   if (mode !== 'freezers') return plain(open, tol, mode, loc)
   const fz = [...new Set(open.flatMap(l => l.cands.map(p => loc(p).fz ?? -1)))]
   let best: Plan | null = null
+  // PICK-12 (Aziz): closest to the front of the freezer first, then fewest freezers.
+  // Ranking: nothing short, fewest pallets to move out of the way, fewest freezers, shallowest, fewest splits.
+  const deep = (p: Plan) => p.rows.reduce((a, r) => a + loc(r.pallet).front, 0)
   const better = (a: Plan, b: Plan | null): boolean => {
     if (!b) return true
     const sa = sumShort(a), sb = sumShort(b)
     if (Math.abs(sa - sb) > 0.5) return sa < sb
-    if (a.freezers.length !== b.freezers.length) return a.freezers.length < b.freezers.length
     if (a.moves !== b.moves) return a.moves < b.moves
+    if (a.freezers.length !== b.freezers.length) return a.freezers.length < b.freezers.length
+    if (deep(a) !== deep(b)) return deep(a) < deep(b)
     return a.splits < b.splits
   }
-  // smallest set of freezers that can cover every line, then the fewest pallets in the way and splits inside it
-  for (let k = 1; k <= Math.min(fz.length, 4) && !best; k++) {
+  // every freezer allowed: the front-most pallets wherever they are
+  best = plain(open, tol, mode, loc)
+  // then small sets of freezers (up to 4) that still cover every line: same or fewer moves with fewer freezers wins
+  for (let k = 1; k <= Math.min(fz.length, 4); k++) {
     let tried = 0
     for (const set of combos(fz, k)) {
       const s = new Set(set)
       const covers = open.every(l => l.cands.filter(p => s.has(loc(p).fz ?? -1)).reduce((a, p) => a + w(p), 0) >= l.need - tol)
       if (!covers) continue
       const p = plain(open, tol, mode, loc, s)
-      if (p.short.size === 0 && better(p, best)) best = p
+      if (better(p, best)) best = p
       if (++tried > 400) break
     }
   }
-  if (best) return best
+  if (best.short.size === 0 && best.freezers.length <= 4) return best
   // more than 4 freezers needed: add freezers one at a time, each time the one that finishes the most lines
   // (most lbs still needed as the tie-break), then drop any freezer the rest can do without
   const lbsOf = (l: PLine, s: Set<number>) => l.cands.filter(p => s.has(loc(p).fz ?? -1)).reduce((a, p) => a + w(p), 0)
@@ -138,7 +168,8 @@ export function makePlan(lines: PLine[], tol: number, mode: Mode, loc: (p: Palle
     const s = new Set(chosen); s.delete(f)
     if (open.every(l => done(l, s) || !done(l, chosen))) chosen.delete(f)
   }
-  return plain(open, tol, mode, loc, chosen)
+  const g = plain(open, tol, mode, loc, chosen)
+  return better(g, best) ? g : best
 }
 const sumShort = (p: Plan) => [...p.short.values()].reduce((a, b) => a + b, 0)
 
