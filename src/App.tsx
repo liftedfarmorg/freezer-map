@@ -62,6 +62,8 @@ import { LoadForm, LoadView, PickLoad, TransitView, stopColor } from './loads'
 import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
 import { FeedbackView } from './feedback'
+import { FbIcon, FbReport } from './fbreport'
+import { captureScreen } from './fbcapture'
 import { ReportedYieldsPage } from './reportedYields'
 import { ItemsView } from './items'
 import { StaffOpenMenu } from './openmenu'
@@ -430,6 +432,8 @@ export default function App() {
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
   const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)
+  const [fb, setFb] = useState<{ shot: Blob | null } | null>(null)   // FB-7: Feedback & Bugs sheet (with the screen picture)
+  const [fbBusy, setFbBusy] = useState(false)
   const [more, setMore] = useState<false | 'mods' | 'more'>(false)   // 281 (phone): the top pill opens modules, the bottom More opens this module's other screens
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
@@ -486,6 +490,14 @@ export default function App() {
 
   const reload = useCallback(async () => { const s = await backend.load(); setStrainColors(s); setSnap(s) }, [])
   const flash = (text: string, bad = false) => { setToast({ text, bad }); setTimeout(() => setToast(null), bad ? 5000 : 2500) }
+  // FB-7: close any menu, let the screen settle, picture it, then open the report sheet
+  const startReport = async () => {
+    if (fbBusy || fb) return
+    setAcctMenu(false); setMore(false); setModMenu(false); setFbBusy(true)
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))))
+    const shot = await captureScreen()
+    setFbBusy(false); setFb({ shot })
+  }
 
   useEffect(() => { backend.getUser().then(setUser) }, [])
   useEffect(() => {
@@ -684,7 +696,9 @@ export default function App() {
   // driver-only login (215): no modules, set up as a driver: just the Driver screen
   if (me && staff && noMods && me.access?.driver && backend.client()) return <>{viewBar}<DriverHome sb={backend.client()!} name={me.display_name ?? me.email} nf={(me.access?.prefs?.notify ?? {}) as Record<string, boolean>}
     onLang={l => { backend.setMyPrefs({ ...(me.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }}
-    signOut={() => backend.signOut().then(() => setUser(null))} /></>
+    signOut={() => backend.signOut().then(() => setUser(null))} onReport={startReport} reportBusy={fbBusy} />
+    {fb && <FbReport sb={backend.client()} shot={fb.shot} where={{ module: 'driver', moduleLabel: t('Driver'), screen: t('My loads'), viewingAs: me.viewing_as ? me.email : null }} onClose={() => setFb(null)} flash={flash} />}
+    {toast && <div className={`toast ${toast.bad ? 'bad' : ''}`}>{toast.text}</div>}</>
   if (me && !staff) return <>{viewBar}<NoAccess me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
   if (loadError && !snap) return (
     <div className="center"><h2>Couldn't load the app</h2>
@@ -1092,6 +1106,8 @@ export default function App() {
           <button type="button" className="ghost small scanbtn desk-only" title={t('Scan a METRC tag')} onClick={() => setScanning(true)}>📷</button></>}
         {(cur !== 'dist' || noMods) && <span className="grow" />}
         {staff && <WeatherBar sb={backend.client()} canEdit={!!me?.access?.owner || lv.cultivation === 'admin'} flash={flash} />}
+        {staff && <button className="ghost small fbbtn" title={t('Feedback & Bugs: report a problem or an idea')} aria-label={t('Feedback & Bugs')} disabled={fbBusy} onClick={startReport}>
+          <FbIcon /><span className="fbbtn-l">{t('Feedback & Bugs')}</span></button>}
         <span className="phacct">
           <button className="phacct-btn" aria-haspopup="menu" aria-expanded={acctMenu} aria-label={t('Account menu')} onClick={() => setAcctMenu(!acctMenu)}>{((me?.display_name || who(user) || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || '?').toUpperCase()}</button>
           {acctMenu && <>
@@ -1099,6 +1115,7 @@ export default function App() {
             <div className="phacct-menu" role="menu">
               <div className="phacct-who"><b>{me?.display_name || who(user)}</b><small>{user}</small></div>
               <button role="menuitem" onClick={() => { setAcctMenu(false); view === 'mine' ? go(lastView.current) : go('mine') }}>{t('My settings')}</button>
+              <button role="menuitem" onClick={startReport}>{t('Feedback & Bugs')}</button>
               <button role="menuitem" onClick={() => { setAcctMenu(false); backend.signOut().then(() => setUser(null)) }}>{t('Sign out')}</button>
             </div>
           </>}
@@ -1312,12 +1329,17 @@ export default function App() {
               {more === 'more' && !inDrv && !bottomRest.length && <p className="muted">{t('Everything in {m} is on the bar below.', { m: ML(cur) })}</p>}
               {more === 'more' && !inDrv && <div className="morechips">{bottomRest.map(x => <button key={x.k} className={x.on ? 'on' : ''} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
               {more === 'more' && inDrv && <div className="morechips">{extras.map(x => <button key={x.k} onClick={() => { setMore(false); x.go() }}>{x.l}</button>)}</div>}
+              {staff && <button className="ghost fbmore" onClick={startReport}><FbIcon /> {t('Feedback & Bugs')}<span className="muted small"> · {t('report a problem or an idea')}</span></button>}
             </div>
           </div>
         )}
       </>}
 
       {scanning && <Scanner typed onClose={() => setScanning(false)} onScan={handleScan} />}
+      {fb && <FbReport sb={backend.client()} shot={fb.shot} onClose={() => setFb(null)} flash={flash}
+        where={{ module: noMods ? null : inDrv ? 'driver' : MOD_KEY[cur], moduleLabel: noMods ? '' : inDrv ? t('Driver') : ML(cur),
+          screen: view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : inDrv ? (drvTab === 'loads' ? t('My loads') : t('Trucks and inspections')) : pageTitle,
+          viewingAs: me?.viewing_as ? me.email : null, site: cur === 'dist' ? site : null }} />}
       {scanMiss && (
         <div className="scrim" onClick={() => setScanMiss(null)}>
           <div className="sheet scanmiss" onClick={e => e.stopPropagation()}>

@@ -1,3 +1,4 @@
+import { FbIcon } from './fbreport'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Scanner } from './scan'
@@ -125,7 +126,7 @@ function LangPick({ onLang }: { onLang?: (l: Lang) => void }) {
 // a signed-in driver
 // =====================================================================================================
 export type DTab = 'loads' | 'vehicles'
-export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0, tab: tab0, onTab }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean; nf?: NotifyPrefs
+export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0, tab: tab0, onTab, onReport, reportBusy }: { sb: SupabaseClient; name?: string | null; onLang?: (l: Lang) => void; signOut?: () => void; embedded?: boolean; onReport?: () => void; reportBusy?: boolean; nf?: NotifyPrefs
   tab?: DTab; onTab?: (t: DTab) => void }) {
   const [tabS, setTabS] = useState<DTab>('loads')
   const tab = tab0 ?? tabS
@@ -155,6 +156,7 @@ export function DriverHome({ sb, name, onLang, signOut, embedded, nf: nf0, tab: 
   const qu = useQueue(sb, reload)
   return <div className={`drv ${embedded ? '' : 'drv-full'}`}>
     {!embedded && <header className="drv-top"><b>{t('Lifted Farms · Driver')}</b><span className="grow" /><LangPick onLang={l => { onLang?.(l); bump(x => x + 1) }} />
+      {onReport && <button className="ghost small fbbtn" title={t('Feedback & Bugs: report a problem or an idea')} aria-label={t('Feedback & Bugs')} disabled={reportBusy} onClick={onReport}><FbIcon /><span className="fbbtn-l">{t('Feedback & Bugs')}</span></button>}
       {signOut && <button className="ghost small" onClick={signOut}>{t('Sign out')}</button>}</header>}
     {!onTab && <div className="drv-tabs"><div className="seg">{([['loads', t('My loads')], ['vehicles', t('Trucks and inspections')]] as [DTab, string][]).map(([k, l]) =>
       <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div></div>}

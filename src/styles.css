@@ -1240,3 +1240,25 @@ a.btnlink { display: inline-flex; align-items: center; text-decoration: none; co
 /* YLD-17: customer reports on the strain profile */
 .srep { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 4px 0 10px; display: grid; gap: 6px; font-size: 14px; }
 .srep-h { font-weight: 700; font-size: 13px; }
+
+/* FB-7: Feedback & Bugs */
+.fbbtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fbbtn svg { flex: none; }
+@media (max-width: 999px) { .top .fbbtn .fbbtn-l { display: none; } .top .fbbtn { padding: 6px 8px; } }
+.drv-top .fbbtn .fbbtn-l { display: none; }
+@media (min-width: 700px) { .drv-top .fbbtn .fbbtn-l { display: inline; } }
+.fbmore { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 14px; border-top: 1px solid var(--line); border-radius: 0; padding: 14px 4px 4px; font-weight: 600; text-align: left; }
+.fbsheet { max-width: 600px; }
+.fbsheet .fbtype { margin: 4px 0 10px; }
+.fbsheet .fbtype button { flex: 1; }
+.fbwhere { font-size: 14px; background: var(--empty); border-radius: 10px; padding: 8px 10px; overflow-wrap: anywhere; }
+.fbsheet textarea { padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font: inherit; font-size: 16px; width: 100%; resize: vertical; color: inherit; }
+.fbsev .chip.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.fbpics { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.fbpic { position: relative; width: 96px; height: 96px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--empty); }
+.fbpic img { width: 100%; height: 100%; object-fit: cover; object-position: top; cursor: zoom-in; display: block; }
+.fbpic-k { position: absolute; left: 4px; bottom: 4px; font-size: 11px; font-weight: 600; background: rgb(0 0 0 / .6); color: #fff; border-radius: 6px; padding: 1px 6px; }
+.fbpic-x { position: absolute; right: 3px; top: 3px; width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 0; background: rgb(0 0 0 / .6); color: #fff; font-size: 12px; line-height: 24px; }
+.fbadd { width: 96px; height: 96px; border: 1px dashed var(--line); border-radius: 10px; background: transparent; font-weight: 600; color: var(--muted); }
+.fbbig { position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .75); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+.fbbig img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 8px 30px rgb(0 0 0 / .4); }
