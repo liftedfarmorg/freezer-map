@@ -4,6 +4,7 @@ import { pageAll } from './pageAll'
 import type { ReactNode } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { MONTHS_ES, MONTHS_LONG_ES, lang, t, tn } from './i18n'
+import { useSaved } from './saved'
 
 // Spray, feed and labor logs, shared by Cultivation and the Nursery (each sees its own).
 // Cultivation works like Farm Data OHR: rates per acre x acres; the Nursery mixes per gallon of water.
@@ -77,16 +78,16 @@ export function OpsLogs({ sb, module, sites, areas, strains, flash, batches, wag
   fieldAcres?: Record<string, number>; canEditRecipes?: boolean
 }) {
   const field = module === 'cultivation'
-  const [kind, setKind] = useState<LogKind | 'extra' | 'recipes' | 'products'>('spray')
+  const [kind, setKind] = useSaved<LogKind | 'extra' | 'recipes' | 'products'>(`logs.${module}.kind`, 'spray')
   const [extraK, setExtraK] = useState<string | null>(null)
   const [rows, setRows] = useState<OpsLog[] | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<Partial<OpsLog> | null>(null)
-  const [site, setSite] = useState<string | null>(null)
-  const [year, setYear] = useState<number | null>(null)
-  const [q, setQ] = useState('')
+  const [site, setSite] = useSaved<string | null>(`logs.${module}.site`, null)
+  const [year, setYear] = useSaved<number | null>(`logs.${module}.year`, null)
+  const [q, setQ] = useSaved(`logs.${module}.q`, '')
   const [opened, setOpened] = useState<Set<string> | null>(null)   // null: only the latest month open
   const load = useCallback(async () => {
     const [l, p, r] = await Promise.all([
@@ -368,8 +369,8 @@ function Products({ sb, module, products, logs, canEdit, field, flash, onChanged
   sb: SupabaseClient; module: string; products: Product[]; logs: OpsLog[]; canEdit: boolean; field: boolean; flash: Flash; onChanged: () => void
 }) {
   const [ed, setEd] = useState<Partial<Product> | null>(null)
-  const [q, setQ] = useState('')
-  const [f, setF] = useState<'all' | 'pest' | 'off'>('all')
+  const [q, setQ] = useSaved('logs.Products.q', '')
+  const [f, setF] = useSaved<'all' | 'pest' | 'off'>('logs.Products.f', 'all')
   const [busy, setBusy] = useState(false)
   const yr = new Date().getFullYear()
   const use = useMemo(() => {

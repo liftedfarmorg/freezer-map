@@ -31,6 +31,7 @@ import type { InvAction } from '../metrc'
 import { openMetrcManifest } from '../metrcCall'
 import type { PalletManifest } from '../metrcCall'
 import { CloseLotButton, ComingBack, NeedsOurTag, ReceiveBackButton, lotBack } from './Returns'
+import { useSaved } from '../saved'
 
 /** the freezer map's pallet actions, handed down from App (same dialogs, same METRC queue) */
 export interface InvBridge { act: (p: Pallet, kind: InvAction) => void; info: (id: number) => { load?: string; mixed?: string; inSnap: boolean }; tick: number
@@ -450,7 +451,7 @@ function PutAwaySheet({ c, p, sb, onClose }: { c: Ctx; p: Pallet; sb: ReturnType
 
 // ---------- Runs ----------
 function Runs({ c, onStart, sel }: { c: Ctx; onStart: (k: Run['kind']) => void; sel?: number | null }) {
-  const [f, setF] = useState<'open' | 'done' | 'all'>('open')
+  const [f, setF] = useSaved<'open' | 'done' | 'all'>('proc.ProcessingView.Runs.f', 'open')
   const rows = c.d.runs.filter(r => f === 'all' ? r.status !== 'cancelled' : r.status === f)
   return (
     <div className="list">
@@ -839,7 +840,7 @@ function Yields({ c }: { c: Ctx }) {
   const [labor, setLabor] = useState<Labor[]>([])
   useEffect(() => { c.api.history().then(setHist).catch(() => {}) }, [])
   const years = [...new Set([...c.d.runs.map(r => r.crop_year), ...c.d.pallets.map(p => p.crop_year), ...hist.map(h => h.crop_year)].filter((x): x is number => !!x))].sort((a, b) => b - a)
-  const [yr, setYr] = useState<number | null>(years[0] ?? new Date().getFullYear())
+  const [yr, setYr] = useSaved<number | null>('proc.ProcessingView.Yields.yr', years[0] ?? new Date().getFullYear())
   const [rows, setRows] = useState<Yield[] | null>(null)
   useEffect(() => { setRows(null); c.api.yields(yr).then(setRows).catch(e => c.flash(errText(e), true)); c.api.labor(yr).then(setLabor) }, [yr])
   // FL25 and other workbook years: from the history table when there are no runs for that strain and year

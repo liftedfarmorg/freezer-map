@@ -8,13 +8,14 @@ import { Choices, DateIn, F, NumIn, Pick, SaveBar, SelAll, SelBar, SelBox, SelBu
 import type { Flash } from './ui'
 import { TagRunBox, useHeldRuns } from './tagrun'
 import type { HeldRun } from './tagrun'
+import { useSaved } from '../saved'
 
 const SOURCES: { v: Source; l: string }[] = [{ v: 'clone', l: 'Clone' }, { v: 'seed', l: 'Seed' }, { v: 'auto', l: 'Auto (seed)' }]
 
 export function PlantingsTab({ d, c, site, q, api, flash, onSaved, openId }: { d: CultData; c: Ctx; site: string | null; q: string; api: CultApi; flash: Flash; onSaved: (m: string) => Promise<void>; openId?: number }) {
   const [edit, setEdit] = useState<Partial<Planting> | null>(() => (openId != null ? d.plantings.find(p => p.id === openId) ?? null : null))   // 281: opened from a scanned tag
   const [rEdit, setREdit] = useState<Partial<Receipt> | null>(null)
-  const [view, setView] = useState<'fields' | 'receiving'>('fields')
+  const [view, setView] = useSaved<'fields' | 'receiving'>('cult.plantings.PlantingsTab.view', 'fields')
   const sel = useSel()
   const ql = q.trim().toLowerCase()
   const ps = d.plantings.filter(p => (!site || p.site === site) && (!ql || `${p.strain} ${p.nursery ?? ''} ${p.notes ?? ''}`.toLowerCase().includes(ql)))

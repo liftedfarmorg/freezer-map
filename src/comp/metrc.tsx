@@ -11,6 +11,7 @@ import { Mapping } from './mapping'
 import { FIELD_LABEL, download, mapColumns, readTable, toCsv, toRows } from './csv'
 import type { Field, MRow } from './csv'
 import { DateIn, F, Pick, SaveBar, Sheet, TextIn, errText, useSel, SelBox, SelAll, SelBar } from '../cult/ui'
+import { useSaved } from '../saved'
 
 const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
 const short = (t: string | null | undefined) => (t ? (t.length > 10 ? tagTxt(t, 8) : t) : '')
@@ -80,7 +81,7 @@ function MetrcBar({ r, now }: { r: MAction; now: number }) {
 
 // ---------- to do: every app action METRC needs ----------
 function Todo({ c }: { c: Ctx }) {
-  const [status, setStatus] = useState<string | null>('todo')
+  const [status, setStatus] = useSaved<string | null>('comp.metrc.Todo.status', 'todo')
   const [lic, setLic] = useState<string | null>(null)
   const [rows, setRows] = useState<MAction[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -203,7 +204,7 @@ const ISSUE: Record<Recon['issue'], [string, string]> = {
 const ORDER: Recon['issue'][] = ['closed_in_app', 'not_in_app', 'not_in_metrc', 'other_license', 'weight', 'item', 'on_hold', 'tag_pending', 'stale']
 
 function Reconcile({ c }: { c: Ctx }) {
-  const [mode, setMode] = useState<'live' | 'farm' | 'nursery' | 'file'>('live')
+  const [mode, setMode] = useSaved<'live' | 'farm' | 'nursery' | 'file'>('comp.metrc.Reconcile.mode', 'live')
   return <>
     <div className="chips" style={{ marginBottom: 8 }}>{([['live', 'From METRC (live)'], ['farm', 'Farm plants'], ['nursery', 'Nursery (1PN)'], ['file', 'Upload an export']] as const).map(([k, l]) =>
       <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{l}</button>)}</div>
@@ -352,7 +353,7 @@ function ErrorSheet({ c, e, plays, onClose, onSaved }: { c: Ctx; e: Partial<MErr
 
 function Playbook({ c }: { c: Ctx }) {
   const [rows, setRows] = useState<Play[] | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('comp.metrc.Playbook.q', '')
   const [ed, setEd] = useState<Partial<Play> | null>(null)
   const [busy, setBusy] = useState(false)
   const load = async () => { try { setRows(await c.api.playbook()) } catch (e) { c.flash(errText(e), true); setRows([]) } }

@@ -8,6 +8,7 @@ import type { Backend } from './api'
 import type { Balance, CustomerTerms, Order } from './types'
 import { TYPE_LONG, TYPE_ORDER, tcls, typeShort } from './strainTypes'
 import { StrainLink } from './strainCard'
+import { useSaved } from './saved'
 
 type Flash = (t: string, bad?: boolean) => void
 type Tag = { g: string | null; t: string | null }
@@ -43,9 +44,9 @@ export function ReserveEditor({ backend, cid, cname, year, cur, flash, onSaved, 
   const [terms, setTerms] = useState<CustomerTerms[]>([])
   const [rev, setRev] = useState(0)
   const [ed, setEd] = useState<Record<string, number>>({})   // strain key -> change (+/− lbs)
-  const [fRes, setFRes] = useState<'all' | 'res' | 'not'>('all')
+  const [fRes, setFRes] = useSaved<'all' | 'res' | 'not'>('reseditor.ReserveEditor.fRes', 'all')
   const [fG, setFG] = useState<'all' | 'SHO' | 'BHO'>('all')
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('reseditor.ReserveEditor.q', '')
   const [srt, setSrt] = useState<{ k: SortK; up: boolean }>({ k: 's', up: true })
   const [step, setStepRaw] = useState(() => { try { return Number(localStorage.getItem('fm.res.step')) || 10 } catch { return 10 } })
   const [custom, setCustom] = useState(false)

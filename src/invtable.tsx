@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { SelAll, SelBox, SelBar, SelButton, useSel } from './cult/ui'
 import type { SelAction } from './cult/ui'
+import { useSaved } from './saved'
 
 export interface Col<R> {
   k: string; l: string
@@ -63,7 +64,7 @@ export function InvTable<R>({ id, title, note, rows, rowId, cols, groups, defaul
   const [show, setShow] = useState<Set<string>>(new Set(saved?.show ?? []))
   const [sort, setSort] = useState<[string, 1 | -1] | null>(saved?.sort ?? (defaultSort ? [defaultSort, 1] : null))
   const [pick, setPick] = useState<Record<string, Set<string>>>({})
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved(`invtable.${id}.q`, '')
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [openRow, setOpenRow] = useState<number | null>(null)
   const [colMenu, setColMenu] = useState(false)

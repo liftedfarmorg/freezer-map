@@ -3,6 +3,7 @@ import { Select } from '../combo'
 import { errText } from '../cult/ui'
 import type { LocMap, MapData } from './api'
 import type { Ctx } from './ctx'
+import { useSaved } from '../saved'
 
 // Compliance > METRC > Mapping (Phase 2): what METRC calls our fields, nursery rooms, drying rooms and strains,
 // plus what's growing where in METRC (plant batches and plant counts from the nightly pull).
@@ -11,9 +12,9 @@ const n0 = (x: number | null | undefined) => (x == null ? '' : Math.round(Number
 
 export function Mapping({ c }: { c: Ctx }) {
   const [d, setD] = useState<MapData | null>(null)
-  const [site, setSite] = useState<string>('OHR')
+  const [site, setSite] = useSaved<string>('comp.mapping.Mapping.site', 'OHR')
   const [busy, setBusy] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('comp.mapping.Mapping.q', '')
   const load = async () => { try { setD(await c.api.mapData()) } catch (e) { c.flash(errText(e), true) } }
   useEffect(() => { load() }, [])
 

@@ -2,6 +2,7 @@ import { MTag, tagTxt } from './mtag'
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Dialog, lbs } from './forms'
+import { useSaved } from './saved'
 
 // Distribution > Archived: pallets that are out of inventory as "archived" (sheet import leftovers, removed as a mistake,
 // closed by Reconcile). Shows which ones METRC still has as active packages, and brings them back (a spot picked on the
@@ -56,7 +57,7 @@ export function ArchivedView({ sb, flash, onChanged, pickSpot, openPallet, initi
   const [ov, setOv] = useState<Overview | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [show, setShow] = useState<'metrc' | 'all'>(initialQ ? 'all' : 'metrc')
-  const [site, setSite] = useState('')
+  const [site, setSite] = useSaved('archived.ArchivedView.site', '')
   const [q, setQ] = useState(initialQ ?? '')
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [restoring, setRestoring] = useState<ArchRow | null>(null)

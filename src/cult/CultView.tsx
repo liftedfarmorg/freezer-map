@@ -23,18 +23,19 @@ import { HarvestTab } from './harvest'
 import { OpsLogs } from '../logs'
 import { useScanHandler } from '../scanroute'
 import type { CultTab as Tab } from './tabs'
+import { useSaved } from '../saved'
 const remembered = <T extends string>(k: string, d: T): T => { try { return (localStorage.getItem(k) as T) || d } catch { return d } }
 const remember = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* private mode */ } }
 
 export default function CultView({ backend, flash, onPalletsChanged, tab, go }: { backend: Backend; flash: (t: string, bad?: boolean) => void; onPalletsChanged: () => void; tab: Tab; go: (t: Tab) => void }) {
   const api = useMemo(() => { const sb = backend.client(); return sb ? new CultApi(sb) : null }, [backend])
   const [site, setSiteS] = useState<string | null>(() => remembered('cult.site', '') || null)
-  const [year, setYear] = useState<number | null>(null)
+  const [year, setYear] = useSaved<number | null>('cult.CultView.CultView.year', null)
   const [logId, setLogId] = useState<number | null>(null)
   useEffect(() => { if (tab !== 'harvest') setLogId(null) }, [tab])
   const [d, setD] = useState<CultData | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('cult.CultView.CultView.q', '')
   const [open, setOpen] = useState<Partial<Harvest> | null>(null)
   const setSite = (s: string | null) => { setSiteS(s); remember('cult.site', s ?? '') }
 

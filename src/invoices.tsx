@@ -6,6 +6,7 @@ import { PRODUCT_LABEL, SALE_PRODUCTS } from './types'
 import type { SalesDoc } from './docs'
 import { dfmt, docTitle, downloadPdf, emailHref, makePdf, money, shareUrl, textHref } from './docs'
 import { Tile, Tiles } from './dash'
+import { useSaved } from './saved'
 
 type Flash = (t: string, bad?: boolean) => void
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -132,9 +133,9 @@ function LineRow({ l, busy, onPrice, onRemove }: { l: SalesDoc['lines'][number];
 export function InvoicesView({ backend, customers, flash, isAdmin, sender, scope = 'sales' }: { backend: Backend; customers: Customer[]; flash: Flash; isAdmin: boolean; sender?: string | null; scope?: 'sales' | 'nursery' }) {
   const [rows, setRows] = useState<Invoice[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [f, setF] = useState<'open' | 'overdue' | 'paid' | 'void' | 'all'>('open')
-  const [q, setQ] = useState('')
-  const [open, setOpen] = useState<number | null>(null)
+  const [f, setF] = useSaved<'open' | 'overdue' | 'paid' | 'void' | 'all'>('invoices.InvoicesView.f', 'open')
+  const [q, setQ] = useSaved('invoices.InvoicesView.q', '')
+  const [open, setOpen] = useSaved<number | null>('invoices.InvoicesView.open', null)
   const load = () => backend.listInvoices(scope).then(r => { setRows(r); setErr(null) }).catch(e => setErr(String(e?.message ?? e)))
   useEffect(() => { load() }, [])
   const cname = useMemo(() => { const m = new Map(customers.map(c => [c.id, c.name])); return (id: number) => m.get(id) ?? `#${id}` }, [customers])
@@ -226,8 +227,8 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
   const [quoted, setQuoted] = useState(false)
   const [est, setEst] = useState<{ charge: number | null; descr: string | null; rule: string; problem: string | null } | null>(null)
   const [terms, setTerms] = useState<PaymentTerm[]>([])
-  const [tab, setTab] = useState<Product>('fresh_frozen')
-  const [q, setQ] = useState('')
+  const [tab, setTab] = useSaved<Product>('invoices.NewOrderSheet.tab', 'fresh_frozen')
+  const [q, setQ] = useSaved('invoices.NewOrderSheet.q', '')
   const [det, setDet] = useState(false)
   const [sumOpen, setSumOpen] = useState(false)
   // one entry per product + strain + crop year: lbs typed, price (only kept when changed from the autofill), sample + hold

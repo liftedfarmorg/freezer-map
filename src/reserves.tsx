@@ -15,6 +15,7 @@ import { CatalogButton } from './catalog'
 import { RequestsPanel } from './requests'
 import { STATE_LABEL } from './fulfill'
 import type { CustomerTerms, FOrder, MenuNumbers, ReserveRequest, ReserveYears, Balance, Customer, ImportResult, Order, RoshiRow, Strain } from './types'
+import { useSaved } from './saved'
 
 const n0 = (x: number) => Math.round(x).toLocaleString()
 
@@ -62,14 +63,14 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 }) {
   const [reqs, setReqs] = useState<ReserveRequest[]>([])
   const [nums, setNums] = useState<MenuNumbers[]>([])
-  const [year, setYear] = useState<number | null>(null)
+  const [year, setYear] = useSaved<number | null>('reserves.ReservesView.year', null)
   const [bal, setBal] = useState<Balance[] | null>(null)
   const [ys, setYs] = useState<ReserveYears | null>(null)
   const [ry, setRy] = useState<number | null>(null)   // which crop's reserves
   useEffect(() => { backend.reserveYears().then(setYs).catch(() => {}) }, [])
   const [orders, setOrders] = useState<Order[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const [open, setOpen] = useState<number | null>(null)
+  const [open, setOpen] = useSaved<number | null>('reserves.ReservesView.open', null)
   // RES-4: Reserves by customer as a sortable table (computers and tablets; phones keep the cards)
   const [csort, setCsort] = useState<{ k: 'name' | 'strains' | 'res' | 'ship' | 'so' | 'left' | 'pct' | 'contract' | 'mmin' | 'price'; up: boolean }>({ k: 'res', up: false })
   // RES-5: By strain table sort + which strain is open
@@ -86,7 +87,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
   useEffect(() => { backend.listTerms().then(setCterms).catch(() => {}) }, [])
   const [adding, setAdding] = useState<{ preset: number | null } | null>(null)   // RES-1
   const [edit, setEdit] = useState<{ customer_id: number | null; strain: string; lbs: string; isNew: boolean; note?: string } | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('reserves.setSStep.q', '')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [sampleOf, setSampleOf] = useState<Order | null>(null)

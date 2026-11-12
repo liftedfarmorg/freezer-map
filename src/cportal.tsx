@@ -8,6 +8,7 @@ import { downloadStatement } from './statement'
 import type { Backend } from './api'
 import { TYPE_LONG, TYPE_SHORT, tcls } from './strainTypes'
 import type { Balance, Me, QboLine, MenuRow, MyContract, Order, OrderInput, ReserveLineInput, ReserveRequest, SampleHold, Statement, StatementInvoice, Terms } from './types'
+import { useSaved } from './saved'
 
 /* ---------- helpers ---------- */
 const c = (s: string) => s.split(/\s+/).filter(Boolean).map(x => 'cp-' + x).join(' ')
@@ -182,7 +183,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     return () => { document.removeEventListener('visibilitychange', vis); removeEventListener('focus', refresh); clearInterval(t) }
   }, [])
 
-  const [screen, setScreen] = useState<Screen>('home')
+  const [screen, setScreen] = useSaved<Screen>('cportal.vis.screen', 'home')
   // desktop (1024px and wider): sidebar layout and dashboard home; phones and tablets keep the mobile screens
   const deskQ = '(min-width: 1024px)'
   const [desk, setDesk] = useState(() => matchMedia(deskQ).matches)
@@ -233,11 +234,11 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [reqNote, setReqNote] = useState('')
   const [lastReq, setLastReq] = useState<Change[]>([])
   const [lastReqRows, setLastReqRows] = useState<ReqRow[]>([]); const [lastReqNote, setLastReqNote] = useState('')
-  const [q, setQ] = useState('')
-  const [editQ, setEditQ] = useState('')
-  const [orderQ, setOrderQ] = useState('')
+  const [q, setQ] = useSaved('cportal.toast.q', '')
+  const [editQ, setEditQ] = useSaved('cportal.toast.editQ', '')
+  const [orderQ, setOrderQ] = useSaved('cportal.toast.orderQ', '')
   const [menuYear, setMenuYear] = useState<'all' | number>('all')
-  const [gradeF, setGradeF] = useState<'all' | 'SHO' | 'BHO'>('all')   // grade filter on Reserves & Menu (desktop) and Open Menu (phones)
+  const [gradeF, setGradeF] = useSaved<'all' | 'SHO' | 'BHO'>('cportal.toast.gradeF', 'all')   // grade filter on Reserves & Menu (desktop) and Open Menu (phones)
   // phones: a one-time tip to add the portal to the home screen (an icon keeps them signed in and they never need the link again)
   const [a2hs, setA2hs] = useState<'ios' | 'android' | null>(() => {
     try {
@@ -261,7 +262,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
       onClick={() => setSorts({ ...sorts, [t]: { col, dir: on ? -dir : col === 's' ? 1 : -1 } })}>{label}<i aria-hidden="true">{on ? (dir > 0 ? '▲' : '▼') : '↕'}</i></button>
   }
   const [notRes, setNotRes] = useState(false)
-  const [rmRes, setRmRes] = useState<'all' | 'res' | 'not'>('all')
+  const [rmRes, setRmRes] = useSaved<'all' | 'res' | 'not'>('cportal.sh.rmRes', 'all')
   const [stepCustom, setStepCustom] = useState(false)
   const [stepTxt, setStepTxt] = useState<string | null>(null)
   const [rmStep, setRmStepRaw] = useState(() => { try { return Number(localStorage.getItem('cp-rm-step')) || 10 } catch { return 10 } })
@@ -278,7 +279,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   const [lastOrder, setLastOrder] = useState<{ label: string; lbs: number; res: number; amount: number | null; detail: Detail[]; modified: boolean; po?: string; wanted?: string; note?: string } | null>(null)
 
   // orders
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useSaved('cportal.setRmStep.filter', 'all')
   const [openRow, setOpenRow] = useState<string | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<ORow | null>(null)
   const [stBusy, setStBusy] = useState(false)
@@ -872,7 +873,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
   }
 
   // ---------- reserve history (mockup) ----------
-  const [actF, setActF] = useState<'all' | 'you' | 'lifted'>('all')
+  const [actF, setActF] = useSaved<'all' | 'you' | 'lifted'>('cportal.col.actF', 'all')
   const [actOpen, setActOpen] = useState<string[]>([])
   const actSeenKey = 'cp-act-seen'
   const latestAdjust = (d?.acts ?? []).filter(a => a.by === 'lifted' && a.kind === 'adjust').sort((a, b) => b.at.localeCompare(a.at))[0]
@@ -1565,7 +1566,7 @@ export function Portal({ backend, me, signOut }: { backend: Backend; me: Me; sig
     }
     return [...m.values()]
   }, [d, orows])
-  const [yTab, setYTab] = useState<'report' | 'results' | null>(null)
+  const [yTab, setYTab] = useSaved<'report' | 'results' | null>('cportal.div.yTab', null)
   const [yOpen, setYOpen] = useState<string | null>(null)
   const [yProc, setYProc] = useState<'all' | 'SHO' | 'BHO'>('all')   // SHO = hash / hash + rosin runs, BHO = BHO runs
 

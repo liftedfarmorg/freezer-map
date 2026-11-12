@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Customer, Load, PickupCarrier, ShipQuoteRow, ShipSettings, ShipZone, StopShipping } from './types'
 import { Select } from './combo'
+import { useSaved } from './saved'
 
 // 089: shipping (zones, rules, quotes), customer pickups, and the app's own RPC helper for these screens.
 
@@ -152,7 +153,7 @@ export function ShippingQuote({ sb, customers, flash }: { sb: SupabaseClient | n
 export function ShippingSettings({ sb, flash, canEdit }: { sb: SupabaseClient | null; flash: Flash; canEdit: boolean }) {
   const [s, setS] = useState<ShipSettings | null>(null)
   const [zone, setZone] = useState<Partial<ShipZone> | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('ship.ShippingSettings.q', '')
   const load = () => rpc<ShipSettings>(sb, 'ship_settings').then(setS).catch(e => flash((e as Error).message, true))
   useEffect(() => { load() }, [])
   if (!s) return <p className="muted">Loading…</p>

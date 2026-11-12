@@ -13,6 +13,7 @@ import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
 import { pageAll } from '../pageAll'
 import { PhenoPhotos } from './phenophotos'
+import { useSaved } from '../saved'
 import { useQueueDone } from './photoqueue'
 
 // PHENO-PIC-3: the open pheno is remembered for 2 hours, so if the phone reloads the app while the camera is open you land back on it
@@ -24,20 +25,7 @@ function rememberPheno(hunt: number, pheno: number | null) {
   try { if (pheno == null) sessionStorage.removeItem(LAST_PHENO); else sessionStorage.setItem(LAST_PHENO, JSON.stringify({ hunt, pheno, at: Date.now() })) } catch { /* private window */ }
 }
 
-// PHENO-SCORE-2: state that survives a refresh in this browser tab (sessionStorage), e.g. which hunt is open and its filters
-function useSaved<T>(key: string, init: T | (() => T)): [T, (v: T | ((o: T) => T)) => void] {
-  const [v, setV] = useState<T>(() => {
-    try { const raw = sessionStorage.getItem(key); if (raw != null) return JSON.parse(raw) as T } catch { /* private window */ }
-    return typeof init === 'function' ? (init as () => T)() : init
-  })
-  const set = useCallback((n: T | ((o: T) => T)) => setV(o => {
-    const next = typeof n === 'function' ? (n as (o: T) => T)(o) : n
-    try { sessionStorage.setItem(key, JSON.stringify(next)) } catch { /* private window */ }
-    return next
-  }), [key])
-  return [v, set]
-}
-
+// PHENO-SCORE-2: state that survives a refresh lives in useSaved (../saved)
 // Breeding: pollination runs (one donor x many receivers per trailer), seed lots, pheno hunts with group scoring, keepers.
 interface Run {
   id: number; site: string; season: number; name: string; project: string | null; room_id: number | null; donor_strain: string | null; donor_mother_id: number | null; donor_room_id: number | null; donor_batch_id: number | null

@@ -12,6 +12,7 @@ import { CustomerLogins } from './custlogins'
 import { ItemGeneratorSheet, StrainCodesSheet, StrainMetrcSheet, loadStrainPlan } from './strainMetrc'
 import { STRAIN_TYPES, TYPE_SHORT, tcls } from './strainTypes'
 import type { Customer, CustomerTerms, ListName, ListRow, ReserveYears, Settings, Strain, Vehicle } from './types'
+import { useSaved } from './saved'
 
 // ---------- column definitions per list ----------
 
@@ -200,16 +201,16 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
 }) {
   const [data, setData] = useState<Settings | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [tab, setTab] = useState<ListName>(lists[0] ?? 'strains')
-  const [q, setQ] = useState('')
-  const [showRetired, setShowRetired] = useState(false)
+  const [tab, setTab] = useSaved<ListName>(`settings.${focus}.${title ?? ''}.tab`, lists[0] ?? 'strains')
+  const [q, setQ] = useSaved(`settings.${focus}.${title ?? ''}.q`, '')
+  const [showRetired, setShowRetired] = useSaved(`settings.${focus}.${title ?? ''}.showRetired`, false)
   const [edit, setEdit] = useState<Partial<ListRow> | null>(null)
   const profSave = useRef<null | (() => Promise<boolean>)>(null)   // YLD-12: StrainProfileEdit's save-all, for the sheet's Save
   const [plan, setPlan] = useState<{ rows: PlanRow[]; found: string[]; file: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [other, setOther] = useState<string | null>(startOn ?? (lists.length ? null : extra?.[0]?.k ?? null))
   const [qbo, setQbo] = useState(false)
-  const [ordF, setOrdF] = useState<'all' | 'res' | 'menu'>('all')   // customers table: All / Reserves on / Menu only
+  const [ordF, setOrdF] = useSaved<'all' | 'res' | 'menu'>(`settings.${focus}.${title ?? ''}.ordF`, 'all')   // customers table: All / Reserves on / Menu only
   const [terms, setTerms] = useState<{ code: string; label: string }[]>([])
   const [metrcFor, setMetrcFor] = useState<{ id: number; isNew: boolean } | null>(null)
   const [codes, setCodes] = useState(false)
@@ -218,8 +219,8 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
   const cats = useCatList(backend, PRODUCT_CATEGORIES_KEY, DEFAULT_CATEGORIES).list
   const nurseries = useCatList(backend, NURSERIES_KEY, DEFAULT_NURSERIES).list
   const [pickOpen, setPickOpen] = useState(false)
-  const [catF, setCatF] = useState('')
-  const [where, setWhere] = useState<'all' | 'inv' | 'nurs' | 'field' | 'out'>('all')
+  const [catF, setCatF] = useSaved(`settings.${focus}.${title ?? ''}.catF`, '')
+  const [where, setWhere] = useSaved<'all' | 'inv' | 'nurs' | 'field' | 'out'>(`settings.${focus}.${title ?? ''}.where`, 'all')
   // strains in the nursery (active mothers) and in the field (this crop year's plantings). Outside nurseries = the strain card's Nurseries.
   const [grow, setGrow] = useState<{ moms: Set<string>; field: Set<string> } | null>(null)
   useEffect(() => {

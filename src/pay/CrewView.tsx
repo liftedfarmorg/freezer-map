@@ -8,6 +8,7 @@ import type { DayRow, Employee, Entry, Rate, Task } from './api'
 import { t } from '../i18n'
 import { DateIn, F, NumIn, Pick, Sheet, SaveBar, TextIn, errText } from '../cult/ui'
 import type { Flash } from '../cult/ui'
+import { useSaved } from '../saved'
 
 // Crew days are logged inside each run (RunDayLog, phone first, English / Español). Processing > Crew: productivity, days logged, the crew list, piece rates.
 
@@ -24,7 +25,7 @@ export function CrewTab({ sb, runs, flash, canEdit, isAdmin, onOpenRun }: {
   sb: SupabaseClient; runs: RunLite[]; flash: Flash; canEdit: boolean; isAdmin: boolean; onOpenRun: (run: number, date: string) => void
 }) {
   const api = useMemo(() => new PayApi(sb), [sb])
-  const [sec, setSec] = useState<'prod' | 'days' | 'crew' | 'rates'>('prod')
+  const [sec, setSec] = useSaved<'prod' | 'days' | 'crew' | 'rates'>('pay.CrewView.CrewTab.sec', 'prod')
   const [emps, setEmps] = useState<Employee[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const load = async () => { try { setEmps(await api.employees()); setErr(null) } catch (e) { setErr(errText(e)) } }

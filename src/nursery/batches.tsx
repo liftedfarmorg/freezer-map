@@ -7,6 +7,7 @@ import type { Batch, NData, NUse, Stage } from './types'
 import { DateIn, F, NumIn, Pick, SaveBar, Sheet, StrainList, TextIn } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
+import { useSaved } from '../saved'
 
 const stagePill = (b: Batch) => {
   const late = b.stage === 'rooting' && b.ready_on && b.ready_on < today()
@@ -17,7 +18,7 @@ export const success = (b: Batch) => { const r = rooted(b); return r == null || 
 
 /** Nursery > Batches: cuttings taken, rooting, sorts, ready, out the door (or into the hoops as moms) */
 export function BatchesTab({ d, c, q, onOpen, onNew, onSortDay }: { d: NData; c: NCtx; q: string; onOpen: (b: Batch) => void; onNew: () => void; onSortDay: () => void }) {
-  const [f, setF] = useState<'live' | Stage | 'all'>('live')
+  const [f, setF] = useSaved<'live' | Stage | 'all'>('nursery.batches.BatchesTab.f', 'live')
   const [gen, setGen] = useState<0 | 1 | 2 | 3 | 4>(0)
   const ql = q.trim().toLowerCase()
   const rows = d.batches.filter(b => (f === 'all' || (f === 'live' ? b.stage === 'rooting' || b.stage === 'ready' : b.stage === f)) && (!gen || b.gen === gen) &&

@@ -20,6 +20,7 @@ import { Ccof } from './ccof'
 import { Metrc } from './metrc'
 import { fmtD } from './files'
 import { CompFleet, FleetCard } from '../fleet/Fleet'
+import { useSaved } from '../saved'
 
 const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
 const ago = (iso: string | null | undefined) => (iso ? Math.round((Date.now() - new Date(iso).getTime()) / 86400000) : null)
@@ -32,7 +33,7 @@ export default function ComplianceView({ backend, flash, tab, go, isAdmin, canEd
   const [ov, setOv] = useState<Overview | null>(null)
   const [types, setTypes] = useState<DocType[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const [sub, setSub] = useState<string | null>(null)
+  const [sub, setSub] = useSaved<string | null>('comp.ComplianceView.ComplianceView.sub', null)
   const load = useCallback(async () => {
     if (!api) return
     try { const [o, t] = await Promise.all([api.overview(), api.docTypes()]); setOv(o); setTypes(t); setErr(null) } catch (e) { setErr(errText(e)) }

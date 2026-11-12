@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { can } from './fold'
+import { useSaved } from './saved'
 
 // Distribution > Settings > Locations: the freezers and reefer trailers at OHR and GVR.
 // Each is 2 columns x N spots deep. Add, change, retire (hidden from the map, history kept), or delete one that never held anything.
@@ -11,11 +12,11 @@ const STATUS = ['On', 'Off', 'Needs Attention', 'Not Working']
 const label = (l: { kind: string; number: number }) => (l.kind === 'trailer' ? `Reefer ${l.number - 100}` : `Freezer ${l.number}`)
 
 export function DistLocations({ sb, flash, onChanged }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void; onChanged: () => void }) {
-  const [site, setSite] = useState<'OHR' | 'GVR'>('GVR')
+  const [site, setSite] = useSaved<'OHR' | 'GVR'>('locations.DistLocations.site', 'GVR')
   const [locs, setLocs] = useState<Loc[] | null>(null)
   const [ed, setEd] = useState<Ed | null>(null)
   const [busy, setBusy] = useState(false)
-  const [showRetired, setShowRetired] = useState(false)
+  const [showRetired, setShowRetired] = useSaved('locations.DistLocations.showRetired', false)
   const edit = can('distribution', 'locations')
   const formRef = useRef<HTMLElement>(null)
   useEffect(() => { if (ed) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [ed?.at, ed?.id, ed == null])

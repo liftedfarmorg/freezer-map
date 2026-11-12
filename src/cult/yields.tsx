@@ -5,13 +5,14 @@ import { avg, calcHarvest, fieldName, fmtD, n0, n1, n2, pct, sum, yieldsByStrain
 import type { Ctx } from './calc'
 import type { CultData, YieldHist } from './types'
 import { Kpis } from './ui'
+import { useSaved } from '../saved'
 
 type Sort = 'lpp' | 'lbs' | 'name' | 'vs'
 
 export function YieldsTab({ d, c, site, q, api }: { d: CultData; c: Ctx; site: string | null; q: string; api: CultApi }) {
-  const [sort, setSort] = useState<Sort>('lpp')
+  const [sort, setSort] = useSaved<Sort>('cult.yields.YieldsTab.sort', 'lpp')
   const [hist, setHist] = useState<YieldHist[]>([])
-  const [view, setView] = useState<'strain' | 'field' | 'harvest'>('strain')
+  const [view, setView] = useSaved<'strain' | 'field' | 'harvest'>('cult.yields.YieldsTab.view', 'strain')
   useEffect(() => { api.history().then(setHist).catch(() => setHist([])) }, [api])
   const ql = q.trim().toLowerCase()
   const ys = yieldsByStrain(d, c, site).filter(y => !ql || y.strain.toLowerCase().includes(ql))

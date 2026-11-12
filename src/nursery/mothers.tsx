@@ -8,6 +8,7 @@ import type { Mother, NData } from './types'
 import { DateIn, F, NumIn, Pick, SaveBar, SelAll, SelBar, SelBox, SelButton, Sheet, StrainList, TextIn, useSel } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
+import { useSaved } from '../saved'
 
 const where = (c: NCtx, m: Mother) => [c.room(m.room_id), m.bed].filter(Boolean).join(' · ')
 const nextSeason = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 6 ? 1 : 0) }
@@ -16,7 +17,7 @@ const nextSeason = () => { const d = new Date(); return d.getFullYear() + (d.get
 export function MothersTab({ d, c, q, api, flash, onSaved, onOpen, onAdd }: {
   d: NData; c: NCtx; q: string; api: NurseryApi; flash: Flash; onSaved: (m: string) => Promise<void>; onOpen: (m: Mother) => void; onAdd: (v?: Partial<Mother>) => void
 }) {
-  const [f, setF] = useState<'active' | 'gone' | 'all'>('active')
+  const [f, setF] = useSaved<'active' | 'gone' | 'all'>('nursery.mothers.MothersTab.f', 'active')
   const [gen, setGen] = useState<0 | 1 | 2 | 3>(0)
   const sel = useSel()
   const ql = q.trim().toLowerCase()

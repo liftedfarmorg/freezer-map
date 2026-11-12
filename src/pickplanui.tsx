@@ -10,6 +10,7 @@ import { makePlan, rescore, route, type Loc, type Mode, type PLine, type PRow } 
 import { useBack, scrollTop } from './nav'
 import { ScanButton } from './scan'
 import { sameTag, useScanHandler } from './scanroute'
+import { useSaved } from './saved'
 
 const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
 const w = (p: Pallet) => Number(p.current_weight ?? 0)
@@ -53,10 +54,10 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
     for (const r of held) { const s = loc(r.pallet).site; if (s) m.set(s, (m.get(s) ?? 0) + 1e6) }
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s)
   }, [all, held, loc])
-  const [site, setSite] = useState<string | null>(null)
+  const [site, setSite] = useSaved<string | null>('pickplanui.lineOf.site', null)
   const st = site ?? sites[0] ?? null
   const lines: PLine[] = useMemo(() => all.map(l => ({ ...l, cands: l.cands.filter(p => loc(p).site === st) })), [all, st, loc])
-  const [mode, setMode] = useState<Mode>('freezers')
+  const [mode, setMode] = useSaved<Mode>('pickplanui.lineOf.mode', 'freezers')
   const fresh = useMemo(() => makePlan(lines, tol, mode, loc), [lines, tol, mode, loc])
   const [rows, setRows] = useState<PRow[] | null>(null)
   const [change, setChange] = useState<number | null>(null)   // pallet id being changed

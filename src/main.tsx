@@ -7,6 +7,7 @@ import { applyTheme, savedTheme } from './theme'
 import { UpdateBanner } from './update'
 import { installTabHeader } from './tabid'
 import { installPreviewGuard } from './preview'
+import { installDragScroll } from './dragscroll'
 installPreviewGuard()
 installTabHeader()
 
@@ -85,6 +86,7 @@ const PublicMenu = React.lazy(async () => {
   return { default: () => <PublicMenuPage sb={sb} code={menuCode!} /> }
 })
 
+installDragScroll()
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>{menuCode ? <React.Suspense fallback={null}><PublicMenu /></React.Suspense> : <App />}</ErrorBoundary>

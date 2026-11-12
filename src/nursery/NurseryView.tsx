@@ -27,6 +27,7 @@ import '../cult/cult.css'
 import './nursery.css'
 import { startQueue } from './photoqueue'
 import { PhotoQueuePill } from './phenophotos'
+import { useSaved } from '../saved'
 
 export default function NurseryView({ backend, flash, tab, go, customers, isAdmin, sender, me }: {
   backend: Backend; flash: (t: string, bad?: boolean) => void; tab: NTab; go: (t: NTab) => void; customers: Customer[]; isAdmin: boolean; sender?: string | null; me?: string
@@ -36,7 +37,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
   const api = useMemo(() => (sb ? new NurseryApi(sb) : null), [sb])
   const [d, setD] = useState<NData | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('nursery.NurseryView.NurseryView.q', '')
   const [terms, setTerms] = useState<PaymentTerm[]>([])
   const [order, setOrder] = useState<Partial<NOrder> | null>(null)
   const [batch, setBatch] = useState<Partial<Batch> | null>(null)

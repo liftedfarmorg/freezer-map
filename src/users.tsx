@@ -8,6 +8,7 @@ import { NotifyBox } from './notifyprefs'
 import type { NotifyPrefs } from './notifyprefs'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { can, isOwnerMe } from './fold'
+import { useSaved } from './saved'
 
 type Kind = 'staff' | 'customer' | 'none'
 const KINDS: { k: Kind; label: string; what: string }[] = [
@@ -37,7 +38,7 @@ export function UsersTab({ backend, me, customers, flash }: {
   const [users, setUsers] = useState<AppUser[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [edit, setEdit] = useState<Partial<AppUser> | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('users.UsersTab.q', '')
   const [logins, setLogins] = useState<Map<string, { claimed: boolean; invited_at: string | null }>>(new Map())
   const load = () => Promise.all([backend.listUsers(), backend.userLogins()])
     .then(([u, l]) => { setUsers(u); setLogins(l); setErr(null) }).catch(e => setErr(String(e?.message ?? e)))
@@ -267,7 +268,7 @@ export function LinkBox({ backend, email, claimed, flash, onLinked }: {
 export function ModulePeople({ sb, module, flash }: { sb: SupabaseClient | null; module: 'distribution' | 'sales' | 'cultivation' | 'nursery' | 'processing' | 'accounting' | 'compliance'; flash: (t: string, bad?: boolean) => void }) {
   type Row = { email: string; name: string | null; owner: boolean; last: string | null; lv: Level | null; login: 'microsoft' | 'email' }
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved(`users.${module}.people.q`, '')
   const [busy, setBusy] = useState(false)
   const [add, setAdd] = useState<{ email: string; name: string; login: 'microsoft' | 'email'; level: Level } | null>(null)
   const own = isOwnerMe(), manage = own || can(module, 'people'), makeAdmins = own || can(module, 'make_admins')

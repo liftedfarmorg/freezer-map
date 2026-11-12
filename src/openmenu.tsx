@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { TYPE_ORDER, tcls, typeShort } from './strainTypes'
 import './openmenu.css'
+import { useSaved } from './saved'
 
 // 174: the new open menu. Sales > Open menu (staff) and the public link (lifted-orders.app/menu/<code>, no login).
 // Fresh Frozen + Dry Flower (Standards, Smalls), crop year buttons, search, sortable columns, total row; tap a strain name for
@@ -28,10 +29,10 @@ const isRange = (lo: number | null, hi: number | null | undefined) => lo != null
 const yld = (lo: number | null, hi: number | null | undefined) => isRange(lo, hi) ? `${Number(lo).toFixed(1)}–${Number(hi).toFixed(1)}%` : pct(lo ?? hi ?? null)
 
 export function MenuBoard({ rows, variant }: { rows: MenuLine[]; variant: 'staff' | 'public' }) {
-  const [group, setGroup] = useState<Group>('ff')
-  const [year, setYear] = useState<number | 'all'>('all')
-  const [q, setQ] = useState('')
-  const [sort, setSort] = useState<{ col: 's' | 'y' | 'p' | 'open' | 'price' | 'g' | 't' | 'sho' | 'bho'; dir: number }>({ col: 's', dir: 1 })
+  const [group, setGroup] = useSaved<Group>('openmenu.MenuBoard.group', 'ff')
+  const [year, setYear] = useSaved<number | 'all'>('openmenu.MenuBoard.year', 'all')
+  const [q, setQ] = useSaved('openmenu.MenuBoard.q', '')
+  const [sort, setSort] = useSaved<{ col: 's' | 'y' | 'p' | 'open' | 'price' | 'g' | 't' | 'sho' | 'bho'; dir: number }>('openmenu.MenuBoard.sort', { col: 's', dir: 1 })
   const [open, setOpen] = useState<MenuLine | null>(null)
   const inGroup = rows.filter(r => (group === 'ff' ? r.product === 'FF' : r.product !== 'FF') && r.open_lbs > 0)
   const years = useMemo(() => [...new Set(inGroup.map(r => r.crop_year))].sort((a, b) => b - a), [rows, group])

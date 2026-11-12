@@ -10,6 +10,7 @@ import { download, toCsv } from './csv'
 import { readCcofPdf } from './ccoflist'
 import type { CcofRow } from './ccoflist'
 import { DateIn, F, Pick, SaveBar, Sheet, TextIn, errText } from '../cult/ui'
+import { useSaved } from '../saved'
 
 const ST_CLS: Record<Material['ccof_status'], string> = { approved: 'cp-ok', pending: 'cp-warn', not_allowed: 'cp-bad', unknown: 'cp-mute' }
 const LISTINGS = ['OMRI', 'CDFA OIM', 'WSDA', 'CCOF approved', 'Not listed']
@@ -37,7 +38,7 @@ function Materials({ c }: { c: Ctx }) {
   const [st, setSt] = useState<string | null>(null)
   const nurseryCert = c.ov.certs?.['1PN'] ?? true
   const [mod, setMod] = useState<string | null>(nurseryCert ? null : 'cultivation')
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('comp.ccof.Materials.q', '')
   const [open, setOpen] = useState<Material | null>(null)
   const [list, setList] = useState<CcofEntry[]>([])
   const load = async () => { try { const [m, i, l] = await Promise.all([c.api.materials(), c.api.issues(), c.api.ccofList().catch(() => [] as CcofEntry[])]); setRows(m); setIssues(i); setList(l) } catch (e) { c.flash(errText(e), true); setRows([]) } }
@@ -125,11 +126,11 @@ function MaterialSheet({ c, m, list, uses, onClose, onSaved }: { c: Ctx; m: Mate
 // ---------- application log ----------
 function AppLogView({ c }: { c: Ctx }) {
   const y = new Date().getFullYear()
-  const [from, setFrom] = useState<string | null>(`${y}-01-01`)
-  const [to, setTo] = useState<string | null>(today())
-  const [site, setSite] = useState<string | null>(null)
+  const [from, setFrom] = useSaved<string | null>('comp.ccof.AppLogView.from', `${y}-01-01`)
+  const [to, setTo] = useSaved<string | null>('comp.ccof.AppLogView.to', today())
+  const [site, setSite] = useSaved<string | null>('comp.ccof.AppLogView.site', null)
   const [mod, setMod] = useState<string | null>('cultivation')
-  const [kind, setKind] = useState<'both' | 'feed' | 'spray'>('both')
+  const [kind, setKind] = useSaved<'both' | 'feed' | 'spray'>('comp.ccof.AppLogView.kind', 'both')
   const [rows, setRows] = useState<AppLog[] | null>(null)
   const [mats, setMats] = useState<Material[]>([])
   useEffect(() => { c.api.materials().then(setMats).catch(() => {}) }, [])
@@ -181,8 +182,8 @@ export function TypeDocs({ c, types, note }: { c: Ctx; types: string[]; note: st
 function CcofListView({ c }: { c: Ctx }) {
   const [rows, setRows] = useState<CcofEntry[] | null>(null)
   const [mats, setMats] = useState<Material[]>([])
-  const [q, setQ] = useState('')
-  const [cat, setCat] = useState<string | null>(null)
+  const [q, setQ] = useSaved('comp.ccof.CcofListView.q', '')
+  const [cat, setCat] = useSaved<string | null>('comp.ccof.CcofListView.cat', null)
   const [preview, setPreview] = useState<{ file: File; rows: CcofRow[]; date: string | null } | null>(null)
   const [busy, setBusy] = useState(false)
   const load = async () => { try { const [l, m] = await Promise.all([c.api.ccofList(), c.api.materials()]); setRows(l); setMats(m) } catch (e) { c.flash(errText(e), true); setRows([]) } }

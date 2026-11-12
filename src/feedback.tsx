@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { useSaved } from './saved'
 
 // 324: Sales > Customer feedback. Notes customers send from the portal's "Help & feedback" button.
 // Not a ticket queue: nothing to open, assign or close. Newest first; "New" marks what came in since you last looked here.
@@ -17,8 +18,8 @@ const when = (s: string) => new Date(s).toLocaleString([], { month: 'short', day
 
 export function FeedbackView({ sb, flash }: { sb: SupabaseClient | null; flash: (t: string, bad?: boolean) => void }) {
   const [rows, setRows] = useState<FB[] | null>(null)
-  const [kind, setKind] = useState<'all' | FB['kind']>('all')
-  const [q, setQ] = useState('')
+  const [kind, setKind] = useSaved<'all' | FB['kind']>('feedback.FeedbackView.kind', 'all')
+  const [q, setQ] = useSaved('feedback.FeedbackView.q', '')
   // what counted as "new" when the page opened (then we mark everything as seen)
   const [seenAt] = useState(() => { try { return localStorage.getItem(SEEN_KEY) ?? '' } catch { return '' } })
   async function load() {

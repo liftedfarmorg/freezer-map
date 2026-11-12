@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { Select } from '../combo'
 import { Empty } from '../dash'
 import { dfmt, money } from '../docs'
+import { useSaved } from '../saved'
 
 type Flash = (t: string, bad?: boolean) => void
 const msg = (e: unknown) => String((e as Error)?.message ?? e)
@@ -50,7 +51,7 @@ export function BcPanel({ sb, flash, canEdit }: { sb: SupabaseClient; flash: Fla
   const api = useMemo(() => new BcApi(sb), [sb])
   const [st, setSt] = useState<Status | null>(null)
   const [cfg, setCfg] = useState<Config | null>(null)
-  const [sec, setSec] = useState<'invoices' | 'matching' | 'settings'>('invoices')
+  const [sec, setSec] = useSaved<'invoices' | 'matching' | 'settings'>('acct.BcPanel.BcPanel.sec', 'invoices')
   const [err, setErr] = useState<string | null>(null)
   const loadCfg = () => api.config().then(c => { setCfg(c); setErr(null) }).catch(e => setErr(msg(e)))
   const loadSt = () => api.server<Status>({ action: 'status' }).then(setSt).catch(e => setSt({ env: null, configured: false, error: msg(e) }))
@@ -79,9 +80,9 @@ export function BcPanel({ sb, flash, canEdit }: { sb: SupabaseClient; flash: Fla
 // ---------- the invoices: QuickBooks and Business Central side by side ----------
 function Invoices({ api, env, flash, canEdit }: { api: BcApi; env: string; flash: Flash; canEdit: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [f, setF] = useState<'all' | 'waiting' | 'problems' | 'inbc' | 'differs'>('all')
+  const [f, setF] = useSaved<'all' | 'waiting' | 'problems' | 'inbc' | 'differs'>('acct.BcPanel.Invoices.f', 'all')
   const [busy, setBusy] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('acct.BcPanel.Invoices.q', '')
   const load = () => api.list(env).then(setRows).catch(e => flash(msg(e), true))
   useEffect(() => { load() }, [env])
   if (!rows) return <p className="muted">Loading…</p>

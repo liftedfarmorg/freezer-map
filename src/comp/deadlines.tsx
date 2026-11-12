@@ -6,6 +6,7 @@ import type { Ctx } from './ctx'
 import { DocList, SITES, fmtD, today } from './files'
 import { DocSheet } from './library'
 import { DateIn, F, NumIn, Pick, SaveBar, Sheet, TextIn, errText } from '../cult/ui'
+import { useSaved } from '../saved'
 
 const KIND_LABEL: Record<Deadline['kind'], string> = { obligation: 'Deadline', doc: 'Document', license: 'License', material: 'Material listing', customer: 'Customer license', fleet: 'Vehicle' }
 const REPEAT: { v: number; l: string }[] = [{ v: 1, l: 'Every month' }, { v: 3, l: 'Every 3 months' }, { v: 6, l: 'Every 6 months' }, { v: 12, l: 'Every year' }, { v: 24, l: 'Every 2 years' }]
@@ -15,8 +16,8 @@ export const dueTone = (d: Deadline) => d.due_on == null ? 'cp-warn' : d.days_le
 export function Deadlines({ c }: { c: Ctx }) {
   const [rows, setRows] = useState<Deadline[] | null>(null)
   const [obs, setObs] = useState<(Obligation & { id: number })[]>([])
-  const [cat, setCat] = useState<string | null>(null)
-  const [site, setSite] = useState<string | null>(null)
+  const [cat, setCat] = useSaved<string | null>('comp.deadlines.Deadlines.cat', null)
+  const [site, setSite] = useSaved<string | null>('comp.deadlines.Deadlines.site', null)
   const [edit, setEdit] = useState<Partial<Obligation> | null>(null)
   const [done, setDone] = useState<(Obligation & { id: number }) | null>(null)
   const [doc, setDoc] = useState<Doc | null>(null)

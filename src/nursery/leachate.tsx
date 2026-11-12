@@ -8,6 +8,7 @@ import { DateIn, F, NumIn, Pick, SaveBar, Sheet, TextIn } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { canEditMod } from '../fold'
 import { t } from '../i18n'
+import { useSaved } from '../saved'
 
 interface Leach {
   id: number; site: string; room_id: number | null; bed: string | null; taken_on: string; minutes: number | null; leach_vol: number | null; leach_ec: number | null; leach_ph: number | null
@@ -34,8 +35,8 @@ export function expectPct(r: Partial<Leach>): number | null {
 export function Leachate({ sb, d, flash }: { sb: SupabaseClient; d: NData; flash: Flash }) {
   const [rows, setRows] = useState<Leach[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [place, setPlace] = useState<string>('')
-  const [year, setYear] = useState<number | null>(null)
+  const [place, setPlace] = useSaved<string>('nursery.leachate.Leachate.place', '')
+  const [year, setYear] = useSaved<number | null>('nursery.leachate.Leachate.year', null)
   const [open, setOpen] = useState<Set<string> | null>(null)
   const [ed, setEd] = useState<Partial<Leach> | null>(null)
   const load = async () => {

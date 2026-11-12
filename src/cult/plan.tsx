@@ -6,12 +6,13 @@ import type { Ctx } from './calc'
 import type { CultData, Demand, NurseryOrder, PlanData, PlanRow, Source } from './types'
 import { Choices, DateIn, F, Kpis, NumIn, Pick, SaveBar, SelAll, SelBar, SelBox, SelButton, Sheet, StrainList, TextIn, errText, useSel } from './ui'
 import type { Flash } from './ui'
+import { useSaved } from '../saved'
 
 const STATUSES: NurseryOrder['status'][] = ['planned', 'ordered', 'confirmed', 'received', 'cancelled']
 const lc = (s: string) => s.toLowerCase()
 
 export function PlanTab({ d, c, api, flash, q }: { d: CultData; c: Ctx; api: CultApi; flash: Flash; q: string }) {
-  const [year, setYear] = useState(d.currentYear + 1)
+  const [year, setYear] = useSaved('cult.plan.PlanTab.year', d.currentYear + 1)
   const [p, setP] = useState<PlanData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [dEdit, setDEdit] = useState<Partial<Demand> | null>(null)

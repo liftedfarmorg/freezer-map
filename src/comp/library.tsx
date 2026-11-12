@@ -4,6 +4,7 @@ import type { CustLic, Doc, License, RefKind } from './api'
 import type { Ctx } from './ctx'
 import { AddDocsSheet, DocList, DropZone, Expiry, FileChip, SITES, daysTo, fmtD } from './files'
 import { DateIn, F, Pick, SaveBar, Sheet, TextIn, errText } from '../cult/ui'
+import { useSaved } from '../saved'
 
 const REF_LABEL: Record<RefKind, string> = { test: 'Pre-harvest test', pallet: 'Package', lot: 'Harvest lot', harvest: 'Harvest', material: 'Material', license: 'License',
   customer: 'Customer', metrc_error: 'METRC error', obligation: 'Deadline', processor: 'Processor', asset: 'Vehicle', fleet_log: 'Vehicle report', carrier: 'Carrier', driver: 'Driver' }
@@ -24,9 +25,9 @@ export function Library({ c }: { c: Ctx }) {
 // ---------- documents ----------
 function Docs({ c }: { c: Ctx }) {
   const [docs, setDocs] = useState<Doc[] | null>(null)
-  const [type, setType] = useState<string | null>(null)
-  const [site, setSite] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [type, setType] = useSaved<string | null>('comp.library.Docs.type', null)
+  const [site, setSite] = useSaved<string | null>('comp.library.Docs.site', null)
+  const [q, setQ] = useSaved('comp.library.Docs.q', '')
   const [expiring, setExpiring] = useState(false)
   const [removed, setRemoved] = useState(false)
   const [adding, setAdding] = useState<File[] | null>(null)
@@ -169,7 +170,7 @@ const CUST_STATUS: Record<CustLic['status'], [string, string]> = { missing: ['No
 function Customers({ c }: { c: Ctx }) {
   const [rows, setRows] = useState<CustLic[] | null>(null)
   const [open, setOpen] = useState<CustLic | null>(null)
-  const [onlyBad, setOnlyBad] = useState(false)
+  const [onlyBad, setOnlyBad] = useSaved('comp.library.Customers.onlyBad', false)
   const load = async () => { try { setRows(await c.api.customers()) } catch (e) { c.flash(errText(e), true) } }
   useEffect(() => { load() }, [])
   const shown = useMemo(() => (rows ?? []).filter(r => !onlyBad || r.status !== 'ok'), [rows, onlyBad])

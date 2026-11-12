@@ -3,6 +3,7 @@ import type { MenuInfo } from './strains'
 import { useEffect, useState } from 'react'
 import type { Backend } from './api'
 import type { MenuRow, ReserveRequest } from './types'
+import { useSaved } from './saved'
 
 const n0 = (x: number | null | undefined) => Math.round(Number(x ?? 0)).toLocaleString()
 const STATUS: Record<string, string> = { pending: 'Waiting for approval', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled' }
@@ -13,7 +14,7 @@ export function OpenMenu({ backend, reserves }: { backend: Backend; reserves: bo
   const [reqs, setReqs] = useState<ReserveRequest[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [mine, setMine] = useState(false)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('menu.OpenMenu.q', '')
   const [pick, setPick] = useState<MenuRow | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [info, setInfo] = useState<Map<string, MenuInfo>>(new Map())

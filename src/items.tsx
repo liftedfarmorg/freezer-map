@@ -27,6 +27,7 @@ const n0 = (x: number | null | undefined) => Number(x ?? 0).toLocaleString(undef
 const licLabel = (l: { license: string; site: string | null; kind: string | null }) =>
   `${l.site ?? l.license}${l.kind === 'processor' ? ' proc' : l.kind === 'nursery' ? ' nursery' : ''}`
 import { STRAIN_TYPES } from './strainTypes'
+import { useSaved } from './saved'
 export { STRAIN_TYPES }
 
 export function loadItemCards(sb: SupabaseClient | null) { return rpc<ItemCard[]>(sb, 'item_cards', {}, SQL) }
@@ -34,12 +35,12 @@ export function loadItemCards(sb: SupabaseClient | null) { return rpc<ItemCard[]
 /** Sales › Items: every item card, with filters */
 export function ItemsView({ sb, flash, canEdit, canPrice = false }: { sb: SupabaseClient | null; flash: Flash; canEdit: boolean; canPrice?: boolean }) {
   const [rows, setRows] = useState<ItemCard[] | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('items.ItemsView.q', '')
   const [prod, setProd] = useState('')
-  const [year, setYear] = useState('')
-  const [farm, setFarm] = useState('')
+  const [year, setYear] = useSaved('items.ItemsView.year', '')
+  const [farm, setFarm] = useSaved('items.ItemsView.farm', '')
   const [lic, setLic] = useState('')
-  const [show, setShow] = useState<'all' | 'stock' | 'on' | 'off' | 'flag'>('stock')
+  const [show, setShow] = useSaved<'all' | 'stock' | 'on' | 'off' | 'flag'>('items.ItemsView.show', 'stock')
   const [open, setOpen] = useState<ItemCard | null>(null)
   const load = async () => { try { setRows(await loadItemCards(sb)) } catch (e) { flash((e as Error).message, true); setRows([]) } }
   useEffect(() => { load() }, [])

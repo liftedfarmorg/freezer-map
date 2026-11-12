@@ -12,6 +12,7 @@ import { Meter } from './dash'
 import { PRODUCT_LABEL } from './types'
 import { PlanMyPick } from './pickplanui'
 import type { Loc } from './pickplan'
+import { useSaved } from './saved'
 
 const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
 const fmt = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
@@ -67,7 +68,7 @@ export function FulfillView(props: FulfillProps) {
   const [ownId, setOwnId] = useState<number | null>(null)
   const openId = props.setOpenId ? (props.openId ?? null) : ownId
   const setOpenId = props.setOpenId ?? setOwnId
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('fulfill.FulfillView.q', '')
   const [allShipped, setAllShipped] = useState(false)
   useBack(openId != null, () => setOpenId(null))
   const stage = useStages(props.backend.client())
@@ -152,7 +153,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
   const [packSel, setPackSel] = useState<number[]>([])
   const [scanRes, setScanRes] = useState<{ p: Pallet; msg: string; line?: FLine } | null>(null)
   const [planning, setPlanning] = useState(false)
-  const [showFilled, setShowFilled] = useState(false)   // PICK-5
+  const [showFilled, setShowFilled] = useSaved('fulfill.OrderPage.showFilled', false)   // PICK-5
   const [openMix, setOpenMix] = useState<number[]>([])   // PICK-5
   const narrow = useNarrow()
   // on a load that hasn't left: still editable (it can only leave once it's complete and OK'd)

@@ -8,6 +8,7 @@ import { DateIn, F, NumIn, Pick, SaveBar, Sheet, StrainList, TextIn } from '../c
 import type { Flash } from '../cult/ui'
 import { t } from '../i18n'
 import type { PaymentTerm } from '../types'
+import { useSaved } from '../saved'
 
 const money = (x: number) => x.toLocaleString(undefined, { style: 'currency', currency: 'USD' })
 export const statusPill = (o: NOrder, c: NCtx) => {
@@ -17,7 +18,7 @@ export const statusPill = (o: NOrder, c: NCtx) => {
 
 /** Nursery > Orders: what the farms (and outside farms) want, and when */
 export function OrdersTab({ d, c, q, onOpen, onNew }: { d: NData; c: NCtx; q: string; onOpen: (o: NOrder) => void; onNew: () => void }) {
-  const [f, setF] = useState<'open' | 'done' | 'all'>('open')
+  const [f, setF] = useSaved<'open' | 'done' | 'all'>('nursery.orders.OrdersTab.f', 'open')
   const ql = q.trim().toLowerCase()
   const rows = d.orders.filter(o => (f === 'all' || (f === 'open' ? c.isOpen(o) : !c.isOpen(o))) &&
     (!ql || `${o.strain} ${c.to(o)} ${o.so_number ?? ''} ${o.notes ?? ''}`.toLowerCase().includes(ql)))

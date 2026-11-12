@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Backend } from './api'
 import type { Customer } from './types'
 import { LinkBox } from './users'
+import { useSaved } from './saved'
 
 interface Login { email: string; name: string | null; phone: string | null; last_seen: string | null; claimed: boolean; invited_at: string | null; customer_id?: number; customer?: string }
 interface LoginList { can_edit: boolean; can_view_as?: boolean; users: Login[] }
@@ -105,7 +106,7 @@ export function AllCustomerLogins({ backend, customers, flash }: { backend: Back
   const sb = backend.client()
   const [list, setList] = useState<LoginList | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('custlogins.AllCustomerLogins.q', '')
   const [add, setAdd] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
   const load = useCallback(async () => {

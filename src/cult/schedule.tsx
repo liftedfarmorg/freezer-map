@@ -5,6 +5,7 @@ import type { Ctx } from './calc'
 import type { CultData, Harvest, HarvestKind, HarvestStatus } from './types'
 import { Choices, DateIn, F, NumIn, Pick, SaveBar, SelAll, SelBar, SelBox, SelButton, Sheet, StrainList, TextIn, errText, useSel } from './ui'
 import type { Flash } from './ui'
+import { useSaved } from '../saved'
 
 type Mode = 'upcoming' | 'all' | 'done'
 
@@ -12,8 +13,8 @@ export function ScheduleTab({ d, c, site, q, onOpen, api, flash, onSaved }: { d:
   api: CultApi; flash: Flash; onSaved: (m: string) => Promise<void> }) {
   const sel = useSel()
   const bulk = (f: () => Promise<unknown>, m: string) => async () => { try { await f(); await onSaved(m) } catch (e) { flash(errText(e), true) } }
-  const [mode, setMode] = useState<Mode>('all')   // 255: everything by default, filter from there
-  const [kind, setKind] = useState<'all' | 'flower' | 'biomass'>('all')
+  const [mode, setMode] = useSaved<Mode>('cult.schedule.bulk.mode', 'all')   // 255: everything by default, filter from there
+  const [kind, setKind] = useSaved<'all' | 'flower' | 'biomass'>('cult.schedule.bulk.kind', 'all')
   const now = today()
   const ql = q.trim().toLowerCase()
   const rows = useMemo(() => d.harvests.filter(h =>

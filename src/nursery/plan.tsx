@@ -7,12 +7,13 @@ import type { NData } from './types'
 import { F, NumIn, SaveBar, Sheet, TextIn } from '../cult/ui'
 import type { Flash } from '../cult/ui'
 import { t, tn } from '../i18n'
+import { useSaved } from '../saved'
 
 /** Nursery > Plan: from the farm orders back to G4 trays, G3 field moms, G2 greenhouse moms, G1, with cut-by dates */
 export function PlanTab({ d, c, api, flash, onSaved }: { d: NData; c: NCtx; api: NurseryApi; flash: Flash; onSaved: (m: string) => Promise<void> }) {
   const years = [...new Set([...d.orders.map(o => o.crop_year), ...d.mothers.map(m => m.season).filter((y): y is number => !!y), new Date().getFullYear() + 1])].sort((a, b) => b - a)
-  const [year, setYear] = useState(() => { const y = new Date().getFullYear(); return d.orders.some(o => o.crop_year === y + 1) || new Date().getMonth() >= 6 ? y + 1 : y })
-  const [q, setQ] = useState('')
+  const [year, setYear] = useSaved('nursery.plan.PlanTab.year', () => { const y = new Date().getFullYear(); return d.orders.some(o => o.crop_year === y + 1) || new Date().getMonth() >= 6 ? y + 1 : y })
+  const [q, setQ] = useSaved('nursery.plan.PlanTab.q', '')
   const [open, setOpen] = useState<PlanRow | null>(null)
   const rows = useMemo(() => planSeason(d, c, year), [d, c, year])
   const ql = q.trim().toLowerCase()

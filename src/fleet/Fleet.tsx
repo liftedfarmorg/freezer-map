@@ -10,6 +10,7 @@ import { Card, DashHead, Empty, Tile, Tiles } from '../dash'
 import { t } from '../i18n'
 import { reportPdf } from './pdf'
 import './fleet.css'
+import { useSaved } from '../saved'
 
 // Vehicles and equipment.
 //  - Compliance › Vehicles: the list, insurance and registrations (with expiry → Deadlines), every report, closing defects and incidents.
@@ -102,15 +103,15 @@ type FTab = 'assets' | 'drivers' | 'carriers' | 'reports'
 /** Compliance › Vehicles (everything), or one department's Settings › Vehicles (dept set: only theirs, no paperwork) */
 export function CompFleet({ sb, flash, dept }: { sb: SupabaseClient | null; flash: Flash; dept?: Dept }) {
   const { api, d, err, load } = useFleet(sb)
-  const [tab, setTab] = useState<FTab>('assets')
+  const [tab, setTab] = useSaved<FTab>('fleet.Fleet.CompFleet.tab', 'assets')
   const [asset, setAsset] = useState<Partial<Asset> | null>(null)
   const [driver, setDriver] = useState<Partial<Driver> | null>(null)
   const [carrier, setCarrier] = useState<Partial<Carrier> | null>(null)
   const [rep, setRep] = useState<Partial<Log> | null>(null)
-  const [kind, setKind] = useState<'all' | LogKind>('all')
-  const [depF, setDepF] = useState<'all' | Dept>('all')
+  const [kind, setKind] = useSaved<'all' | LogKind>('fleet.Fleet.CompFleet.kind', 'all')
+  const [depF, setDepF] = useSaved<'all' | Dept>('fleet.Fleet.CompFleet.depF', 'all')
   const [openOnly, setOpenOnly] = useState(false)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useSaved('fleet.Fleet.CompFleet.q', '')
   const [retired, setRetired] = useState(false)
   const title = dept ? `${DEPT_L[dept]} vehicles` : 'Vehicles'
   if (!api) return <div className="list"><h2>{title}</h2><p className="muted">Needs the database (not in the demo).</p></div>

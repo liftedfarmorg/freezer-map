@@ -7,6 +7,7 @@ import { useScrimBack, useTabHistory, scrollTop } from './nav'
 import { StrainCardHost, StrainLink } from './strainCard'
 import { CompFleet, CrewFleet } from './fleet/Fleet'
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { readSaved, writeSaved } from './saved'
 import type { ReactNode } from 'react'
 import { Backend, CONFIG_MISSING, IS_PORTAL, makeBackend, portalUrl } from './api'
 import { FREEZER_STATUSES, PRODUCT_LABEL, PRODUCT_SHORT, FINISH_LABEL } from './types'
@@ -413,18 +414,18 @@ export default function App() {
   const [user, setUser] = useState<string | null | undefined>(undefined)
   const [me, setMe] = useState<Me | null>(null)
   const [snap, setSnap] = useState<Snapshot | null>(null)
-  const [site, setSite] = useState<Site>('OHR')
+  const [site, setSite] = useState<Site>(() => readSaved<Site>('app.site', 'OHR'))
   useEffect(() => { if (GO) history.replaceState(null, '', location.pathname) }, [])
   const storedMod = stored('fm.mod') as Mod | null
-  const [view, setView] = useState<View>(GO_ACCT ? 'acct' : GO_TAB ? 'sales' : storedMod === 'cult' ? 'cult' : storedMod === 'nurs' ? 'nursery' : storedMod === 'acct' ? 'acct' : storedMod === 'proc' ? 'proc' : storedMod === 'comp' ? 'comp' : storedMod === 'sales' ? 'sales' : storedMod === 'admin' ? 'admin' : 'dash')
+  const [view, setView] = useState<View>(GO_ACCT ? 'acct' : GO_TAB ? 'sales' : readSaved<View | null>('app.view', null) ?? (storedMod === 'cult' ? 'cult' : storedMod === 'nurs' ? 'nursery' : storedMod === 'acct' ? 'acct' : storedMod === 'proc' ? 'proc' : storedMod === 'comp' ? 'comp' : storedMod === 'sales' ? 'sales' : storedMod === 'admin' ? 'admin' : 'dash'))
   const [mod, setModS] = useState<Mod>(GO_ACCT ? 'acct' : GO_TAB ? 'sales' : storedMod && storedMod in MOD_KEY ? storedMod : 'dist')
   const [cultTab, setCultTabS] = useState<CultTab>(() => ([...CULT_TABS, ...CULT_TAIL].find(t => t.t === stored('cult.tab'))?.t ?? 'dashboard'))
-  const [salesTab, setSalesTabS] = useState<SalesTab>(GO_TAB ?? 'dash')
-  const [adminSet, setAdminSet] = useState<Mod>('admin')
-  const [adminTab, setAdminTabS] = useState<AdminTab>('dash')
+  const [salesTab, setSalesTabS] = useState<SalesTab>(GO_TAB ?? readSaved<SalesTab>('app.salesTab', 'dash'))
+  const [adminSet, setAdminSet] = useState<Mod>(() => readSaved<Mod>('app.adminSet', 'admin'))
+  const [adminTab, setAdminTabS] = useState<AdminTab>(() => readSaved<AdminTab>('app.adminTab', 'dash'))
   const [procTab, setProcTabS] = useState<PTab>(() => ([...PROC_TABS, ...PROC_TAIL].find(x => x.t === stored('proc.tab'))?.t ?? 'dashboard'))
   const [compTab, setCompTabS] = useState<CTab>(() => ([...COMP_TABS, ...COMP_TAIL].find(x => x.t === stored('comp.tab'))?.t ?? 'dashboard'))
-  const [acctTab, setAcctTabS] = useState<ATab>(GO_ACCT ? (QBO_BACK || GO_ACCT_SETTINGS ? 'settings' : 'dashboard') : 'dashboard')
+  const [acctTab, setAcctTabS] = useState<ATab>(GO_ACCT ? (QBO_BACK || GO_ACCT_SETTINGS ? 'settings' : 'dashboard') : readSaved<ATab>('app.acctTab', 'dashboard'))
   const [nurTab, setNurTabS] = useState<NTab>(() => ([...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === stored('nur.tab'))?.t ?? 'dashboard'))
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
@@ -444,7 +445,7 @@ export default function App() {
   const setCompTab = (t: CTab) => { setCompTabS(t); store('comp.tab', t); setView('comp'); top() }
   const lastView = useRef<View>('dash')
   const go = (v: View) => { if (view !== 'mine' && view !== 'fleet' && view !== 'driver') lastView.current = view; setView(v); top() }
-  const [freezerId, setFreezerId] = useState<number | null>(null)
+  const [freezerId, setFreezerId] = useState<number | null>(() => readSaved<number | null>('app.freezer', null))
   const [palletId, setPalletId] = useState<number | null>(null)
   const [plan, setPlan] = useState<Plan>(EMPTY)
   const [selecting, setSelecting] = useState(false)
@@ -458,7 +459,7 @@ export default function App() {
   const [placing, setPlacing] = useState<Placing | null>(null)
   const [confirm, setConfirm] = useState<{ text: string; ok: string; run: () => Promise<void> } | null>(null)
   const [toast, setToast] = useState<{ text: string; bad?: boolean } | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => readSaved('app.query', ''))
   const [extra, setExtra] = useState<Pallet[]>([])
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -501,7 +502,7 @@ export default function App() {
   const myMods = MODS.filter(x => x.on)
   const noMods = staff && myMods.length === 0
   const isDrv = !!me?.access?.driver
-  const [drvTab, setDrvTab] = useState<DTab>('loads')
+  const [drvTab, setDrvTab] = useState<DTab>(() => readSaved<DTab>('app.drvTab', 'loads'))
   const inDrv = view === 'driver' && isDrv
   const modCount = myMods.length + (isDrv ? 1 : 0)
   const cur: Mod = myMods.some(x => x.m === mod) ? mod : myMods[0]?.m ?? 'dist'
@@ -524,7 +525,7 @@ export default function App() {
   useEffect(() => { if (staff && cur !== mod && myMods.length) goMod(cur) }, [cur, mod, staff, myMods.length])
   // Fulfillment: open orders and the pallets held for them (Distribution and Sales)
   const [forders, setForders] = useState<FOrder[] | null>(null)
-  const [fOpen, setFOpen] = useState<number | null>(null)   // order open in Fulfillment (a load's stop can open one)
+  const [fOpen, setFOpen] = useState<number | null>(() => readSaved<number | null>('app.fOpen', null))   // order open in Fulfillment (a load's stop can open one)
   useEffect(() => { if (view !== 'fulfill') setFOpen(null) }, [view])
   const canFulfill = !!lv.distribution || !!lv.sales
   const [fErr, setFErr] = useState<string | null>(null)
@@ -535,6 +536,10 @@ export default function App() {
   const [menuDrag, setMenuDrag] = useState<{ mod: string; keys: string[]; k: string } | null>(null)
   const dragRef = useRef<{ k: string; y: number; keys: string[]; mod: string; started: boolean; moved: boolean } | null>(null)
   const [ordersKey, setOrdersKey] = useState(0)
+  // SAVE-1: where you are survives a refresh (per browser tab)
+  useEffect(() => { writeSaved('app.view', view); writeSaved('app.site', site); writeSaved('app.salesTab', salesTab); writeSaved('app.adminSet', adminSet); writeSaved('app.adminTab', adminTab)
+    writeSaved('app.acctTab', acctTab); writeSaved('app.freezer', freezerId); writeSaved('app.query', query); writeSaved('app.drvTab', drvTab); writeSaved('app.fOpen', fOpen) },
+  [view, site, salesTab, adminSet, adminTab, acctTab, freezerId, query, drvTab, fOpen])
   const refreshF = useCallback(async () => {
     if (!canFulfill) return
     try { setForders(await backend.fulfillmentOrders()); setFErr(null) } catch (e) { setForders([]); setFErr(String((e as Error).message ?? e)) }

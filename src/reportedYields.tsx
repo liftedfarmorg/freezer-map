@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadMenuInfo, yieldRange } from './strains'
 import './reportedYields.css'
+import { useSaved } from './saved'
 
 // Sales > Reported Yields (MOCKUP). Every yield report customers send from the portal, in one place:
 //   By strain   - lbs-weighted averages per strain + crop year across all customers (what will feed the sales menu)
@@ -75,15 +76,15 @@ export function ReportedYieldsPage({ sb, flash }: { sb: SupabaseClient | null; f
 
 export function ReportedYields({ reports, owed, menu, flash, live }: { reports: RYReport[]; owed: RYOwed[]; menu: Record<string, RYMenu>; flash: (t: string, bad?: boolean) => void
   live?: boolean }) {
-  const [tab, setTab] = useState<Tab>('strain')
-  const [year, setYear] = useState<'all' | number>('all')
-  const [procF, setProcF] = useState<'all' | 'sho' | 'bho'>('all')
-  const [cust, setCust] = useState<'all' | number>('all')
-  const [q, setQ] = useState('')
+  const [tab, setTab] = useSaved<Tab>('reportedYields.ReportedYields.tab', 'strain')
+  const [year, setYear] = useSaved<'all' | number>('reportedYields.ReportedYields.year', 'all')
+  const [procF, setProcF] = useSaved<'all' | 'sho' | 'bho'>('reportedYields.ReportedYields.procF', 'all')
+  const [cust, setCust] = useSaved<'all' | number>('reportedYields.ReportedYields.cust', 'all')
+  const [q, setQ] = useSaved('reportedYields.ReportedYields.q', '')
   const [drafts, setDrafts] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
   const [openSub, setOpenSub] = useState<string | null>(null)   // a strain opened inside a customer
-  const [sort, setSort] = useState<{ k: SortK; asc: boolean }>({ k: 'lbs', asc: false })
+  const [sort, setSort] = useSaved<{ k: SortK; asc: boolean }>('reportedYields.ReportedYields.sort', { k: 'lbs', asc: false })
   const menuNow = menu
 
   const all = useMemo(() => reports.flatMap(r => r.lines.flatMap(l => l.parts.filter(done).map(p => calc(r, l, p)))), [reports])

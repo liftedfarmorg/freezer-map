@@ -909,3 +909,5 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .t-ih.t-ih:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-ih-bg); color: var(--t-ih-ink); }
 .t-i.t-i:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-i-bg); color: var(--t-i-ink); }
 .t-a.t-a:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-a-bg); color: var(--t-a-ink); }
+/* SAVE-1: drag to pan tables on a computer */
+@media (hover: hover) and (pointer: fine) { .cwrap { cursor: grab; } .cwrap.dragging { cursor: grabbing; user-select: none; } .cwrap :is(button, a, input, select, tr.tap, .tap) { cursor: pointer; } }

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Customer } from './types'
 import { Select } from './combo'
 import { money, rpc } from './ship'
+import { useSaved } from './saved'
 
 // 159: Sales > Returns. Start a return from a shipped order (same permission as making an order). Distribution > Inbound receives it
 // in METRC; that makes the credit memo (Product Return), which goes to QuickBooks 30 minutes later (or Send now in Accounting).
@@ -34,7 +35,7 @@ async function qboRun<T>(sb: SupabaseClient, body: object): Promise<T> {
 
 export function ReturnsView({ sb, customers, flash, canEdit, canSend, isAdmin }: { sb: SupabaseClient | null; customers: Customer[]; flash: Flash; canEdit: boolean; canSend: boolean; isAdmin: boolean }) {
   const [rows, setRows] = useState<Ret[] | null>(null)
-  const [show, setShow] = useState<'open' | 'all'>('open')
+  const [show, setShow] = useSaved<'open' | 'all'>('returns.ReturnsView.show', 'open')
   const [making, setMaking] = useState(false)
   const [recv, setRecv] = useState<{ r: Ret; credit: boolean } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)

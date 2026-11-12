@@ -12,6 +12,7 @@ import { dfmt, money as money2 } from '../docs'
 import { PayrollTab, PaySettings } from '../pay/PayrollView'
 import { BcPanel } from './BcPanel'
 import { StopAlerts } from '../driver'
+import { useSaved } from '../saved'
 
 type Flash = (t: string, bad?: boolean) => void
 const money = money2
@@ -119,8 +120,8 @@ function Dashboard({ api, ov, rows, conn, env, go, open, banner }: { api: AcctAp
 
 // ---------- To send ----------
 function SendList({ api, rows, env, canEdit, flash, open, reload, banner }: { api: AcctApi; rows: AInvoice[]; env: Env; canEdit: boolean; flash: Flash; open: (id: number) => void; reload: () => Promise<void>; banner: React.ReactNode }) {
-  const [f, setF] = useState<'send' | 'internal' | 'void'>('send')
-  const [q, setQ] = useState('')
+  const [f, setF] = useSaved<'send' | 'internal' | 'void'>('acct.AccountingView.SendList.f', 'send')
+  const [q, setQ] = useSaved('acct.AccountingView.SendList.q', '')
   const [sel, setSel] = useState<number[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [results, setResults] = useState<{ inv: string; ok: boolean; text: string }[]>([])
@@ -251,8 +252,8 @@ function CmPreview({ api, c, env, canEdit, busy, onClose, onSend }: { api: AcctA
 
 // ---------- In QuickBooks ----------
 function SentList({ api, rows, env, flash, open, reload, lastSync, connected, banner }: { api: AcctApi; rows: AInvoice[]; env: Env; flash: Flash; open: (id: number) => void; reload: () => Promise<void>; lastSync: string | null; connected: boolean; banner: React.ReactNode }) {
-  const [f, setF] = useState<'unpaid' | 'overdue' | 'paid' | 'all'>('unpaid')
-  const [q, setQ] = useState('')
+  const [f, setF] = useSaved<'unpaid' | 'overdue' | 'paid' | 'all'>('acct.AccountingView.SentList.f', 'unpaid')
+  const [q, setQ] = useSaved('acct.AccountingView.SentList.q', '')
   const [busy, setBusy] = useState(false)
   const sent = rows.filter(i => i.push?.status === 'sent')
   const ql = q.trim().toLowerCase()
@@ -456,7 +457,7 @@ function SendSheet({ api, id, flash, canEdit, isAdmin = false, env, onClose, onC
 
 // ---------- Settings ----------
 function SettingsTab({ api, flash, conn, env, refresh, sb, canEdit }: { api: AcctApi; flash: Flash; conn: { env: Env; connected: boolean; company?: string; error?: string } | null; env: Env; refresh: () => void; sb: ReturnType<Backend['client']>; canEdit: boolean }) {
-  const [sec, setSec] = useState<'conn' | 'bc' | 'products' | 'classes' | 'rules' | 'pay' | 'people'>('conn')
+  const [sec, setSec] = useSaved<'conn' | 'bc' | 'products' | 'classes' | 'rules' | 'pay' | 'people'>('acct.AccountingView.SettingsTab.sec', 'conn')
   return (
     <div className="list">
       <h2>Accounting settings</h2>
