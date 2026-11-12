@@ -95,6 +95,7 @@ begin
   select * into tc from nursery_containers where id = p_to;
   if tc.id is null then raise exception 'Pick the pot'; end if;
   if p_what not in ('planted','up_pot') then raise exception 'Unknown pot step %', p_what; end if;
+  perform set_config('nursery.move_on', coalesce(p_on, current_date)::text, true);   -- 344: a mother lot moved with an up-pot goes to METRC with this date
   for it in select * from jsonb_array_elements(p_items) loop
     k := it ->> 'kind';
     if k = 'mother' then

@@ -89,7 +89,7 @@ export function UpPotSheet({ sb, d, items, title, flash, onClose, onDone }: { sb
         <F label={t('Up-potted on')}><DateIn value={on} onChange={setOn} /></F>
         <F label={t('Note')}><TextIn value={note} onChange={setNote} /></F>
       </div>
-      <p className="muted small-note">{room && picked.some(r => r.x.kind === 'planting') ? t('The move goes to METRC right away (immature batches). Pot sizes stay in the app (METRC doesn\'t track them).') : t('Pot sizes stay in the app (METRC doesn\'t track them).')}</p>
+      <p className="muted small-note">{room ? t('The move goes to METRC right away when the METRC location changes (a bench to another bench in the greenhouse stays in the app). Pot sizes stay in the app (METRC doesn\'t track them).') : t('Pot sizes stay in the app (METRC doesn\'t track them).')}</p>
       <SaveBar busy={busy} disabled={!ok} saveLabel={t('Up pot {n}', { n: n0(picked.reduce((a, r) => a + (r.n ?? 0), 0)) })} onCancel={onClose} onSave={go} />
     </Sheet>
   )

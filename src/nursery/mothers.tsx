@@ -112,6 +112,7 @@ export function MotherSheet({ d, c, m: m0, api, flash, onClose, onSaved }: { d: 
           onChange={v => set({ status: v ?? 'active', ended_on: v && v !== 'active' ? x.ended_on ?? today() : null })} /></F>
         {x.status !== 'active' && <F label={t('Since')}><DateIn value={x.ended_on} onChange={v => set({ ended_on: v })} /></F>}
       </div>
+      {!isNew && m0.status === 'active' && m0.plant_tag && x.room_id !== m0.room_id && x.room_id != null && <p className="small-note warn-t">{t('Saving moves this lot in METRC too (change of location), unless both places are the same METRC location.')}</p>}
       <F label={t('METRC plant tag')}><div className="row"><TagInput value={x.plant_tag ?? ''} onChange={v => set({ plant_tag: v || null })} where={{ site: x.site ?? site, type: 'plant' }} keep={m0.plant_tag ?? null} disabled={busy} />
         <button type="button" className="ghost small" onClick={fillTag} disabled={busy}>{t('Next tag')}</button></div></F>
       <F label={t('Notes')}><TextIn value={x.notes} onChange={v => set({ notes: v })} /></F>
