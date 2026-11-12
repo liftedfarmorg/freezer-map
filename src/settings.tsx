@@ -233,12 +233,20 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
     const safe = <T,>(p: PromiseLike<{ data: T[] | null }>) => Promise.resolve(p).then(r => r.data ?? [], () => [] as T[])
     Promise.all([
       safe<{ strain: string }>(sb.from('nursery_mothers').select('strain').eq('status', 'active')),
-      safe<{ strain: string }>(sb.from('cult_plantings').select('strain').gte('crop_year', y)),
+      safe<{ id: number; strain: string; site: string; field_id: number | null; planted_on: string | null }>(sb.from('cult_plantings').select('id,strain,site,field_id,planted_on').gte('crop_year', y)),
       safe<{ strain: string }>(sb.from('nursery_batches').select('strain').eq('use', 'trials').neq('stage', 'cancelled')),
       safe<{ item: string | null }>(sb.from('metrc_packages').select('item').eq('state', 'active').ilike('item', '%seed%')),
       safe<{ code: string | null; mother_strain: string | null; father_strain: string | null; seeds: number | null }>(sb.from('seed_lots').select('code,mother_strain,father_strain,seeds')),
       safe<{ keeper_strain: string | null }>(sb.from('phenos').select('keeper_strain').eq('status', 'keeper')),
-    ]).then(([m, p, tr, sp, sl, kp]) => {
+      safe<{ strain: string; site: string; field_id: number | null; planting_id: number | null; harvested_on: string | null; status: string | null }>(sb.from('cult_harvests').select('strain,site,field_id,planting_id,harvested_on,status').gte('crop_year', y)),
+    ]).then(([m, p0, tr, sp, sl, kp, hv]) => {
+      // STRAIN-INV-2: in the field = planted and not harvested yet (a finished harvest on a block covers that strain's plantings there)
+      const done = new Set<number>()
+      for (const h of hv.filter(h => h.status === 'done' || !!h.harvested_on)) {
+        if (h.planting_id != null) done.add(h.planting_id)
+        for (const q of p0) if (lc(q.strain) === lc(h.strain) && q.site === h.site && q.field_id === h.field_id && (!q.planted_on || !h.harvested_on || q.planted_on <= h.harvested_on)) done.add(q.id)
+      }
+      const p = p0.filter(q => !done.has(q.id))
       const seed = new Set<string>()
       for (const r of sp) { const parts = (r.item ?? '').split(' - ').map(x => x.trim()); const nm = parts.length >= 3 ? parts.slice(1, -1).join(' - ') : parts[0]; if (nm) seed.add(lc(nm.replace(/\s*seeds?$/i, ''))) }
       for (const r of sl) if ((r.seeds ?? 0) > 0) { if (r.mother_strain && r.father_strain) seed.add(lc(`${r.mother_strain} x ${r.father_strain}`)); if (r.code) seed.add(lc(r.code)) }
