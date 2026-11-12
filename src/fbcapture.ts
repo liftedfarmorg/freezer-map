@@ -84,33 +84,56 @@ export function deviceInfo() {
   }
 }
 
+// Only the Latin part of the app's web font (Outfit), fetched once: embedding every Google Fonts subset made the capture slow.
+let fontCss: Promise<string> | null = null
+function latinFontCss(): Promise<string> {
+  if (!fontCss) fontCss = (async () => {
+    const href = [...document.querySelectorAll<HTMLLinkElement>('link[rel=stylesheet]')].map(l => l.href).find(h => h.includes('fonts.googleapis.com'))
+    if (!href) return ''
+    const css = await fetch(href).then(r => r.text())
+    return (css.match(/@font-face\s*{[^}]*}/g) ?? []).filter(b => !/unicode-range/.test(b) || /U\+0000-00FF/i.test(b)).join('\n')
+  })().catch(() => '')
+  return fontCss
+}
+
 /** a picture of what's on screen right now (the app page; the phone's own bars aren't part of it). null if it can't. */
 export async function captureScreen(): Promise<Blob | null> {
   const shell = document.querySelector<HTMLElement>('.app.shell') ?? document.body
-  const top = shell.scrollTop
   const w = window.innerWidth, h = window.innerHeight
+  const top = shell.scrollTop
+  // which children scroll with the page (everything but the fixed/sticky bars); those get shifted up by the scroll
+  const kids = ([...shell.children] as HTMLElement[]).filter(el => { const p = getComputedStyle(el).position; return p === 'static' || p === 'relative' })
+  kids.forEach(el => el.setAttribute('data-fbm', ''))
   try {
-    const { domToBlob } = await import('modern-screenshot')
-    const kids = [...shell.children] as HTMLElement[]
-    // which children scroll with the page (everything but the fixed/sticky bars)
-    const moves = kids.map(el => { const p = getComputedStyle(el).position; return p === 'static' || p === 'relative' })
+    const [{ domToBlob }, css] = await Promise.all([import('modern-screenshot'), Promise.race([latinFontCss(), new Promise<string>(r => setTimeout(() => r(''), 1500))])])
     const blob = await Promise.race([
       domToBlob(shell, {
-        width: w, height: h, scale: w < 760 ? 2 : 1, type: 'image/jpeg', quality: 0.85,
+        width: w, height: h, scale: w < 760 ? 2 : 1, type: 'image/jpeg', quality: 0.8,
         backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
-        timeout: 4000,
+        timeout: 3000,
+        font: css ? { cssText: css } : false,
+        features: { copyScrollbar: false },
         filter: n => !(n instanceof HTMLElement && (n.classList.contains('fb-nocap') || n.tagName === 'VIDEO')),
         onCloneNode: cloned => {
           const c = cloned as HTMLElement
           c.style.height = `${h}px`; c.style.overflow = 'hidden'
-          if (top > 0) [...c.children].forEach((el, i) => { if (moves[i]) (el as HTMLElement).style.transform = `translateY(${-top}px)` })
+          if (top > 0) ([...c.children] as HTMLElement[]).forEach(el => { if (el.hasAttribute('data-fbm')) el.style.transform = `translateY(${-top}px)` })
         },
       }),
-      new Promise<null>(res => setTimeout(() => res(null), 8000)),
+      new Promise<null>(res => setTimeout(() => res(null), 10000)),
     ])
     return blob
   } catch (e) {
     console.warn('Screen capture failed', e)
     return null
+  } finally {
+    kids.forEach(el => el.removeAttribute('data-fbm'))
   }
+}
+
+/** start loading the capture code and font early (called once the app is up), so the first report is quick */
+export function warmCapture() {
+  const go = () => { import('modern-screenshot').catch(() => {}); latinFontCss() }
+  const ric = (window as unknown as { requestIdleCallback?: (f: () => void) => void }).requestIdleCallback
+  if (ric) ric(go); else setTimeout(go, 3000)
 }

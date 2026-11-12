@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { t } from './i18n'
 import { appVersion, deviceInfo, openRecord, recentErrors, savedState } from './fbcapture'
@@ -19,14 +19,26 @@ export const FbIcon = () => BUG_ICON
 let picSeq = 0
 const extOf = (b: Blob) => (b.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '') || 'png'
 
-export function FbReport({ sb, shot, where, onClose, flash }: {
-  sb: SupabaseClient | null; shot: Blob | null; where: FbWhere; onClose: () => void; flash: (t: string, bad?: boolean) => void
+export function FbReport({ sb, shot, where, onClose, flash, onMine }: {
+  sb: SupabaseClient | null; shot: Promise<Blob | null>; where: FbWhere; onClose: () => void; flash: (t: string, bad?: boolean) => void; onMine?: () => void
 }) {
   const [type, setType] = useState<FbType>('bug')
   const [trying, setTrying] = useState('')
   const [details, setDetails] = useState('')
   const [sev, setSev] = useState<FbSeverity | null>(null)
-  const [pics, setPics] = useState<Pic[]>(() => shot ? [{ id: ++picSeq, blob: shot, url: URL.createObjectURL(shot), kind: 'screen' }] : [])
+  const [pics, setPics] = useState<Pic[]>([])
+  const [shooting, setShooting] = useState(true)   // the screen picture is still being made (the sheet opens right away)
+  const [noShot, setNoShot] = useState(false)
+  useEffect(() => {
+    let live = true
+    shot.then(b => {
+      if (!live) return
+      setShooting(false)
+      if (b) setPics(ps => ps.some(p => p.kind === 'screen') ? ps : [{ id: ++picSeq, blob: b, url: URL.createObjectURL(b), kind: 'screen' as const }, ...ps].slice(0, 6))
+      else setNoShot(true)
+    })
+    return () => { live = false }
+  }, [shot])
   const [busy, setBusy] = useState(false)
   const [big, setBig] = useState<Pic | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -90,7 +102,7 @@ export function FbReport({ sb, shot, where, onClose, flash }: {
   return (
     <div className="scrim fb-nocap" onClick={() => !busy && onClose()}>
       <div className="sheet form fbsheet" onClick={e => e.stopPropagation()} onPaste={onPaste}>
-        <div className="sheet-h"><div><h2>{t('Feedback & Bugs')}</h2><div className="muted small">{t('Goes to Aziz. You can see what happens to it later.')}</div></div>
+        <div className="sheet-h"><div><h2>{t('Feedback & Bugs')}</h2><div className="muted small">{t('Goes to Aziz.')} {onMine && <a href="#" onClick={e => { e.preventDefault(); onMine() }}>{t('My reports')} ›</a>}</div></div>
           <button className="ghost" aria-label={t('Close')} onClick={onClose} disabled={busy}>✕</button></div>
 
         <div className="seg fbtype" role="radiogroup" aria-label={t('Type')}>
@@ -119,18 +131,19 @@ export function FbReport({ sb, shot, where, onClose, flash }: {
               <span className="fbpic-k">{p.kind === 'screen' ? t('Screen') : p.kind === 'paste' ? t('Pasted') : t('Photo')}</span>
               <button className="fbpic-x" aria-label={t('Remove')} onClick={() => remove(p.id)}>✕</button>
             </div>)}
+            {shooting && <div className="fbpic fbpic-wait"><span className="muted small">{t('Picturing the screen…')}</span></div>}
             {pics.length < 6 && <>
               <button type="button" className="fbadd" onClick={pasteBtn}>{t('Paste')}</button>
               <button type="button" className="fbadd" onClick={() => fileRef.current?.click()}>{t('Add photo')}</button>
             </>}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={e => { add([...(e.target.files ?? [])], 'photo'); e.target.value = '' }} />
           </div>
-          {!shot && <div className="muted small">{t("Couldn't picture the screen this time. Paste a screenshot or add a photo if it helps.")}</div>}
+          {noShot && <div className="muted small">{t("Couldn't picture the screen this time. Paste a screenshot or add a photo if it helps.")}</div>}
         </div>
 
         <div className="row end">
           <button className="ghost" onClick={onClose} disabled={busy}>{t('Cancel')}</button>
-          <button className="primary" disabled={busy || !details.trim()} onClick={send}>{busy ? t('Sending…') : t('Send')}</button>
+          <button className="primary" disabled={busy || shooting || !details.trim()} onClick={send}>{busy ? t('Sending…') : shooting ? t('One moment…') : t('Send')}</button>
         </div>
       </div>
       {big && <div className="fbbig" onClick={e => { e.stopPropagation(); setBig(null) }}><img src={big.url} alt="" /></div>}

@@ -63,7 +63,8 @@ import { InboundView } from './inbound'
 import { ReturnsView } from './returns'
 import { FeedbackView } from './feedback'
 import { FbIcon, FbReport } from './fbreport'
-import { captureScreen } from './fbcapture'
+import { FbInbox, MyReports } from './fbinbox'
+import { captureScreen, warmCapture } from './fbcapture'
 import { ReportedYieldsPage } from './reportedYields'
 import { ItemsView } from './items'
 import { StaffOpenMenu } from './openmenu'
@@ -98,7 +99,7 @@ const MOD_LABEL: Record<Mod, string> = { dist: 'Distribution', sales: 'Sales', c
 const ML = (m: Mod) => t(MOD_LABEL[m])
 const MOD_WHAT: Record<Mod, string> = { dist: 'Freezer map · transit · review', sales: 'Reserves · menu · orders', cult: 'Harvests · fields · plan', nurs: 'Mothers · cuttings · deliveries', proc: 'Drying · bucking · trimming', acct: 'Invoices to QuickBooks · payments', comp: 'METRC · CCOF · documents · deadlines', admin: 'Company · users · app settings' }
 type SalesTab = 'dash' | 'inventory' | SalesMode | 'invoices' | 'returns' | 'shipping' | 'feedback' | 'yields' | 'review' | 'activity' | 'settings' | 'customers'
-type AdminTab = 'dash' | 'customers' | 'review' | 'activity' | 'settings'
+type AdminTab = 'dash' | 'feedback' | 'customers' | 'review' | 'activity' | 'settings'
 /** s: short plain label for the phone bar; n: count badge (warn = amber) */
 interface NavItem { k: string; l: ReactNode; s?: string; n?: number; warn?: boolean; on: boolean; go: () => void }
 const MOD_SHORT: Record<Mod, string> = { dist: 'Dist', sales: 'Sales', cult: 'Cult', nurs: 'Nursery', proc: 'Proc', acct: 'Acct', comp: 'Comp', admin: 'Admin' }
@@ -405,6 +406,8 @@ interface Placing { title: string; sub: string; run: (slot: Slot) => Promise<voi
 
 // opened from a request email: go straight to Sales > Requests or Orders
 const GO = new URLSearchParams(location.search).get('go')
+// FB-8: a Feedback & Bugs push opens ?fb=<id>: the report in Admin > Feedback & Bugs (or My reports for people without Admin)
+const FB_OPEN = (() => { const v = Number(new URLSearchParams(location.search).get('fb')); return Number.isInteger(v) && v > 0 ? v : null })()
 const GO_TAB: 'requests' | 'orders' | null = GO === 'requests' || GO === 'orders' ? GO : null
 // back from connecting QuickBooks (api/qbo/callback): Accounting > Settings
 const GO_ACCT = GO === 'accounting'
@@ -417,7 +420,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [site, setSite] = useState<Site>(() => readSaved<Site>('app.site', 'OHR'))
-  useEffect(() => { if (GO) history.replaceState(null, '', location.pathname) }, [])
+  useEffect(() => { if (GO || FB_OPEN) history.replaceState(null, '', location.pathname) }, [])
   const storedMod = stored('fm.mod') as Mod | null
   const [view, setView] = useState<View>(GO_ACCT ? 'acct' : GO_TAB ? 'sales' : readSaved<View | null>('app.view', null) ?? (storedMod === 'cult' ? 'cult' : storedMod === 'nurs' ? 'nursery' : storedMod === 'acct' ? 'acct' : storedMod === 'proc' ? 'proc' : storedMod === 'comp' ? 'comp' : storedMod === 'sales' ? 'sales' : storedMod === 'admin' ? 'admin' : 'dash'))
   const [mod, setModS] = useState<Mod>(GO_ACCT ? 'acct' : GO_TAB ? 'sales' : storedMod && storedMod in MOD_KEY ? storedMod : 'dist')
@@ -432,8 +435,11 @@ export default function App() {
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
   const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)
-  const [fb, setFb] = useState<{ shot: Blob | null } | null>(null)   // FB-7: Feedback & Bugs sheet (with the screen picture)
+  const [fb, setFb] = useState<{ shot: Promise<Blob | null> } | null>(null)   // FB-7: Feedback & Bugs sheet (with the screen picture)
   const [fbBusy, setFbBusy] = useState(false)
+  const [fbOpenId, setFbOpenId] = useState<number | null>(null)   // FB-8: report to open in Admin > Feedback & Bugs
+  const [myFb, setMyFb] = useState<{ open: number | null } | null>(null)   // FB-8: My reports sheet
+  const [fbNew, setFbNew] = useState(0)   // FB-8: New reports (Admin nav badge)
   const [more, setMore] = useState<false | 'mods' | 'more'>(false)   // 281 (phone): the top pill opens modules, the bottom More opens this module's other screens
   // Scan (bottom bar in Distribution and Processing): camera open, a tag nobody has, an older pallet found by its tag
   const [scanning, setScanning] = useState(false)
@@ -491,12 +497,12 @@ export default function App() {
   const reload = useCallback(async () => { const s = await backend.load(); setStrainColors(s); setSnap(s) }, [])
   const flash = (text: string, bad = false) => { setToast({ text, bad }); setTimeout(() => setToast(null), bad ? 5000 : 2500) }
   // FB-7: close any menu, let the screen settle, picture it, then open the report sheet
+  // FB-8: the sheet opens right away; the screen picture is made in the background (the sheet itself is left out of it)
   const startReport = async () => {
     if (fbBusy || fb) return
     setAcctMenu(false); setMore(false); setModMenu(false); setFbBusy(true)
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))))
-    const shot = await captureScreen()
-    setFbBusy(false); setFb({ shot })
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))   // menus closed before the picture
+    setFb({ shot: captureScreen() }); setFbBusy(false)
   }
 
   useEffect(() => { backend.getUser().then(setUser) }, [])
@@ -531,8 +537,18 @@ export default function App() {
     const p = me.access?.prefs ?? {}
     if (p.theme) applyTheme(p.theme)
     if (p.start_site) setSite(p.start_site)
-    if (!GO_TAB && !GO_ACCT && p.start_module && lv[p.start_module]) goMod(KEY_MOD[p.start_module])
+    if (!GO_TAB && !GO_ACCT && !FB_OPEN && p.start_module && lv[p.start_module]) goMod(KEY_MOD[p.start_module])
   }, [me?.email])
+  useEffect(() => { if (me && staff) warmCapture() }, [me?.email])   // FB-8: first report opens quickly
+  // FB-8: opened from a Feedback & Bugs push
+  useEffect(() => {
+    if (!me || !staff || !FB_OPEN) return
+    if (lv.admin) { setModS('admin'); store('fm.mod', 'admin'); setAdminTab('feedback'); setFbOpenId(FB_OPEN) }
+    else setMyFb({ open: FB_OPEN })
+  }, [me?.email])
+  // FB-8: New reports badge on Admin > Feedback & Bugs
+  const loadFbCount = () => { const c = backend.client(); if (c && lv.admin) c.from('feedback').select('id', { count: 'exact', head: true }).eq('status', 'new').then(r => { if (!r.error) setFbNew(r.count ?? 0) }) }
+  useEffect(() => { loadFbCount() }, [me?.email, mod])   // eslint-disable-line react-hooks/exhaustive-deps
   // the module we're in isn't on for this person: go to one that is
   useEffect(() => { if (staff && cur !== mod && myMods.length) goMod(cur) }, [cur, mod, staff, myMods.length])
   // Fulfillment: open orders and the pallets held for them (Distribution and Sales)
@@ -697,7 +713,8 @@ export default function App() {
   if (me && staff && noMods && me.access?.driver && backend.client()) return <>{viewBar}<DriverHome sb={backend.client()!} name={me.display_name ?? me.email} nf={(me.access?.prefs?.notify ?? {}) as Record<string, boolean>}
     onLang={l => { backend.setMyPrefs({ ...(me.access?.prefs ?? {}), lang: l }).then(p => setMe(m => m && ({ ...m, access: { ...m.access, prefs: p } }))).catch(() => {}) }}
     signOut={() => backend.signOut().then(() => setUser(null))} onReport={startReport} reportBusy={fbBusy} />
-    {fb && <FbReport sb={backend.client()} shot={fb.shot} where={{ module: 'driver', moduleLabel: t('Driver'), screen: t('My loads'), viewingAs: me.viewing_as ? me.email : null }} onClose={() => setFb(null)} flash={flash} />}
+    {fb && <FbReport sb={backend.client()} shot={fb.shot} where={{ module: 'driver', moduleLabel: t('Driver'), screen: t('My loads'), viewingAs: me.viewing_as ? me.email : null }} onClose={() => setFb(null)} flash={flash} onMine={() => { setFb(null); setMyFb({ open: null }) }} />}
+    {myFb && <MyReports sb={backend.client()} me={me.email} flash={flash} openId={myFb.open} onClose={() => setMyFb(null)} />}
     {toast && <div className={`toast ${toast.bad ? 'bad' : ''}`}>{toast.text}</div>}</>
   if (me && !staff) return <>{viewBar}<NoAccess me={me} signOut={() => backend.signOut().then(() => setUser(null))} /></>
   if (loadError && !snap) return (
@@ -931,8 +948,8 @@ export default function App() {
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
   const cultMain = [...CULT_TABS.map(x => cItem(x.t, t(x.l))), itemsNav]
   const cultTail = CULT_TAIL.filter(x => x.t !== 'setup' || isAdminOf('cult')).map(x => cItem(x.t, t(x.l)))
-  const aItem = (t: AdminTab, l: string): NavItem => ({ k: t, l, on: view === 'admin' && adminTab === t, go: () => setAdminTab(t) })
-  const adminMain = [aItem('dash', 'Dashboard'), aItem('customers', 'Customers')], adminTail = [aItem('review', 'Review'), aItem('activity', 'Activity'), aItem('settings', 'Settings')]
+  const aItem = (t: AdminTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'admin' && adminTab === t, go: () => setAdminTab(t) })
+  const adminMain = [aItem('dash', 'Dashboard'), aItem('feedback', <>{t('Feedback & Bugs')}{badge(fbNew, true)}</>, { s: t('Feedback'), n: fbNew, warn: true }), aItem('customers', 'Customers')], adminTail = [aItem('review', 'Review'), aItem('activity', 'Activity'), aItem('settings', 'Settings')]
   const nItem = (t: NTab, l: string): NavItem => ({ k: t, l, on: view === 'nursery' && nurTab === t, go: () => setNurTab(t) })
   const nurMain = [...NURSERY_TABS.map(x => nItem(x.t, t(x.l))), itemsNav]
   const nurTail = NURSERY_TAIL.filter(x => x.t !== 'settings' || isAdminOf('nurs')).map(x => nItem(x.t, t(x.l)))
@@ -1116,6 +1133,7 @@ export default function App() {
               <div className="phacct-who"><b>{me?.display_name || who(user)}</b><small>{user}</small></div>
               <button role="menuitem" onClick={() => { setAcctMenu(false); view === 'mine' ? go(lastView.current) : go('mine') }}>{t('My settings')}</button>
               <button role="menuitem" onClick={startReport}>{t('Feedback & Bugs')}</button>
+              <button role="menuitem" onClick={() => { setAcctMenu(false); setMyFb({ open: null }) }}>{t('My reports')}</button>
               <button role="menuitem" onClick={() => { setAcctMenu(false); backend.signOut().then(() => setUser(null)) }}>{t('Sign out')}</button>
             </div>
           </>}
@@ -1258,6 +1276,7 @@ export default function App() {
           isAdmin={isAdminOf('comp')} canEdit={lv.compliance === 'user' || lv.compliance === 'admin'} me={me?.email ?? null} /></Suspense>}
         {view === 'admin' && cur === 'admin' && adminTab === 'dash' && <AdminDashboard backend={backend} open={jump} />}
         {view === 'admin' && cur === 'admin' && adminTab === 'review' && <AdminReview backend={backend} open={jump} />}
+        {view === 'admin' && cur === 'admin' && adminTab === 'feedback' && <FbInbox sb={backend.client()} me={me?.email ?? null} flash={flash} openId={fbOpenId} onOpened={() => setFbOpenId(null)} onCount={loadFbCount} />}
         {view === 'admin' && cur === 'admin' && adminTab === 'activity' && <ActivityView ix={ix} module="all" />}
         {view === 'admin' && cur === 'admin' && adminTab === 'customers' && customersHome('admin-cust')}
         {view === 'admin' && cur === 'admin' && adminTab === 'settings' && <div className="allset">
@@ -1336,7 +1355,8 @@ export default function App() {
       </>}
 
       {scanning && <Scanner typed onClose={() => setScanning(false)} onScan={handleScan} />}
-      {fb && <FbReport sb={backend.client()} shot={fb.shot} onClose={() => setFb(null)} flash={flash}
+      {myFb && me && <MyReports sb={backend.client()} me={me.email} flash={flash} openId={myFb.open} onClose={() => setMyFb(null)} />}
+      {fb && <FbReport sb={backend.client()} shot={fb.shot} onClose={() => setFb(null)} flash={flash} onMine={() => { setFb(null); setMyFb({ open: null }) }}
         where={{ module: noMods ? null : inDrv ? 'driver' : MOD_KEY[cur], moduleLabel: noMods ? '' : inDrv ? t('Driver') : ML(cur),
           screen: view === 'mine' ? t('My settings') : view === 'fleet' ? t('Vehicles') : inDrv ? (drvTab === 'loads' ? t('My loads') : t('Trucks and inspections')) : pageTitle,
           viewingAs: me?.viewing_as ? me.email : null, site: cur === 'dist' ? site : null }} />}
