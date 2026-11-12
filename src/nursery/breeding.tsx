@@ -24,6 +24,20 @@ function rememberPheno(hunt: number, pheno: number | null) {
   try { if (pheno == null) sessionStorage.removeItem(LAST_PHENO); else sessionStorage.setItem(LAST_PHENO, JSON.stringify({ hunt, pheno, at: Date.now() })) } catch { /* private window */ }
 }
 
+// PHENO-SCORE-2: state that survives a refresh in this browser tab (sessionStorage), e.g. which hunt is open and its filters
+function useSaved<T>(key: string, init: T | (() => T)): [T, (v: T | ((o: T) => T)) => void] {
+  const [v, setV] = useState<T>(() => {
+    try { const raw = sessionStorage.getItem(key); if (raw != null) return JSON.parse(raw) as T } catch { /* private window */ }
+    return typeof init === 'function' ? (init as () => T)() : init
+  })
+  const set = useCallback((n: T | ((o: T) => T)) => setV(o => {
+    const next = typeof n === 'function' ? (n as (o: T) => T)(o) : n
+    try { sessionStorage.setItem(key, JSON.stringify(next)) } catch { /* private window */ }
+    return next
+  }), [key])
+  return [v, set]
+}
+
 // Breeding: pollination runs (one donor x many receivers per trailer), seed lots, pheno hunts with group scoring, keepers.
 interface Run {
   id: number; site: string; season: number; name: string; project: string | null; room_id: number | null; donor_strain: string | null; donor_mother_id: number | null; donor_room_id: number | null; donor_batch_id: number | null
@@ -67,13 +81,13 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
   refresh?: () => Promise<void>
   /** 281: a scanned plant tag: open its pheno (flowering plant) or its pollination run (flowering planting) */
   openTag?: { pheno?: number; hunt?: number; run?: number; n: number } | null }) {
-  const [tab, setTab] = useState<'runs' | 'seeds' | 'hunts'>(() => (lastPheno() ? 'hunts' : 'runs'))
+  const [tab, setTab] = useSaved<'runs' | 'seeds' | 'hunts'>('nur.b.tab', () => (lastPheno() ? 'hunts' : 'runs'))
   const [b, setB] = useState<BData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [run, setRun] = useState<Partial<Run> | null>(null)
   const [lot, setLot] = useState<Partial<SeedLot> | null>(null)
   const [hunt, setHunt] = useState<Partial<Hunt> | null>(null)
-  const [huntView, setHuntView] = useState<number | null>(() => lastPheno()?.hunt ?? null)
+  const [huntView, setHuntView] = useSaved<number | null>('nur.b.hunt', () => lastPheno()?.hunt ?? null)
   const [donor, setDonor] = useState<Partial<DonorBatch> | null>(null)
   useBack(huntView != null, () => setHuntView(null))
   const load = useCallback(async () => {
@@ -464,15 +478,17 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   useEffect(() => { rememberPheno(h.id, open?.id ?? null) }, [h.id, open?.id])
   // after a save the card stays open: point it at the reloaded pheno
   useEffect(() => { setOpen(o => (o ? b.phenos.find(z => z.id === o.id) ?? o : o)) }, [b.phenos])
-  const [f, setF] = useState<'all' | 'growing' | 'keeper' | 'maybe' | 'culled' | 'suggested'>('growing')
+  // PHENO-SCORE-2: this hunt's filters survive a refresh
+  const k = `nur.h.${h.id}.`
+  const [f, setF] = useSaved<'all' | 'growing' | 'keeper' | 'maybe' | 'culled' | 'suggested'>(k + 'f', 'growing')
   // PHENO-PIC-5: Suggested keepers = scored, still in the hunt, group average at or above this, best first
-  const [minAvg, setMinAvg] = useState<number>(4)
-  const [withPics, setWithPics] = useState(false)
-  const [lotF, setLotF] = useState<number | null>(null)
-  const [roomF, setRoomF] = useState<number | null>(null)
-  const [q, setQ] = useState('')
+  const [minAvg, setMinAvg] = useSaved<number>(k + 'min', 4)
+  const [withPics, setWithPics] = useSaved(k + 'pics', false)
+  const [lotF, setLotF] = useSaved<number | null>(k + 'lot', null)
+  const [roomF, setRoomF] = useSaved<number | null>(k + 'room', null)
+  const [q, setQ] = useSaved(k + 'q', '')
   const [shown, setShown] = useState(SHOW)
-  const [who_, setWho] = useState<string | null>(null)
+  const [who_, setWho] = useSaved<string | null>(k + 'who', null)
   // PHENO-PIC-4: pheno order while scoring (default), or best score first; remembered on this device
   const [rank, setRankS] = useState<'pheno' | 'score'>(() => { try { return localStorage.getItem('nur.phenoSort') === 'score' ? 'score' : 'pheno' } catch { return 'pheno' } })
   const setRank = (v: 'pheno' | 'score') => { setRankS(v); try { localStorage.setItem('nur.phenoSort', v) } catch { /* private */ } }
@@ -601,7 +617,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState<string | null>(p.cull_reason ?? null)
   // PHENO-SCORE-1: card split into tabs; grower notes are one short form per person (stage 'grower')
-  const [tab, setTab] = useState<'score' | 'notes' | 'plant'>('score')
+  const [tab, setTab] = useSaved<'score' | 'notes' | 'plant'>('nur.pcard.tab', 'score')
   const obsAll = b.obs.filter(z => z.pheno_id === p.id)
   const obsMine = obsAll.filter(z => z.observer === me)
   const gMine = obsMine.find(z => z.stage === 'grower')
@@ -652,6 +668,8 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
         <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{t(l)}{k === 'notes' && gMine ? ' ✓' : k === 'score' && mine ? ' ✓' : ''}</button>)}</div>
       {tab === 'score' && <>
         {!out && <>
+          <div className="scoregrid pscore-tiles">{TRAITS.map(([k, l]) => <Fragment key={k}><span>{t(l)}{TRAIT_HINT[k] ? <span className="muted small"> {t(TRAIT_HINT[k]!)}</span> : ''}</span>
+            <div className="choices">{[1, 2, 3, 4, 5].map(v => <button key={v} type="button" className={sc[k] === v ? 'on' : ''} onClick={() => setSc(s => ({ ...s, [k]: s[k] === v ? null : v }))}>{v}</button>)}</div></Fragment>)}</div>
           <div className="pscore">{TRAITS.map(([k, l]) => <label key={k} className={`pscore-row ${sc[k] ? 'set' : ''}`}>
             <span>{t(l)}{TRAIT_HINT[k] ? <span className="muted small"> {t(TRAIT_HINT[k]!)}</span> : ''}</span>
             <select value={sc[k] ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSc(s => ({ ...s, [k]: v })) }}>

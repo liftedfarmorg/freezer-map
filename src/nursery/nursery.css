@@ -132,3 +132,7 @@
 .pscore-row.set { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 7%, var(--panel)); }
 .pgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
 @media (max-width: 560px) { .pscore { grid-template-columns: 1fr; gap: 6px; } .pgrid2 { grid-template-columns: 1fr; } }
+/* PHENO-SCORE-2: 1-5 tiles on a computer, roller wheels on a phone */
+.pscore { display: none; }
+.pscore-tiles .muted.small { display: block; }
+@media (max-width: 760px) { .pscore { display: grid; } .pscore-tiles { display: none; } }
