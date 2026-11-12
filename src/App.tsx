@@ -501,8 +501,7 @@ export default function App() {
   const startReport = async () => {
     if (fbBusy || fb) return
     setAcctMenu(false); setMore(false); setModMenu(false); setFbBusy(true)
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))   // menus closed before the picture
-    setFb({ shot: captureScreen() }); setFbBusy(false)
+    setFb({ shot: new Promise<Blob | null>(r => setTimeout(r, 40)).then(() => captureScreen()) }); setFbBusy(false)   // menus close before the picture
   }
 
   useEffect(() => { backend.getUser().then(setUser) }, [])

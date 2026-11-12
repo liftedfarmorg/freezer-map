@@ -1315,3 +1315,6 @@ a.btnlink { display: inline-flex; align-items: center; text-decoration: none; co
 }
 .fbpic-wait { display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px; animation: fbpulse 1.2s ease-in-out infinite; }
 @keyframes fbpulse { 50% { opacity: .55; } }
+.fbinbox .seg.setf { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.fbinbox .seg.setf::-webkit-scrollbar { display: none; }
+.fbinbox .seg.setf > button { flex: none; white-space: nowrap; }
