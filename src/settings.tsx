@@ -1,8 +1,10 @@
 import { Select } from './combo'
 import { Fold } from './fold'
 import { DEFAULT_CATEGORIES, DEFAULT_NURSERIES, MultiPick, NURSERIES_KEY, PRODUCT_CATEGORIES_KEY, useCatList } from './catlists'
-import { StrainProfileEdit, eff, loadProfiles, mmdd, yieldRange } from './strains'
+import { OnStrainTab, StrainProfileEdit, StrainTab, eff, loadProfiles, mmdd, yieldRange } from './strains'
+import { StrainWhere } from './strainWhere'
 import type { StrainProfile } from './strains'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { readSheet } from 'read-excel-file/browser'
@@ -417,13 +419,13 @@ export function SettingsView({ backend, inventoryStrains, onChanged, flash, list
         </Fold>
       ))}
 
-      {edit && <EditForm key={`${tab}-${edit.id ?? 'new'}`} readOnly={readOnly} list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
+      {edit && <EditForm key={`${tab}-${edit.id ?? 'new'}`} sb={sb} readOnly={readOnly} list={tab} row={edit} busy={busy} onClose={() => setEdit(null)} onSave={save} terms={terms} carriers={carriers} cats={cats} nurseries={nurseries}
         tabExtra={tab === 'customers' && edit.id != null && (edit as Customer).kind !== 'internal' ? {
           contract: canTerms && !readOnly ? <TermsByYear backend={backend} c={edit as Customer} /> : null,
           logins: readOnly ? null : <CustomerLogins backend={backend} customerId={edit.id} customerName={String(edit.name ?? '')} flash={flash} /> } : undefined}
         extra={tab === 'customers' ? null
           : tab === 'strains' && edit.id != null ? <>
-              {sb && <div className="row" style={{ margin: '6px 0 10px' }}><button className="ghost small" onClick={() => { const id = edit.id!; setEdit(null); setMetrcFor({ id, isNew: false }) }}>METRC: strain and items on every license</button></div>}
+              {sb && <OnStrainTab tab="details"><div className="row" style={{ margin: '6px 0 10px' }}><button className="ghost small" onClick={() => { const id = edit.id!; setEdit(null); setMetrcFor({ id, isNew: false }) }}>METRC: strain and items on every license</button></div></OnStrainTab>}
               {profiles.get(edit.id) && <StrainProfileEdit sb={backend.client()} p={profiles.get(edit.id)!} flash={flash} onSaved={loadProfilesNow} saveRef={profSave} />}
             </> : null} />}
       {metrcFor && sb && <StrainMetrcSheet sb={sb} strainId={metrcFor.id} isNew={metrcFor.isNew} flash={flash} onClose={() => { setMetrcFor(null); load() }} />}
@@ -568,7 +570,9 @@ const CUST_TAB: Record<string, string> = { billing_address: 'billing', billing_c
 const STRAIN_TYPES_5 = STRAIN_TYPES
 const TYPE_SHORT5 = TYPE_SHORT
 
-export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers, cats, nurseries, tabExtra, readOnly }: {
+export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carriers, cats, nurseries, tabExtra, readOnly, sb }: {
+  /** STRAIN-INV-1: for the strain card's Where it is tab */
+  sb?: SupabaseClient | null
   list: ListName; row: Partial<ListRow>; busy: boolean; onClose: () => void; onSave: (r: Partial<ListRow>) => void; extra?: React.ReactNode
   terms?: { code: string; label: string }[]; carriers?: { id: number; name: string; license_no: string | null }[]
   cats?: string[]; nurseries?: string[]; tabExtra?: { contract?: React.ReactNode; logins?: React.ReactNode }; readOnly?: boolean
@@ -584,6 +588,9 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
   const renamed = list === 'strains' && row.id != null && !!oldName && String(r.name ?? '').trim().toLowerCase() !== oldName.toLowerCase()
   const colorOk = !r.color || /^#[0-9a-f]{6}$/i.test(String(r.color))
   const [ctab, setCtab] = useState('overview')
+  // STRAIN-INV-1: an existing strain's card is tabs across the top (Details / Where it is / Nursery / Cultivation / Sales and extraction)
+  const strainTabs = list === 'strains' && row.id != null
+  const [stab, setStab] = useSaved<string>('strain.card.tab', 'details')
   const isCust = list === 'customers', ext = isCust && r.kind !== 'internal'
   function submit() {
     const out: Record<string, unknown> = { ...r, name: String(r.name ?? '').trim() }
@@ -664,6 +671,10 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
           {ctab === 'contract' && tabExtra?.contract}
           {ctab === 'logins' && tabExtra?.logins}
         </> : list === 'strains' ? <>
+          {strainTabs && <nav className="ftabs stabs">{([['details', 'Details'], ['where', 'Where it is'], ['nursery', 'Nursery'], ['cultivation', 'Cultivation'], ['sales', 'Sales and extraction']] as const).map(([k, l]) =>
+            <button key={k} className={stab === k ? 'on' : ''} onClick={() => setStab(k)}>{l}</button>)}</nav>}
+          {strainTabs && stab === 'where' && <StrainWhere sb={sb ?? null} name={String(row.name ?? '')} aliases={(row as Strain).aliases ?? []} />}
+          <div style={strainTabs && stab !== 'details' ? { display: 'none' } : undefined}>
           <div className="fgrid">{cols.filter(c => ['name', 'aliases'].includes(c.key)).map(fieldFor)}</div>
           <div className="field fsec">
             <label>Type <span className="muted">(one; shows on the menus in the app and the customer portal)</span></label>
@@ -676,10 +687,11 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
               <MultiPick options={nurseries ?? []} value={(r.nurseries as string[] | undefined) ?? []} onChange={v => set('nurseries', v)} /></div>
           </div>
           <div className="fgrid">{cols.filter(c => !['name', 'aliases'].includes(c.key)).map(fieldFor)}</div>
+          </div>
         </> : cols.map(fieldFor)}
         {!colorOk && <div className="warn-t">Color must look like #A1B2C3</div>}
         {!isCust && list !== 'strains' && carrier}
-        {extra}
+        {strainTabs ? <StrainTab.Provider value={stab}>{extra}</StrainTab.Provider> : extra}
         {locked && <p className="muted">{String(row.name)} is a Lifted site. You can edit its details but not rename or retire it.</p>}
         {readOnly ? <div className="row between fbar"><span className="muted">View only</span><button className="ghost" onClick={onClose}>Close</button></div> : <div className="row between fbar">
           {row.id && !locked

@@ -932,3 +932,20 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .lockbtn { flex: 0 0 auto; width: 44px; padding: 0; font-size: 18px; }
 .lockbtn.open { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .renamenote { margin: 6px 0 0; }
+/* STRAIN-INV-1: strain card tabs + Where it is */
+.stabs { position: sticky; top: -20px; z-index: 3; background: var(--panel, #fff); margin: -4px 0 12px; padding: 6px 0; overflow-x: auto; flex-wrap: nowrap; }
+.stabs button { white-space: nowrap; }
+.stabsec { margin: 4px 0 8px; }
+.swhere h3 { margin: 2px 0 8px; }
+.sw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.sw-chip { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; min-width: 120px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.sw-chip b { font-size: 20px; } .sw-chip span { font-size: 12px; color: var(--muted); }
+.sw-chip.inv { border-color: #bcd9cc; } .sw-chip.nur { border-color: #d9d0ea; } .sw-chip.fld { border-color: #ead9bd; }
+.sw-t td, .sw-t th { vertical-align: top; }
+.sw-sec td { background: color-mix(in srgb, var(--line) 35%, transparent); font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.sw-sub { color: var(--muted); font-size: 12px; font-weight: 400; }
+.sw-st { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 9px; white-space: nowrap; }
+.s-frz { background: #e3f0fb; color: #205a8a; } .s-dry { background: #f6ecdf; color: #7a4f17; } .s-mom { background: #efe8f8; color: #5b3f8c; }
+.s-root { background: #fbf1dc; color: #8a5a12; } .s-veg { background: #e6f4ea; color: #2b6a3f; } .s-hv { background: #eceeec; color: #4d524f; }
+.sw-foot { margin: 6px 2px 0; }
+@media (max-width: 700px) { .sw-t .hide-s { display: none; } .sw-chip { flex: 1 1 40%; min-width: 0; } }

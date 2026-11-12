@@ -1,5 +1,6 @@
 import { ListInput } from './combo'
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Fold, isAdminOf } from './fold'
 import { STRAIN_PHOTOS } from './strainPhotos'
@@ -101,6 +102,11 @@ function ReportedBox({ sb, p }: { sb: SupabaseClient | null; p: StrainProfile })
   </div>
 }
 
+/** STRAIN-INV-1: the strain card's tab (Details / Where / nursery / cultivation / sales); null = old fold layout */
+export const StrainTab = createContext<string | null>(null)
+/** show children only on one tab of the strain card (or always, outside the tabbed card) */
+export function OnStrainTab({ tab, children }: { tab: string; children: ReactNode }) { const cur = useContext(StrainTab); return cur == null || cur === tab ? <>{children}</> : null }
+
 export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: SupabaseClient | null; p: StrainProfile; flash: (t: string, bad?: boolean) => void; onSaved: () => void
   /** YLD-12: lets the strain sheet's main Save also save any changed profile fields (they used to be dropped) */
   saveRef?: { current: null | (() => Promise<boolean>) } }) {
@@ -139,11 +145,15 @@ export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: Supa
     return true
   }
   if (saveRef) saveRef.current = saveAll
+  const tab = useContext(StrainTab)
   useEffect(() => () => { if (saveRef) saveRef.current = null }, [])
+  // in the tabbed strain card only the open tab's group shows (this stays mounted, so the card's Save still saves every group)
+  const groups = tab == null ? GROUPS : GROUPS.filter(g => g.m === tab)
+  if (tab != null && !groups.length) return null
   return <div className="sprofile">
-    {GROUPS.map(g => {
+    {groups.map(g => {
       const can = isAdminOf(g.m), dirty = g.fields.some(f => (v[f.k] ?? '') !== String(p.set?.[f.k] ?? ''))
-      return <Fold key={g.m} id={`strain.${g.m}`} title={g.l} open={g.m === 'sales'} count={can ? '' : '· view only'}>
+      const body = <>
         {g.fields.map(f => {
           const a = f.auto?.(p.auto) ?? '', over = p.set?.[f.k] != null
           return <div key={f.k} className={`field sfield${f.half ? ' half' : ''}`}>
@@ -161,7 +171,9 @@ export function StrainProfileEdit({ sb, p, flash, onSaved, saveRef }: { sb: Supa
         {g.m === 'sales' && <ReportedBox sb={sb} p={p} />}
         {can ? <div className="row"><button className="primary small" disabled={busy || !dirty} onClick={() => save(g.l, g.fields)}>Save {g.l.toLowerCase()}</button></div>
           : <p className="muted small">Only a {g.l === 'Sales and extraction' ? 'Sales' : g.l} Admin can change these.</p>}
-      </Fold>
+      </>
+      return tab != null ? <div key={g.m} className="stabsec">{body}</div>
+        : <Fold key={g.m} id={`strain.${g.m}`} title={g.l} open={g.m === 'sales'} count={can ? '' : '· view only'}>{body}</Fold>
     })}
     {p.set?.updated_by && <p className="muted small">Last change {p.set.updated_by.split('@')[0]}{p.set.updated_at ? ` · ${new Date(p.set.updated_at).toLocaleDateString()}` : ''}</p>}
   </div>

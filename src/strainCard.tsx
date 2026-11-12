@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Backend } from './api'
 import type { ListRow } from './types'
 import { EditForm } from './settings'
-import { StrainProfileEdit, loadProfiles } from './strains'
+import { OnStrainTab, StrainProfileEdit, loadProfiles } from './strains'
 import type { StrainProfile } from './strains'
 import { isAnyAdmin } from './fold'
 import type { Strain } from './types'
@@ -48,7 +48,7 @@ export function StrainCardHost({ backend, strains, flash, onChanged }: { backend
   const p = profiles?.get(s.id)
   const profile = p ? <StrainProfileEdit key={s.id} sb={backend.client()} p={p} flash={flash} onSaved={reloadProfiles} /> : <p className="muted">{profiles ? '' : 'Loading…'}</p>
   if (isAnyAdmin()) return (
-    <EditForm key={s.id} list="strains" row={structuredClone(s) as Partial<ListRow>} busy={busy} onClose={close} extra={<>{s.code && <StrainCode code={s.code} flash={flash} />}{profile}<StrainItems sb={backend.client()} strainId={s.id} strainType={s.strain_type ?? null} flash={flash} canEdit onChanged={onChanged} /></>}
+    <EditForm key={s.id} sb={backend.client()} list="strains" row={structuredClone(s) as Partial<ListRow>} busy={busy} onClose={close} extra={<><OnStrainTab tab="details">{s.code && <StrainCode code={s.code} flash={flash} />}</OnStrainTab>{profile}<OnStrainTab tab="details"><StrainItems sb={backend.client()} strainId={s.id} strainType={s.strain_type ?? null} flash={flash} canEdit onChanged={onChanged} /></OnStrainTab></>}
       onSave={async row => {
         setBusy(true)
         try { await backend.saveRow('strains', row); onChanged(); flash('Saved'); close() }
