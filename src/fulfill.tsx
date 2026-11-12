@@ -217,7 +217,7 @@ function OrderPage({ o, back, backend, reload, flash, pallets, heldBy, onLoad, i
     held={heldInFreezers([o], pal, loc)} />
   return (
     <div className="list fulfill">
-      <button className="ghost small" onClick={back}>‹ Fulfillment</button>
+      <button className="backbtn2" onClick={back}>Fulfillment</button>
       <h2>{o.customer} <span className="muted">{o.so ?? `Order #${o.id}`}</span></h2>
       <div className="row wrap">
         <span className={`pill fs-${o.state}`}>{STATE_LABEL[o.state]}</span>

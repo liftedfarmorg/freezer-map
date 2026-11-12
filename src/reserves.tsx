@@ -205,7 +205,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
         const cReqs = reqs.filter(r => r.customer_id === c.id && r.status === 'pending')
         return (
           <div className="custfocus">
-            <button className="ghost backbtn" onClick={closeCust}>‹ All customers</button>
+            <button className="backbtn2" onClick={closeCust}>All customers</button>
             <div className="rescard">
               {/* RES-6: the customer's card closes it again (it looked like a fold you could tap shut) */}
               <button className="li setrow custhead" onClick={closeCust} aria-label={`Close ${c.name}`}>
@@ -228,7 +228,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
               <table className="restable wide"><thead><tr><th>Order</th><th>Date</th><th>Status</th><th className="num">Lbs</th></tr></thead>
                 <tbody>{cOrders.slice(0, 25).map(o => <tr key={o.id}><td>{o.so_number ?? `#${o.id}`}</td><td>{fmtDate(o.order_date)}</td>
                   <td><span className={`pill o-${o.status}`}>{STATUS_LABEL[o.status]}</span></td><td className="num">{n0(orderLbs(o))}</td></tr>)}</tbody></table>)}
-            <button className="ghost backbtn" onClick={closeCust}>‹ All customers</button>
+            <button className="backbtn2" onClick={closeCust}>All customers</button>
           </div>
         )
       })()}

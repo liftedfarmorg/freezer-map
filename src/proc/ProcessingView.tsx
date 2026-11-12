@@ -584,7 +584,7 @@ function RunSheet({ c, run, logDate, setLogDate, onClose }: { c: Ctx; run: Run; 
     try { await c.api.cancelRun(run.id); c.flash(`${run.code} cancelled`); await c.reload(); onClose() } catch (e) { c.flash(errText(e), true) } finally { setBusy(false) }
   }
   if (logDate && c.sb) return <Sheet wide side title={`${run.code} · ${KIND[run.kind]} · crew`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''}`} onClose={onClose}>
-    <button className="ghost small backrun" onClick={() => setLogDate(null)}>← Back to the run</button>
+    <button className="backbtn2 backrun" onClick={() => setLogDate(null)}>Back to the run</button>
     <RunDayLog sb={c.sb} run={run as RunLite} date0={logDate} flash={c.flash} canEdit={c.canEdit} onSaved={loadCrew} />
   </Sheet>
   return <Sheet wide side title={`${run.code} · ${KIND[run.kind]}`} sub={`${run.strain ?? ''} ${run.crop_year ?? ''} · started ${fmtD(run.started_on)}${run.finished_on ? ` · done ${fmtD(run.finished_on)}` : ''}${run.status === 'cancelled' ? ' · cancelled' : ''}`} onClose={onClose}>

@@ -1235,7 +1235,8 @@ export const ES: Record<string, string> = {
  "Save grower notes": "Guardar notas del cultivador",
  "First flower": "Primera flor",
  "Ideal harvest": "Cosecha ideal",
- "Cull only marks the pheno in the app. Destroying the plant in METRC is still done by hand.": "Descartar solo marca el feno en la app. Destruir la planta en METRC todavía se hace a mano."
+ "Cull only marks the pheno in the app. Destroying the plant in METRC is still done by hand.": "Descartar solo marca el feno en la app. Destruir la planta en METRC todavía se hace a mano.",
+ "Hunts": "Búsquedas"
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",

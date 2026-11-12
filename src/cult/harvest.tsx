@@ -170,7 +170,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   const rawLbs = sum(raw.map(w => w.lbs)) || sum(h.raw_bins)
   return (
     <div className="hlog">
-      <button className="ghost small hback" onClick={back}>‹ Harvest</button>
+      <button className="backbtn2 hback" onClick={back}>Harvest</button>
       <h2><StrainLink name={h.strain} /> {trial && <span className="kpill k-trial" title="Trial strain">Trial</span>} {(h.day_no ?? 1) > 1 && <span className="kpill s-planned">Day {h.day_no}</span>} <span className="muted">{h.site} {fieldName(c, h.field_id)}</span></h2>
       {h.planted_strain && h.planted_strain !== h.strain && <p className="muted small">Planted as {h.planted_strain} (renamed at harvest; the planting keeps its name)</p>}
       <div className="row wrap"><span className={`kpill k-${h.kind}`}>{KIND_LABEL[h.kind]}</span>

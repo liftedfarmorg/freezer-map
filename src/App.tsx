@@ -942,7 +942,7 @@ export default function App() {
   const closeSides = () => { setNewOrder(false); setPalletId(null) }
   // BACK-1: clicking the tab you're already on takes you back to its top level (like a back button). Filters stay; what's open
   // (a customer, hunt, load, order, freezer, run…) closes, and the screen reloads from its top.
-  const resetNav = () => { clearDrill(); setFreezerId(null); setFOpen(null); setPalletId(null); setNavKey(k => k + 1); top() }
+  const resetNav = () => { clearDrill(); setFreezerId(null); setFOpen(null); setPalletId(null); setLoadId(null); setDoc(null); setScanned(null); setNavKey(k => k + 1); top() }
   const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); if (x.on) resetNav(); else x.go() } })
   const orderMain = (items: NavItem[]): NavItem[] => {
     if (items.length < 3) return items
@@ -1760,7 +1760,7 @@ function FreezerView({ ix, L, plan, freezer, query, placing, selecting, sel, sib
   return (
     <div className={`freezer ${staging ? 'staging' : ''}`}>
       <div className="fz-head">
-        <button className="ghost" onClick={onBack}>‹ All</button>
+        <button className="backbtn2" onClick={onBack}>All</button>
         <div className="fz-title">
           <h2>{freezer.site} {staging ? 'Staging' : fName(freezer)}</h2>
           <div className="muted">{ps.length} pallet{ps.length === 1 ? '' : 's'} · {lbs(ps.reduce((a, p) => a + weightOf(ix, p), 0))}{staging ? ` · spots 1 to ${grid.length}` : ''}</div>

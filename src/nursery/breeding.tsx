@@ -547,7 +547,7 @@ function HuntView({ sb, d, c, b, h, me, admin, flash, onBack, onSaved, onEdit, o
   }
   const untagged = ps.filter(p => !isOut(p) && !p.plant_tag).length, unconf = ps.filter(p => p.plant_tag && !p.tag_confirmed).length
   return <div>
-    <div className="row toolbar between"><button className="ghost" onClick={onBack}>{t('‹ Hunts')}</button><button className="ghost small" onClick={onEdit}>{t('Edit hunt')}</button></div>
+    <div className="row toolbar between"><button className="backbtn2" onClick={onBack}>{t('Hunts')}</button><button className="ghost small" onClick={onEdit}>{t('Edit hunt')}</button></div>
     <h3 className="huntname">{h.name} <span className="muted">· {s ? cross(s) : tn(crosses.length, '{n} cross', '{n} crosses')} · {t('sown')} {fmtD(h.sown_on) || '—'}{h.planted_on ? ` · ${t('planted')} ${fmtD(h.planted_on)}` : ''} · {t('{n} seeds', { n: n0(h.seeds_sown) })}{h.germinated ? `, ${t('{n} up', { n: n0(h.germinated) })}` : ''}{h.room_id ? ` · ${c.room(h.room_id)}` : ''}</span></h3>
     <p className="muted small-note">{t('{a} phenos · {b} growing · {c} culled · {d} scored', { a: n0(nAll), b: n0(nAll - nOut), c: n0(nOut), d: n0(ps.filter(p => scoresBy.has(p.id)).length) })}</p>
     {crosses.length > 1 && <details className="crosslist"><summary>{t('Crosses')} ({crosses.length})</summary><div className="cwrap tight"><table className="ctable">

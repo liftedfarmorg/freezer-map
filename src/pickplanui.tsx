@@ -125,7 +125,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
 
   return (
     <div className="list fulfill pmp">
-      <button className="ghost small" onClick={back}>‹ {backLabel}</button>
+      <button className="backbtn2" onClick={back}>{backLabel}</button>
       <h2>{title}{sub && <span className="muted"> {sub}</span>}</h2>
       {walk && <div className="pmp-bar"><div className="grow"><b>Walk in progress</b><div className="small">{walk.done.length} of {walk.rows.length} picked. It's saved on this phone.</div></div>
         <button className="ghost" onClick={() => saveWalk(null)}>Clear it</button>
@@ -235,7 +235,7 @@ function Walk({ walk, save, pallet, contents, loc, altsFor, chip, busy, lineOf, 
 
   return (
     <div className="list fulfill pmp walk">
-      <button className="ghost small" onClick={close}>‹ Plan</button>
+      <button className="backbtn2" onClick={close}>Plan</button>
       {next && L ? <>
         <div className="muted small">Freezer {fzs.indexOf(fzNow) + 1} of {fzs.length}</div>
         <div className="row between"><h2>{L.fzLabel}</h2><b className="ok-t">{walk.done.length} of {rows.length} picked</b></div>

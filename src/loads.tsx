@@ -395,7 +395,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
     if (p) { setPicker({ stop: null, position: null, pre: p.id }); return true }
     return false
   } : null)
-  if (!l) return <div className="list"><button className="ghost" onClick={onBack}>‹ Transit</button><p className="muted">Load not found.</p></div>
+  if (!l) return <div className="list"><button className="backbtn2" onClick={onBack}>Transit</button><p className="muted">Load not found.</p></div>
   const v = ctx.vehicles.find(x => x.id === l.vehicle_id)
   const stops = ctx.stops.filter(s => s.load_id === l.id).sort((a, b) => a.seq - b.seq)
   const items = ctx.items.filter(i => i.load_id === l.id)
@@ -452,7 +452,7 @@ export function LoadView({ ctx, loadId, onBack, onEdit }: { ctx: LoadCtx; loadId
   return (
     <div className="loadview">
       <div className="lv-head">
-        <button className="linkbtn lv-back" onClick={onBack}>‹ Transit</button>
+        <button className="backbtn2 lv-back" onClick={onBack}>Transit</button>
         <div className="lv-title">
           <h2>{l.code}</h2><span className={`pill s-${l.status}`}>{STATUS[l.status]}</span>
           <span className="grow" />

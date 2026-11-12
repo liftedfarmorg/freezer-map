@@ -911,3 +911,12 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .t-a.t-a:is(.ttag, .om-ttag, .cp-ttag) { background: var(--t-a-bg); color: var(--t-a-ink); }
 /* SAVE-1: drag to pan tables on a computer */
 @media (hover: hover) and (pointer: fine) { .cwrap { cursor: grab; } .cwrap.dragging { cursor: grabbing; user-select: none; } .cwrap :is(button, a, input, select, tr.tap, .tap) { cursor: pointer; } }
+/* BACK-1: one prominent back button everywhere: green pill with a chevron */
+.backbtn2 { display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 16px 0 10px; border-radius: 999px; width: auto; flex: 0 0 auto;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 45%, transparent); background: color-mix(in srgb, var(--brand) 9%, var(--panel, #fff));
+  color: var(--brand); font-weight: 700; font-size: 15px; line-height: 1; cursor: pointer; white-space: nowrap; }
+.backbtn2::before { content: ''; width: 18px; height: 18px; flex: 0 0 18px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 18l-6-6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 18l-6-6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+.backbtn2:hover { background: color-mix(in srgb, var(--brand) 16%, var(--panel, #fff)); }
+.backbtn2:active { transform: translateY(1px); }
