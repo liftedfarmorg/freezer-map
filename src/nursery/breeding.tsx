@@ -40,29 +40,21 @@ interface SeedPkg { label: string; item: string; qty: number | null; uom: string
 interface Hunt { id: number; site: string; season: number; name: string; seed_lot_id: number | null; sown_on: string | null; planted_on: string | null; seeds_sown: number | null; germinated: number | null; room_id: number | null; status: string; notes: string | null }
 interface Pheno {
   id: number; hunt_id: number; seed_lot_id: number | null; number: number; label: string | null; plant_tag: string | null; lot_tag: string | null; room_id: number | null; bed: string | null
-  status: string; keeper_strain: string | null; notes: string | null; planted_on: string | null; cut_on: string | null; cut_qty: number | null; cull_reason: string | null; culled_on: string | null
+  status: string; keeper_strain: string | null; notes: string | null; planted_on: string | null; cut_on: string | null; cut_qty: number | null; cull_reason: string | null; culled_on: string | null; harvested_on?: string | null
   tag_confirmed: boolean; tag_source: string | null
 }
 interface Obs { id: number; pheno_id: number; stage: string; observed_on: string; traits: Record<string, string | number | null>; notes: string | null; observer: string | null }
 interface DonorBatch { id: number; project: string; label: string; strains: string | null; plants: number | null; cut_on: string | null; room_id: number | null; to_room_on: string | null; move_in_on: string | null; notes: string | null }
-interface Score { id: number; pheno_id: number; scorer: string; scored_on: string; vigor: number | null; structure: number | null; aroma: number | null; color: number | null; tackiness: number | null; jar: number | null; notes: string | null }
+interface Score { id: number; pheno_id: number; scorer: string; scored_on: string; vigor: number | null; structure: number | null; aroma: number | null; color: number | null; tackiness: number | null; leafiness: number | null; jar: number | null; notes: string | null }
 interface BData { plantings: NPlanting[]; runs: Run[]; receivers: Receiver[]; seeds: SeedLot[]; hunts: Hunt[]; phenos: Pheno[]; scores: Score[]; obs: Obs[]; donors: DonorBatch[]; pkgs: Map<string, SeedPkg>; photos: Map<number, number>; pics: Map<number, { path: string; kind: string }[]> }
 
-const TRAITS = [['vigor', 'Vigor'], ['structure', 'Structure'], ['aroma', 'Aroma'], ['color', 'Color'], ['tackiness', 'Tackiness'], ['jar', 'Jar test']] as const
+const TRAITS = [['vigor', 'Vigor'], ['structure', 'Structure'], ['aroma', 'Aroma'], ['color', 'Color'], ['tackiness', 'Tackiness'], ['leafiness', 'Leafiness'], ['jar', 'Jar test']] as const
+// PHENO-SCORE-1: what 1 and 5 mean, shown under the trait
+const TRAIT_HINT: Partial<Record<string, string>> = { leafiness: '5 = least leaf, easiest trim' }
 type Trait = typeof TRAITS[number][0]
 const RUN_STATUS = ['planned', 'growing', 'flowering', 'pollinated', 'harvested', 'done', 'cancelled']
 const PSTATUS: Record<string, string> = { growing: 'Growing', maybe: 'Maybe', keeper: 'Keeper', culled: 'Culled', male: 'Male' }
 const CULL_REASONS = ['Hermaphroditism', 'Male', 'Genetic Abnormality', 'Excessive Stretch', 'Poor Structure', 'Stunted Growth', 'Disease Susceptibility', 'Pest Susceptibility', 'Poor Stress Tolerance', 'Low Resin Production', 'Selection Redundancy']
-type ObsField = { k: string; l: string; kind: 'rate' | 'num' | 'text'; unit?: string }
-const OBS: { stage: string; l: string; fields: ObsField[] }[] = [
-  { stage: 'preflip', l: 'Pre-flip', fields: [{ k: 'type', l: 'Type', kind: 'text' }, { k: 'height', l: 'Height average', kind: 'num', unit: 'in' }, { k: 'leaf_density', l: 'Leaf density', kind: 'rate' },
-    { k: 'internode', l: 'Internodal spacing', kind: 'rate' }, { k: 'vigor', l: 'Vigor', kind: 'rate' }, { k: 'impression', l: 'Visual impression', kind: 'rate' }, { k: 'branching', l: 'Branching', kind: 'rate' },
-    { k: 'canopy_shape', l: 'Canopy shape', kind: 'text' }, { k: 'trainability', l: 'Trainability', kind: 'rate' }, { k: 'sex', l: 'Sex expression', kind: 'text' }] },
-  { stage: 'midflower', l: 'Mid flower', fields: [{ k: 'stretch_pct', l: 'Stretch factor', kind: 'num', unit: '%' }, { k: 'bud_formation', l: 'Bud formation', kind: 'rate' }, { k: 'resin_onset', l: 'Resin onset', kind: 'rate' }, { k: 'aroma', l: 'Aroma', kind: 'rate' }] },
-  { stage: 'lateflower', l: 'Late flower', fields: [{ k: 'canopy_density', l: 'Canopy density', kind: 'rate' }, { k: 'bud_density', l: 'Bud density', kind: 'rate' }, { k: 'resin_coverage', l: 'Resin coverage', kind: 'rate' },
-    { k: 'aroma', l: 'Aroma', kind: 'rate' }, { k: 'maturity', l: 'Maturity', kind: 'rate' }, { k: 'fade', l: 'Fade / health', kind: 'rate' },
-    { k: 'ft_avg', l: 'Flower time left, average', kind: 'num', unit: 'days' }, { k: 'ft_low', l: 'Flower time left, low', kind: 'num', unit: 'days' }, { k: 'ft_high', l: 'Flower time left, high', kind: 'num', unit: 'days' }] },
-]
 const SHOW = 300
 const who = (e: string) => e.split('@')[0]
 const cap = (s: string) => t(s[0].toUpperCase() + s.slice(1))
@@ -608,64 +600,90 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
   const [x, setX] = useState<Pheno>(p)
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState<string | null>(p.cull_reason ?? null)
-  const [stage, setStage] = useState<string>(OBS[0].stage)
+  // PHENO-SCORE-1: card split into tabs; grower notes are one short form per person (stage 'grower')
+  const [tab, setTab] = useState<'score' | 'notes' | 'plant'>('score')
   const obsAll = b.obs.filter(z => z.pheno_id === p.id)
   const obsMine = obsAll.filter(z => z.observer === me)
-  const [ob, setOb] = useState<Record<string, Record<string, string | number | null>>>(() => Object.fromEntries(obsMine.map(z => [z.stage, { ...z.traits, _notes: z.notes }])))
+  const gMine = obsMine.find(z => z.stage === 'grower')
+  const [gn, setGn] = useState<Record<string, string | number | null>>((): Record<string, string | number | null> => {
+    if (gMine) return { ...gMine.traits, _notes: gMine.notes }
+    const old = obsMine.find(z => z.stage === 'preflip')   // carry over type / height from the old pre-flip notes
+    return old ? { type: old.traits.type ?? null, height: old.traits.height ?? null } : {}
+  })
   const run = async (f: () => PromiseLike<{ error: { message: string } | null }>, ok: string, keep = false) => {
     setBusy(true)
     const { error } = await f()
     setBusy(false)
     if (error) flash(error.message, true); else await onSaved(ok, keep)
   }
-  const saveScore = () => run(() => mine
-    ? sb.from('pheno_scores').update({ ...Object.fromEntries(TRAITS.map(([k]) => [k, sc[k] ?? null])), notes: sc.notes ?? null, scored_on: today() }).eq('id', mine.id)
-    : sb.from('pheno_scores').insert({ pheno_id: p.id, ...Object.fromEntries(TRAITS.map(([k]) => [k, sc[k] ?? null])), notes: sc.notes ?? null }), 'Score saved', true)
+  const saveScore = () => run(async () => {
+    const go = (keys: readonly (readonly [string, string])[]) => {
+      const v = { ...Object.fromEntries(keys.map(([k]) => [k, sc[k as Trait] ?? null])), notes: sc.notes ?? null }
+      return mine ? sb.from('pheno_scores').update({ ...v, scored_on: today() }).eq('id', mine.id) : sb.from('pheno_scores').insert({ pheno_id: p.id, ...v })
+    }
+    const r = await go(TRAITS)
+    // before 340 runs there's no leafiness column: save the rest and say so
+    if (r.error && /leafiness/i.test(r.error.message)) {
+      const r2 = await go(TRAITS.filter(([k]) => k !== 'leafiness'))
+      if (!r2.error) flash(t('Saved without Leafiness: run 340_pheno_rosin_keeper_admin.sql in Supabase first.'), true)
+      return r2
+    }
+    return r
+  }, 'Score saved', true)
   const savePheno = (v: Partial<Pheno>, ok: string) => run(() => sb.from('phenos').update({ label: v.label ?? x.label, plant_tag: v.plant_tag ?? x.plant_tag, room_id: v.room_id ?? x.room_id, bed: v.bed ?? x.bed,
     status: v.status ?? x.status, notes: v.notes ?? x.notes, cut_on: v.cut_on !== undefined ? v.cut_on : x.cut_on, cut_qty: v.cut_qty !== undefined ? v.cut_qty : x.cut_qty,
     cull_reason: v.cull_reason !== undefined ? v.cull_reason : x.cull_reason }).eq('id', p.id), ok)
   const saveObs = () => {
-    const cur = ob[stage] ?? {}
-    const traits = Object.fromEntries(Object.entries(cur).filter(([k, v]) => k !== '_notes' && v != null && v !== ''))
-    const notes = (cur._notes as string | null) || null
-    const had = obsMine.find(z => z.stage === stage)
-    return run(() => had ? sb.from('pheno_obs').update({ traits, notes, observed_on: today() }).eq('id', had.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage, traits, notes }), 'Notes saved', true)
+    const traits = Object.fromEntries(Object.entries(gn).filter(([k, v]) => k !== '_notes' && v != null && v !== ''))
+    const notes = (gn._notes as string | null) || null
+    return run(() => gMine ? sb.from('pheno_obs').update({ traits, notes, observed_on: today() }).eq('id', gMine.id) : sb.from('pheno_obs').insert({ pheno_id: p.id, stage: 'grower', traits, notes }), 'Notes saved', true)
   }
   const keeper = async () => {
     const name = prompt(t('Name for this keeper (it goes on the Strains list)'), x.keeper_strain ?? x.label ?? ''); if (name == null) return
     await run(() => sb.rpc('pheno_keeper', { p_pheno: p.id, p_name: name }), t('{name} is a keeper', { name: name || x.label || '' }))
   }
-  const spec = OBS.find(o => o.stage === stage)!
-  const setO = (k: string, v: string | number | null) => setOb(o => ({ ...o, [stage]: { ...(o[stage] ?? {}), [k]: v } }))
+  const setG = (k: string, v: string | number | null) => setGn(o => ({ ...o, [k]: v }))
+  const gOthers = obsAll.filter(z => z.stage === 'grower' && z.observer !== me)
+  const others = scores.filter(z => z.scorer !== me)
   const out = x.status === 'culled' || x.status === 'male'
   return (
     <Sheet side title={x.label ?? `#${x.number}`} sub={`${lot ? cross(lot) + ' · ' : ''}${c.room(x.room_id)}${x.bed ? ' ' + x.bed : ''} · ${tn(scores.length, '{n} score', '{n} scores')} · ${t(PSTATUS[x.status])}${x.cull_reason ? ` (${t(x.cull_reason)})` : ''}${x.keeper_strain ? ` · ${x.keeper_strain}` : ''}`} onClose={onClose} wide>
-      {!out && <>
-        <h3>{t('Your score')}</h3>
-        <div className="scoregrid">{TRAITS.map(([k, l]) => <Fragment key={k}><span>{t(l)}</span>
-          <div className="choices">{[1, 2, 3, 4, 5].map(v => <button key={v} type="button" className={sc[k] === v ? 'on' : ''} onClick={() => setSc(s => ({ ...s, [k]: s[k] === v ? null : v }))}>{v}</button>)}</div></Fragment>)}</div>
-        <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} /></F>
-        <button className="primary" disabled={busy || !TRAITS.some(([k]) => sc[k])} onClick={saveScore}>{t(mine ? 'Update my score' : 'Save my score')}</button>
+      <div className="seg ptabs">{([['score', 'Score'], ['notes', 'Grower notes'], ['plant', 'Plant & METRC']] as const).map(([k, l]) =>
+        <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{t(l)}{k === 'notes' && gMine ? ' ✓' : k === 'score' && mine ? ' ✓' : ''}</button>)}</div>
+      {tab === 'score' && <>
+        {!out && <>
+          <div className="pscore">{TRAITS.map(([k, l]) => <label key={k} className={`pscore-row ${sc[k] ? 'set' : ''}`}>
+            <span>{t(l)}{TRAIT_HINT[k] ? <span className="muted small"> {t(TRAIT_HINT[k]!)}</span> : ''}</span>
+            <select value={sc[k] ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSc(s => ({ ...s, [k]: v })) }}>
+              <option value="">–</option>{[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}</select>
+          </label>)}</div>
+          <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} /></F>
+          <button className="primary" disabled={busy || !TRAITS.some(([k]) => sc[k])} onClick={saveScore}>{t(mine ? 'Update my score' : 'Save my score')}</button>
+        </>}
+        <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} onCount={n => { if (n !== (b.photos.get(p.id) ?? 0)) void onSaved('', true) }} />
+        {others.length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">
+          <thead><tr><th>{t('Who')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l).slice(0, 5)}</th>)}<th>{t('Notes')}</th></tr></thead>
+          <tbody>{others.map(z => <tr key={z.id}><td>{who(z.scorer)}</td>{TRAITS.map(([k]) => <td key={k} className="num">{z[k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>
+        </table></div></>}
       </>}
-      <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} onCount={n => { if (n !== (b.photos.get(p.id) ?? 0)) void onSaved('', true) }} />
-      {scores.filter(z => z.scorer !== me).length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">
-        <thead><tr><th>{t('Who')}</th>{TRAITS.map(([k, l]) => <th key={k} className="num">{t(l).slice(0, 5)}</th>)}<th>{t('Notes')}</th></tr></thead>
-        <tbody>{scores.filter(z => z.scorer !== me).map(z => <tr key={z.id}><td>{who(z.scorer)}</td>{TRAITS.map(([k]) => <td key={k} className="num">{z[k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>
-      </table></div></>}
-      <h3>{t('Your grower notes')}</h3>
-      <div className="seg">{OBS.map(o => <button key={o.stage} className={stage === o.stage ? 'on' : ''} onClick={() => setStage(o.stage)}>{t(o.l)}{obsMine.some(z => z.stage === o.stage) ? ' ✓' : ''}</button>)}</div>
-      <div className="scoregrid">{spec.fields.map(fd => <Fragment key={fd.k}><span>{t(fd.l)}{fd.unit ? <span className="muted small"> ({fd.unit})</span> : ''}</span>
-        {fd.kind === 'rate' ? <div className="choices">{[1, 2, 3, 4, 5].map(v => <button key={v} type="button" className={ob[stage]?.[fd.k] === v ? 'on' : ''} onClick={() => setO(fd.k, ob[stage]?.[fd.k] === v ? null : v)}>{v}</button>)}</div>
-          : fd.kind === 'num' ? <NumIn value={(ob[stage]?.[fd.k] as number | null) ?? null} onChange={v => setO(fd.k, v)} />
-            : <TextIn value={(ob[stage]?.[fd.k] as string | null) ?? null} onChange={v => setO(fd.k, v)} />}</Fragment>)}</div>
-      <F label={t('Notes')}><TextIn value={(ob[stage]?._notes as string | null) ?? null} onChange={v => setO('_notes', v)} /></F>
-      <button className="ghost" disabled={busy} onClick={saveObs}>{t('Save {s} notes', { s: t(spec.l).toLowerCase() })}</button>
-      {obsMine.find(z => z.stage === stage) && <span className="muted small"> {t('Saved {d}', { d: fmtD(obsMine.find(z => z.stage === stage)!.observed_on) })}</span>}
-      {obsAll.some(z => z.stage === stage && z.observer !== me) && <><h3>{t('Everyone else, {s}', { s: t(spec.l).toLowerCase() })}</h3><div className="cwrap tight"><table className="ctable">
-        <thead><tr><th>{t('Who')}</th>{spec.fields.map(fd => <th key={fd.k} className="num">{t(fd.l).split(/[ ,]/)[0]}</th>)}<th>{t('Notes')}</th></tr></thead>
-        <tbody>{obsAll.filter(z => z.stage === stage && z.observer !== me).map(z => <tr key={z.id}><td>{who(z.observer ?? '')}<span className="muted small"> {fmtD(z.observed_on)}</span></td>
-          {spec.fields.map(fd => <td key={fd.k} className="num">{z.traits[fd.k] ?? ''}</td>)}<td className="small">{z.notes}</td></tr>)}</tbody>
-      </table></div></>}
+      {tab === 'notes' && <>
+        <div className="pgrid2">
+          <F label={t('Type')}><TextIn value={(gn.type as string | null) ?? null} onChange={v => setG('type', v)} placeholder={t('Indica, sativa, hybrid…')} /></F>
+          <F label={`${t('Height')} (in)`}><NumIn value={(gn.height as number | null) ?? null} onChange={v => setG('height', v)} /></F>
+          <F label={t('First flower set')}><DateIn value={(gn.first_flower as string | null) ?? null} onChange={v => setG('first_flower', v)} /></F>
+          <F label={t('Ideal harvest day')}><DateIn value={(gn.ideal_harvest as string | null) ?? null} onChange={v => setG('ideal_harvest', v)} /></F>
+          <F label={t('Actual harvest day')} hint={t('Filled in when the pheno is harvested in the app.')}><input value={fmtD(x.harvested_on ?? null) || '—'} readOnly /></F>
+        </div>
+        <F label={t('Notes')}><TextIn value={(gn._notes as string | null) ?? null} onChange={v => setG('_notes', v)} /></F>
+        <button className="primary" disabled={busy} onClick={saveObs}>{t('Save grower notes')}</button>
+        {gMine && <span className="muted small"> {t('Saved {d}', { d: fmtD(gMine.observed_on) })}</span>}
+        {gOthers.length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">
+          <thead><tr><th>{t('Who')}</th><th>{t('Type')}</th><th className="num">{t('Height')}</th><th>{t('First flower')}</th><th>{t('Ideal harvest')}</th><th>{t('Notes')}</th></tr></thead>
+          <tbody>{gOthers.map(z => <tr key={z.id}><td>{who(z.observer ?? '')}<span className="muted small"> {fmtD(z.observed_on)}</span></td><td>{z.traits.type ?? ''}</td><td className="num">{z.traits.height ?? ''}</td>
+            <td className="nowrap">{fmtD((z.traits.first_flower as string) ?? null)}</td><td className="nowrap">{fmtD((z.traits.ideal_harvest as string) ?? null)}</td><td className="small">{z.notes}</td></tr>)}</tbody>
+        </table></div></>}
+      </>}
+      {tab === 'plant' && <>
       <h3>{t('Plant')}</h3>
       <div className="grid3">
         <F label={t('Label')}><TextIn value={x.label} onChange={v => setX({ ...x, label: v })} /></F>
@@ -690,6 +708,8 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
         <Pick value={reason} blank={t('Cull reason…')} options={CULL_REASONS.map(r => ({ v: r, l: t(r) }))} onChange={setReason} />
         <button className="ghost danger" disabled={busy || !reason} onClick={() => savePheno({ status: reason === 'Male' ? 'male' : 'culled', cull_reason: reason }, 'Culled')}>{t('Cull')}</button>
       </div>}
+      {!out && <p className="muted small">{t('Cull only marks the pheno in the app. Destroying the plant in METRC is still done by hand.')}</p>}
+      </>}
     </Sheet>
   )
 }

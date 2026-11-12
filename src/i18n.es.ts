@@ -1219,7 +1219,23 @@ export const ES: Record<string, string> = {
  "Nothing sent yet.": "Todavía no se ha enviado nada.",
  "Sending {n} photo(s)…": "Enviando {n} foto(s)…",
  "{n} photo(s) couldn't save": "{n} foto(s) no se pudieron guardar",
- "{n} photo(s) waiting for signal": "{n} foto(s) esperando señal"
+ "{n} photo(s) waiting for signal": "{n} foto(s) esperando señal",
+ "Leafiness": "Hojosidad",
+ "5 = least leaf, easiest trim": "5 = menos hoja, más fácil de recortar",
+ "Saved without Leafiness: run 340_pheno_rosin_keeper_admin.sql in Supabase first.": "Guardado sin Hojosidad: primero corre 340_pheno_rosin_keeper_admin.sql en Supabase.",
+ "Score": "Puntaje",
+ "Grower notes": "Notas del cultivador",
+ "Plant & METRC": "Planta y METRC",
+ "Indica, sativa, hybrid…": "Índica, sativa, híbrida…",
+ "Height": "Altura",
+ "First flower set": "Primera flor",
+ "Ideal harvest day": "Día ideal de cosecha",
+ "Actual harvest day": "Día real de cosecha",
+ "Filled in when the pheno is harvested in the app.": "Se llena cuando el feno se cosecha en la app.",
+ "Save grower notes": "Guardar notas del cultivador",
+ "First flower": "Primera flor",
+ "Ideal harvest": "Cosecha ideal",
+ "Cull only marks the pheno in the app. Destroying the plant in METRC is still done by hand.": "Descartar solo marca el feno en la app. Destruir la planta en METRC todavía se hace a mano."
 }
 export const EN: Record<string, string> = {
  "PLAN_HOWTO_1": "Works back from the clone orders for {year} (Cultivation's nursery deliveries and outside orders): G4 cuttings = order + {buffer}% in trays of {tray}. G3 field moms = G4 cuttings ÷ {g3} cuts per mom. Each generation above is cut with +{buffer}% and G2 at {g2} cuts per mom.",
