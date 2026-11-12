@@ -15,7 +15,8 @@ import { MotherSheet, MothersTab } from './mothers'
 import { PlanTab } from './plan'
 import { LabTests } from './tests'
 import { Leachate } from './leachate'
-import { BreedingTab } from './breeding'
+import { BVIEW_TAB, BreedingTab } from './breeding'
+import type { BView } from './breeding'
 import { OpsLogs } from '../logs'
 import { SetupTab } from './setup'
 import { Card, Cards, DashHead, Empty, Meter, Tile, Tiles } from '../dash'
@@ -64,7 +65,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
     if (bt) { setBatch(bt); return true }
     const T = tag.trim()
     const ph = await sb.from('phenos').select('id,hunt_id').ilike('plant_tag', T).limit(1)
-    if (ph.data?.length) { go('breeding'); setOpenTag(o => ({ pheno: ph.data![0].id, hunt: ph.data![0].hunt_id, n: (o?.n ?? 0) + 1 })); return true }
+    if (ph.data?.length) { go('phenohunts'); setOpenTag(o => ({ pheno: ph.data![0].id, hunt: ph.data![0].hunt_id, n: (o?.n ?? 0) + 1 })); return true }
     const rc = await sb.from('breed_receivers').select('id,run_id').ilike('plant_tag', T).limit(1)
     if (rc.data?.length) { go('breeding'); setOpenTag(o => ({ run: rc.data![0].run_id, n: (o?.n ?? 0) + 1 })); return true }
     return false
@@ -76,6 +77,7 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
   if (!d || !c) return <div className="list"><h2>{t('Nursery')}</h2><p className="muted">{t('Loading…')}</p></div>
 
   const search = ['orders', 'batches', 'mothers'].includes(tab)
+  const bview = (Object.keys(BVIEW_TAB) as BView[]).find(k => BVIEW_TAB[k] === tab)
   const areas = [...new Set(['Webb', 'GH', ...d.rooms.filter(r => r.active).map(r => r.name), ...d.rooms.map(r => r.place)])]
   return (
     <div className="cult nursery">
@@ -88,7 +90,8 @@ export default function NurseryView({ backend, flash, tab, go, customers, isAdmi
       {tab === 'batches' && <BatchesTab d={d} c={c} q={q} onOpen={setBatch} onNew={() => setBatch({})} onSortDay={() => setSortDay(true)} />}
       {tab === 'plan' && <PlanTab d={d} c={c} api={api} flash={flash} onSaved={saved} />}
       {tab === 'mothers' && <MothersTab d={d} c={c} q={q} api={api} flash={flash} onSaved={saved} onOpen={setMother} onAdd={v => setMother(v ?? {})} />}
-      {tab === 'breeding' && <BreedingTab sb={sb} d={d} c={c} flash={flash} me={me ?? ''} openTag={openTag} admin={isAdmin} refresh={load} />}
+      {/* BREED-SPLIT-1: Breeding, Seed Lots and Pheno Hunts are three sidebar tabs on one screen component */}
+      {bview && <BreedingTab key={bview} view={bview} go={v => go(BVIEW_TAB[v])} sb={sb} d={d} c={c} flash={flash} me={me ?? ''} openTag={openTag} admin={isAdmin} refresh={load} />}
       {tab === 'logs' && <OpsLogs sb={sb} module="nursery" sites={d.sites.map(s => s.code)} areas={areas} strains={[...new Set([...d.mothers.map(m => m.strain), ...d.strains])]} flash={flash}
         wage={d.settings.wage} canEditRecipes={isAdmin} batches={d.batches.filter(b => b.stage !== 'cancelled').slice(0, 300).map(b => ({ id: b.id, strain: b.strain, label: `${fmtD(b.cut_on)} ${b.strain} ${GEN_LABEL[b.gen]} · ${n0(b.cuttings)}` }))}
         extraTabs={[{ k: 'leach', l: t('Leachate'), node: <Leachate sb={sb} d={d} flash={flash} /> }, { k: 'lab', l: t('Lab tests'), node: <LabTests d={d} c={c} api={api} flash={flash} onSaved={saved} /> }]} />}

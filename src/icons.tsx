@@ -36,7 +36,7 @@ const BY_KEY: Record<string, ReactNode> = {
   dash: dash, dashboard: dash, map, inventory: box, fulfill: check, transit: truck, review: inbox, activity: pulse, settings: gear, setup: gear,
   menu: list, orders: clip, invoices: money, requests: inbox, customer: users, customers: users, strain: leaf,
   harvest: leaf, schedule: cal, week: cal, testing: check, plantings: map, avail: chart, yields: chart, plan: cal, logs: list,
-  batches: sprout, mothers: sprout, breeding: sprout,
+  batches: sprout, mothers: sprout, breeding: sprout, seedlots: box, phenohunts: leaf,
   crew: users, incoming: sun, runs: cycle,
   send, sent: book, payroll: money,
   deadlines: clock, library: book, ccof: seal, metrc: tag, fleet: truck,

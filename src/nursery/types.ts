@@ -60,4 +60,4 @@ export interface NData {
   licenses: License[]; ranges: TagRange[]; strains: string[]; settings: NSettings; strainPlan: StrainPlan[]; tests: LabTest[]
   plantings: NPlanting[]; mpkgs: Map<string, MPkg>; runs: NRun[]; donorBatches: NDonorBatch[]
 }
-export type NTab = 'dashboard' | 'receiving' | 'plan' | 'orders' | 'batches' | 'mothers' | 'breeding' | 'logs' | 'invoices' | 'review' | 'activity' | 'settings'
+export type NTab = 'dashboard' | 'receiving' | 'plan' | 'orders' | 'batches' | 'mothers' | 'breeding' | 'seedlots' | 'phenohunts' | 'logs' | 'invoices' | 'review' | 'activity' | 'settings'

@@ -45,7 +45,7 @@ import { DistLocations } from './locations'
 import { DistDashboard } from './distdash'
 import { CULT_TABS, CULT_TAIL } from './cult/tabs'
 import type { CultTab } from './cult/tabs'
-import { NURSERY_TABS, NURSERY_TAIL } from './nursery/tabs'
+import { NURSERY_TABS, NURSERY_TAIL, lastPheno } from './nursery/tabs'
 import type { NTab } from './nursery/tabs'
 import { ACCT_TABS, ACCT_TAIL } from './acct/tabs'
 import { PROC_TABS, PROC_TAIL } from './proc/tabs'
@@ -431,7 +431,15 @@ export default function App() {
   const [procTab, setProcTabS] = useState<PTab>(() => ([...PROC_TABS, ...PROC_TAIL].find(x => x.t === stored('proc.tab'))?.t ?? 'dashboard'))
   const [compTab, setCompTabS] = useState<CTab>(() => ([...COMP_TABS, ...COMP_TAIL].find(x => x.t === stored('comp.tab'))?.t ?? 'dashboard'))
   const [acctTab, setAcctTabS] = useState<ATab>(GO_ACCT ? (QBO_BACK || GO_ACCT_SETTINGS ? 'settings' : 'dashboard') : readSaved<ATab>('app.acctTab', 'dashboard'))
-  const [nurTab, setNurTabS] = useState<NTab>(() => ([...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === stored('nur.tab'))?.t ?? 'dashboard'))
+  const [nurTab, setNurTabS] = useState<NTab>(() => {
+    let k = stored('nur.tab')
+    // BREED-SPLIT-1: Breeding's old sub-tabs are their own tabs now; a pheno open when the phone reloaded the app lands back on Pheno Hunts
+    if (k === 'breeding' || k === 'seedlots' || k === 'phenohunts') {
+      const old = readSaved<string | null>('nur.b.tab', null); writeSaved('nur.b.tab', undefined)
+      if (lastPheno()) k = 'phenohunts'; else if (k === 'breeding' && old === 'seeds') k = 'seedlots'; else if (k === 'breeding' && old === 'hunts') k = 'phenohunts'
+    }
+    return [...NURSERY_TABS, ...NURSERY_TAIL].find(t => t.t === k)?.t ?? 'dashboard'
+  })
   const [modMenu, setModMenu] = useState(false)
   const [railMenu, setRailMenu] = useState(false)
   const [acctMenu, setAcctMenu] = useState(false)   // phone: the initials menu (My settings, Sign out)

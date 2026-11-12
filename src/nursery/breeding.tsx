@@ -15,12 +15,9 @@ import { pageAll } from '../pageAll'
 import { PhenoPhotos } from './phenophotos'
 import { useSaved } from '../saved'
 import { useQueueDone } from './photoqueue'
+import { LAST_PHENO, lastPheno } from './tabs'
 
 // PHENO-PIC-3: the open pheno is remembered for 2 hours, so if the phone reloads the app while the camera is open you land back on it
-const LAST_PHENO = 'nur.lastPheno'
-function lastPheno(): { hunt: number; pheno: number } | null {
-  try { const v = JSON.parse(sessionStorage.getItem(LAST_PHENO) ?? 'null'); return v && Date.now() - v.at < 2 * 3600e3 ? v : null } catch { return null }
-}
 function rememberPheno(hunt: number, pheno: number | null) {
   try { if (pheno == null) sessionStorage.removeItem(LAST_PHENO); else sessionStorage.setItem(LAST_PHENO, JSON.stringify({ hunt, pheno, at: Date.now() })) } catch { /* private window */ }
 }
@@ -64,12 +61,16 @@ const cross = (s: SeedLot) => [s.mother_strain, s.father_strain].filter(Boolean)
 const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }
 const f1 = (x: number | null) => (x == null ? '' : x.toFixed(1))
 
-export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refresh }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string; admin?: boolean
+export type BView = 'runs' | 'seeds' | 'hunts'
+/** BREED-SPLIT-1: Breeding, Seed Lots and Pheno Hunts are their own sidebar tabs; this maps each view to its Nursery tab */
+export const BVIEW_TAB = { runs: 'breeding', seeds: 'seedlots', hunts: 'phenohunts' } as const
+export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refresh, view: tab, go }: { sb: SupabaseClient; d: NData; c: NCtx; flash: Flash; me: string; admin?: boolean
+  /** BREED-SPLIT-1: which of the three tabs this is, and how to jump to another one */
+  view: BView; go: (v: BView) => void
   /** 339: reload the nursery data (packages left after a planting) */
   refresh?: () => Promise<void>
   /** 281: a scanned plant tag: open its pheno (flowering plant) or its pollination run (flowering planting) */
   openTag?: { pheno?: number; hunt?: number; run?: number; n: number } | null }) {
-  const [tab, setTab] = useSaved<'runs' | 'seeds' | 'hunts'>('nur.b.tab', () => (lastPheno() ? 'hunts' : 'runs'))
   const [b, setB] = useState<BData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [run, setRun] = useState<Partial<Run> | null>(null)
@@ -77,7 +78,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
   const [hunt, setHunt] = useState<Partial<Hunt> | null>(null)
   const [huntView, setHuntView] = useSaved<number | null>('nur.b.hunt', () => lastPheno()?.hunt ?? null)
   const [donor, setDonor] = useState<Partial<DonorBatch> | null>(null)
-  useBack(huntView != null, () => setHuntView(null))
+  useBack(tab === 'hunts' && huntView != null, () => setHuntView(null))
   const load = useCallback(async () => {
     const r = await Promise.all(['breed_runs', 'breed_receivers', 'seed_lots', 'pheno_hunts', 'phenos', 'pheno_scores', 'pheno_obs', 'breed_donor_batches'].map(t => pageAll((a, z) => sb.from(t).select('*').order('id').range(a, z))))
     const bad = r.find(x => x.error)
@@ -99,20 +100,20 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
   const [openPheno, setOpenPheno] = useState<number | null>(() => lastPheno()?.pheno ?? null)
   useEffect(() => {
     if (!b || !openTag) return
-    if (openTag.hunt != null) { setTab('hunts'); setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
-    else if (openTag.run != null) { const r = b.runs.find(x => x.id === openTag.run); if (r) { setTab('runs'); setHuntView(null); setRun(r) } }
+    if (openTag.hunt != null && tab === 'hunts') { setHuntView(openTag.hunt); setOpenPheno(openTag.pheno ?? null) }
+    else if (openTag.run != null && tab === 'runs') { const r = b.runs.find(x => x.id === openTag.run); if (r) setRun(r) }
   }, [b, openTag?.n])
   const saved = async (m: string) => { await Promise.all([load(), m ? refresh?.() : undefined]); if (m) flash(t(m)) }  // '' = quiet reload (photo count changed)
   const [donorAct, setDonorAct] = useState<{ pj: string; kind: 'plant' | 'move' | 'flip' } | null>(null)
   if (err) return <div className="warnbox">{err}</div>
   if (!b) return <p className="muted">{t('Loading…')}</p>
-  if (huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView key={`${h.id}-${openPheno ?? ''}`} sb={sb} d={d} c={c} b={b} h={h} me={me} admin={admin} flash={flash} openPheno={openPheno} onBack={() => { setHuntView(null); setOpenPheno(null) }} onSaved={saved} onEdit={() => setHunt(h)} /> }
+  if (tab === 'hunts' && huntView != null) { const h = b.hunts.find(x => x.id === huntView); if (h) return <HuntView key={`${h.id}-${openPheno ?? ''}`} sb={sb} d={d} c={c} b={b} h={h} me={me} admin={admin} flash={flash} openPheno={openPheno} onBack={() => { setHuntView(null); setOpenPheno(null) }} onSaved={saved} onEdit={() => setHunt(h)} /> }
   const sown = (s: SeedLot) => s.sown ?? sum(b.hunts.filter(h => h.seed_lot_id === s.id).map(h => h.seeds_sown ?? 0))
   const lotPhenos = (id: number) => b.phenos.filter(p => p.seed_lot_id === id || (p.seed_lot_id == null && b.hunts.find(h => h.id === p.hunt_id)?.seed_lot_id === id))
   const projects = [...new Set(b.runs.map(r => r.project).filter((x): x is string => !!x))]
   return <>
     <div className="row toolbar between">
-      <div className="seg">{([['runs', 'Pollination runs'], ['seeds', 'Seed lots'], ['hunts', 'Pheno hunts']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{t(l)}</button>)}</div>
+      <p className="muted small-note">{t(tab === 'runs' ? 'Making seeds: pollination runs, donors, receivers and the seeds they put out.' : tab === 'seeds' ? 'Seed inventory: seeds from our own runs and seeds bought or traded in.' : 'Growing out seed lots to find keepers: phenos, scores and picks.')}</p>
       {tab === 'runs' && <button className="primary" onClick={() => setRun({ season: new Date().getFullYear(), status: 'planned', room_id: d.rooms.find(r => r.name === 'Trailer 1')?.id ?? null, donor_room_id: d.rooms.find(r => r.name === 'Trailer 3')?.id ?? null })}>{t('+ Pollination run')}</button>}
       {tab === 'seeds' && <button className="primary" onClick={() => setLot({ source: 'breeder' })}>{t('+ Seed lot')}</button>}
       {tab === 'hunts' && <button className="primary" onClick={() => setHunt({ season: new Date().getFullYear(), status: 'sown', sown_on: today() })}>{t('+ Pheno hunt')}</button>}
@@ -171,7 +172,7 @@ export function BreedingTab({ sb, d, c, flash, me, openTag, admin = false, refre
     })()}
     {lot && <SeedSheet sb={sb} d={d} s0={lot} flash={flash} onClose={() => setLot(null)} onSaved={saved} />}
     {donor && <DonorSheet sb={sb} d={d} x0={donor} flash={flash} onClose={() => setDonor(null)} onSaved={saved} />}
-    {hunt && <HuntSheet sb={sb} d={d} b={b} h0={hunt} flash={flash} onClose={() => setHunt(null)} onSaved={async (m, id) => { await saved(m); if (id) setHuntView(id) }} />}
+    {hunt && <HuntSheet sb={sb} d={d} b={b} h0={hunt} flash={flash} onClose={() => setHunt(null)} onSaved={async (m, id) => { await saved(m); if (id) { setHuntView(id); if (tab !== 'hunts') go('hunts') } }} />}
   </>
 }
 
