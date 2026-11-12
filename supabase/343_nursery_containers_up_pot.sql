@@ -50,6 +50,12 @@ update nursery_mothers m set container_id = c.id from nursery_containers c
    when m.pot ~* '(half|1/2|½|\.5) ?(g|gal)' then 'Half Gallon Pots' when m.pot ~* '^\s*1 ?(g|gal)' then 'One Gallon Pots'
    when m.pot ~* '4 ?("|in|inch)' then '4 Inch Pots' when m.pot ~* '2 ?("|in|inch)' then '2 Inch Pots' when m.pot ~* 'rose' then 'Rose Pots' end);
 
+-- Aziz 11/12: everything in the mom houses (hoops) is in 25L; all donors and receivers are in 10L. The rest gets fixed as they go.
+update nursery_mothers set container_id = (select id from nursery_containers where name = '25L Bato')
+ where container_id is null and status = 'active' and room_id in (select id from nursery_rooms where kind = 'hoop');
+update nursery_plantings set container_id = (select id from nursery_containers where name = '10L Bato')
+ where container_id is null and use in ('receivers','donors');
+
 -- ---------- 3. history ----------
 create table if not exists nursery_pot_events (
   id          bigserial primary key,
