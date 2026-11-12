@@ -536,6 +536,7 @@ export default function App() {
   const [menuDrag, setMenuDrag] = useState<{ mod: string; keys: string[]; k: string } | null>(null)
   const dragRef = useRef<{ k: string; y: number; keys: string[]; mod: string; started: boolean; moved: boolean } | null>(null)
   const [ordersKey, setOrdersKey] = useState(0)
+  const [navKey, setNavKey] = useState(0)   // BACK-1: bumped when you click the tab you're already on
   // SAVE-1: where you are survives a refresh (per browser tab)
   useEffect(() => { writeSaved('app.view', view); writeSaved('app.site', site); writeSaved('app.salesTab', salesTab); writeSaved('app.adminSet', adminSet); writeSaved('app.adminTab', adminTab)
     writeSaved('app.acctTab', acctTab); writeSaved('app.freezer', freezerId); writeSaved('app.query', query); writeSaved('app.drvTab', drvTab); writeSaved('app.fOpen', fOpen) },
@@ -941,7 +942,6 @@ export default function App() {
   const closeSides = () => { setNewOrder(false); setPalletId(null) }
   // BACK-1: clicking the tab you're already on takes you back to its top level (like a back button). Filters stay; what's open
   // (a customer, hunt, load, order, freezer, run…) closes, and the screen reloads from its top.
-  const [navKey, setNavKey] = useState(0)
   const resetNav = () => { clearDrill(); setFreezerId(null); setFOpen(null); setPalletId(null); setNavKey(k => k + 1); top() }
   const wrapGo = (x: NavItem): NavItem => ({ ...x, go: () => { closeSides(); if (x.on) resetNav(); else x.go() } })
   const orderMain = (items: NavItem[]): NavItem[] => {
