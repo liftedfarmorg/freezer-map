@@ -165,6 +165,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
   const trial = !!pl?.trial || c.field.get(h.field_id ?? -1)?.kind === 'trials'
   // 158: combine harvests make Dry Biomass pallets, numbered B1, B2...
   const prefix = h.kind === 'combine' ? 'B' : trial ? 'T' : c.site.get(h.site)?.pallet_prefix ?? 'P'
+  const [topCode, setTopCode] = useState('')   // the pallet # in the single-pallet box, so back-fill doesn't offer it too (Msg BACKOUT-1)
   // plants still standing in the planting (before this harvest)
   const leftBefore = pl ? Math.max((pl.plants ?? 0) - (pl.plant_loss ?? 0) - sum(d.harvests.filter(x => x.planting_id === pl.id && x.id !== h.id && x.status === 'done' && x.kind === h.kind).map(x => x.plants_harvested ?? 0)), 0) : null
   const rawLbs = sum(raw.map(w => w.lbs)) || sum(h.raw_bins)
@@ -194,8 +195,8 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
         <Weights title="Raw bins" kind="raw" rows={raw} busy={busy} done={locked} unit="bin" admin={canFix}
           onAdd={lbs => run(() => api.logWeight(h.id, 'raw', lbs), `Bin ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')}
           onEdit={(id, lbs) => run(() => api.editWeight(id, lbs), `Bin changed to ${n1(lbs)} lbs`)} />
-        <PalletLog h={h} api={api} busy={busy} done={locked} pallets={pallets} run={run} prefix={prefix} />
-        {!locked && <BulkPallets h={h} api={api} busy={busy} run={run} prefix={prefix} pallets={pallets} />}
+        <PalletLog h={h} api={api} busy={busy} done={locked} pallets={pallets} run={run} prefix={prefix} onCode={setTopCode} />
+        {!locked && <BulkPallets h={h} api={api} busy={busy} run={run} prefix={prefix} pallets={pallets} reserved={topCode} />}
       </>}
 
       {h.kind === 'dry' && <>
@@ -209,8 +210,8 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
       {h.kind === 'combine' && <>
         <div className="ckpis hk"><div><b>{n0(sum(pallets.map(p => p.og_weight)) + sum(totes.map(w => w.lbs)))}</b><span>lbs Dry Biomass{k.estBiomass ? ` of ~${n0(k.estBiomass)}` : ''}</span></div>
           <div><b>{pallets.length}</b><span>pallets ({pallets.filter(p => p.pushed !== false).length} pushed)</span></div></div>
-        <PalletLog h={h} api={api} busy={busy} done={locked} pallets={pallets} run={run} prefix={prefix} />
-        {!locked && <BulkPallets h={h} api={api} busy={busy} run={run} prefix={prefix} pallets={pallets} />}
+        <PalletLog h={h} api={api} busy={busy} done={locked} pallets={pallets} run={run} prefix={prefix} onCode={setTopCode} />
+        {!locked && <BulkPallets h={h} api={api} busy={busy} run={run} prefix={prefix} pallets={pallets} reserved={topCode} />}
         <p className="cnote">Dry Biomass pallets (B numbers) go to the freezers or reefers like fresh frozen. Pushing sends the plants and the pallet weight to METRC as the harvest, and each pallet becomes a Dry Biomass package (SU before Sept 1, FL after).</p>
         {totes.length > 0 && <Weights title="Totes (logged before Dry Biomass pallets)" kind="tote" rows={totes} busy={busy} done={true} unit="tote" site={h.site} withTag
           onAdd={(lbs, tag) => run(() => api.logWeight(h.id, 'tote', lbs, tag), `Tote ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')} />}
@@ -335,9 +336,9 @@ const palletDefaultLbs = (h: Harvest) => (h.kind === 'combine' ? 500 : 650)
 type LogPallet = CPallet
 
 /** fresh frozen pallets: logged as they're made (not pushed), fixed freely, then pushed to METRC as packages */
-function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
+function PalletLog({ h, api, busy, done, pallets, run, prefix, onCode }: {
   h: Harvest; api: CultApi; busy: boolean; done: boolean; pallets: LogPallet[]
-  run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string
+  run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string; onCode?: (code: string) => void
 }) {
   const last = pallets[pallets.length - 1]
   const defLbs = palletDefaultLbs(h)
@@ -352,6 +353,7 @@ function PalletLog({ h, api, busy, done, pallets, run, prefix }: {
   useEffect(() => { if (!done) api.nextPallet(h.id).then(setNext).catch(() => setNext(null)) }, [h.id, pallets.length, done])
   const shownCode = code ?? next?.code ?? ''
   const shownTag = tag ?? (code == null ? next?.tag ?? '' : '')
+  useEffect(() => { onCode?.(done ? '' : shownCode.trim()) }, [shownCode, done])
   const waiting = pallets.filter(p => p.pushed === false)
   const pushed = pallets.filter(p => p.pushed !== false)
   const canPush = can('cultivation', 'push', 'user')
@@ -527,7 +529,7 @@ function Finish({ h, busy, run, api, back, ready, raw, pallets }: { h: Harvest; 
 }
 
 /** back-fill: several pallets at once (how many × lbs each); numbers and tags come from the next free pallet numbers */
-function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: CultApi; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string; pallets: { code: string }[] }) {
+function BulkPallets({ h, api, busy, run, prefix, pallets, reserved }: { h: Harvest; api: CultApi; busy: boolean; run: (f: () => Promise<unknown>, ok: string) => Promise<void>; prefix: string; pallets: { code: string }[]; reserved?: string }) {
   const [open, setOpen] = useState(false)
   const [n, setN] = useState<number | null>(null)
   const [lbs, setLbs] = useState<number | null>(palletDefaultLbs(h))
@@ -535,15 +537,21 @@ function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: 
   const [loading, setLoading] = useState(false)
   const set = (i: number, v: Partial<{ lbs: string; tag: string; code: string; auto: boolean }>) => setRows(rs => rs.map((x, j) => (j === i ? { ...x, ...v } : x)))
   const dup = rows.map(r => r.code).filter((c, i, a) => c && (a.indexOf(c) !== i || pallets.some(p => p.code === c)))
+  const inTop = reserved ? rows.some(r => r.code === reserved) : false
   if (!open) return <div className="row hfin"><button className="ghost" disabled={busy} onClick={() => setOpen(true)}>Back-fill several pallets…</button><span className="muted">From paper, after the fact</span></div>
   async function addRows() {
     const k = Math.min(60, n ?? 1)
     setLoading(true)
     try {
+      // next free numbers, skipping the rows already here and the pallet # in the single-pallet box above (Msg BACKOUT-1)
       const out: { lbs: string; tag: string; code: string }[] = []
-      for (let i = 0; i < k; i++) {
-        const nx = await api.nextPallet(h.id, rows.length + i).catch(() => null)
-        out.push({ lbs: lbs ? String(lbs) : '', code: nx?.code ?? '', tag: nx?.tag ?? '' })
+      const seen = new Set([...rows.map(r => r.code), ...pallets.map(p => p.code), ...(reserved ? [reserved] : [])].filter(Boolean))
+      for (let skip = 0, tries = 0; out.length < k && tries < k + seen.size + 20; skip++, tries++) {
+        const nx = await api.nextPallet(h.id, skip).catch(() => null)
+        if (!nx?.code) break
+        if (seen.has(nx.code)) continue
+        seen.add(nx.code)
+        out.push({ lbs: lbs ? String(lbs) : '', code: nx.code, tag: nx.tag ?? '' })
       }
       setRows(rs => [...rs, ...out])
     } finally { setLoading(false) }
@@ -573,9 +581,10 @@ function BulkPallets({ h, api, busy, run, prefix, pallets }: { h: Harvest; api: 
       ))}
       {rows.length > 0 && <>
         {dup.length > 0 && <p className="warn-t small">Already used: {[...new Set(dup)].join(', ')}</p>}
+        {inTop && <p className="warn-t small">{reserved} is also in the single pallet box above. Change one of them.</p>}
         <div className="row">
           {rows[0].tag && rows.length > 1 && <button className="ghost small" onClick={() => setRows(rs => rs.map((x, j) => ({ ...x, tag: nextTag(rs[0].tag, j) })))}>Number the tags in order from the first</button>}
-          <button className="primary" disabled={busy || !rows.some(r => Number(r.lbs) > 0) || dup.length > 0} onClick={make}>Create {rows.length} pallet{rows.length === 1 ? '' : 's'} ({n0(sum(rows.map(r => Number(r.lbs) || 0)))} lbs)</button>
+          <button className="primary" disabled={busy || !rows.some(r => Number(r.lbs) > 0) || dup.length > 0 || inTop} onClick={make}>Create {rows.length} pallet{rows.length === 1 ? '' : 's'} ({n0(sum(rows.map(r => Number(r.lbs) || 0)))} lbs)</button>
         </div>
         <p className="cnote">Pallet # and tag are the next free numbers (the tag follows the pallet # where the site has a tag rule). New pallets go to {h.site} Staging, not pushed.</p>
       </>}
