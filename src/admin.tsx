@@ -10,7 +10,7 @@ const money = (x: number) => '$' + Math.round(Number(x)).toLocaleString()
 const fmt = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''
 
 export type Jump = 'dist.review' | 'dist.map' | 'dist.transit' | 'dist.fulfill' | 'sales.requests' | 'sales.orders' | 'sales.customer' | 'sales.strain' | 'sales.invoices' | 'cult.review' | 'cult.yields' | 'cult.logs'
-  | 'nurs.dashboard' | 'nurs.orders' | 'nurs.batches' | 'nurs.mothers' | 'nurs.breeding' | 'nurs.review' | 'nurs.logs' | 'nurs.invoices' | 'admin.users' | 'admin.settings'
+  | 'nurs.dashboard' | 'nurs.orders' | 'nurs.batches' | 'nurs.mothers' | 'nurs.breeding' | 'nurs.review' | 'nurs.logs' | 'nurs.invoices' | 'admin.users' | 'admin.settings' | 'admin.feedback'
 
 /** Admin Dashboard: the whole company on one page */
 export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: Jump) => void }) {
@@ -19,6 +19,15 @@ export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: 
   useEffect(() => { backend.adminOverview().then(setO).catch(e => setErr(String(e?.message ?? e))) }, [backend])
   const [lbsHist, setLbsHist] = useState<Map<string, number>>(new Map())
   useEffect(() => { backend.dashSeries(['freezer_lbs'], lastDays(90)[0]).then(rs => setLbsHist(new Map(rs.map(r => [r.day, r.value])))).catch(() => {}) }, [backend])
+  // FB-9: Feedback & Bugs counts (SQL 341)
+  const [fb, setFb] = useState<Record<string, number> | null>(null)
+  useEffect(() => {
+    const c = backend.client(); if (!c) return
+    c.from('feedback').select('status').in('status', ['new', 'needs_info', 'approved', 'in_progress', 'ready_to_test']).then(r => {
+      if (r.error) return
+      const m: Record<string, number> = {}; (r.data ?? []).forEach((x: { status: string }) => { m[x.status] = (m[x.status] ?? 0) + 1 }); setFb(m)
+    })
+  }, [backend])
   if (err) return <div className="list"><h2>Dashboard</h2><div className="warnbox">{err}</div></div>
   if (!o) return <p className="muted">Loading…</p>
   const vs = o.season.done_est ? o.season.actual / o.season.done_est - 1 : null
@@ -43,6 +52,8 @@ export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: 
         {B && <Tile label="Unpaid invoices" value={money(B.open_amt)} sub={`${plural(B.open, 'invoice')}${B.overdue ? ` · ${money(B.overdue_amt)} overdue` : ' · none overdue'}`} tone={B.overdue ? 'warn' : 'ok'} foot={B.overdue ? 'Follow up' : undefined} onClick={() => open('sales.invoices')} />}
         <Tile label="Waiting on someone" value={waiting} sub={waiting ? 'requests, orders, deliveries, invoices' : 'nothing waiting'} tone={waiting ? 'heads' : 'ok'} />
         <Tile label="Loads" value={o.loads.active} sub={`${o.loads.active ? `${o.loads.in_transit} in transit` : 'none active'}${o.open_orders != null ? ` · ${plural(o.open_orders, 'order')} to ship` : ''}`} onClick={() => open('dist.transit')} />
+        {fb && <Tile label="Feedback & Bugs" value={fb.new ?? 0} sub={`new to decide · ${(fb.approved ?? 0) + (fb.in_progress ?? 0)} approved for Claude · ${fb.ready_to_test ?? 0} ready to test${fb.needs_info ? ` · ${fb.needs_info} asked` : ''}`}
+          tone={fb.new ? 'heads' : 'ok'} onClick={() => open('admin.feedback')} />}
         {L && <Tile label={`Logs in ${month}`} value={L.month} sub={`${L.pesticide_month ? `${plural(L.pesticide_month, 'pesticide spray')}` : 'no pesticide sprays'}${L.labor_hours_month ? ` · ${n0(L.labor_hours_month)} labor hrs` : ''}`} onClick={() => open('cult.logs')} />}
       </Tiles>
       <Cards>
@@ -57,6 +68,7 @@ export function AdminDashboard({ backend, open }: { backend: Backend; open: (j: 
                 [N.no_tag, 'Clone batches with no METRC tag', 'Nursery', 'nurs.review']] : []),
               ...(B ? [[B.overdue, 'Overdue invoices', 'Billing', 'sales.invoices'], [B.not_sent, 'Open invoices not emailed yet', 'Billing', 'sales.invoices']] : []),
               ...(o.licenses ? [[o.licenses.expiring.length, 'Licenses expiring in 90 days', 'Admin', 'admin.settings']] : []),
+              ...(fb ? [[fb.new ?? 0, 'Feedback & Bugs to decide', 'Admin', 'admin.feedback']] : []),
             ].map(([n, l, m, j]) => (
               <button key={String(l)} className="drow click" onClick={() => open(j as Jump)}><span><b>{l}</b><span className="muted"> · {m}</span></span>
                 <span className={`pill ${n ? 'warnp' : ''}`}>{n}</span></button>
