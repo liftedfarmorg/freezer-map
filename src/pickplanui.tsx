@@ -62,7 +62,7 @@ export function printPickSheet(o: {
     return `<section><h2>${gi + 1}. ${esc(L0.fzLabel)} <span class="m">${rs.length} pallet${rs.length === 1 ? '' : 's'}</span></h2>
       ${way.size ? `<p class="way">Move out of the way first: ${[...way.values()].map(p => `${esc(p.code)} (${esc(loc(p).spot)})`).join(', ')}</p>` : ''}
       <table><thead><tr><th></th><th>Spot</th><th>Pallet</th><th>METRC tag</th><th>Strain</th><th class="n">Take lbs</th><th class="n">Pallet lbs</th><th>Do</th><th>Notes</th></tr></thead><tbody>${body}</tbody></table></section>` }).join('')
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(o.title)} pick sheet</title><style>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pick sheet ${esc(o.orders.map(x => x.so ?? '').filter(Boolean).join(' '))}</title><style>
     @page { size: letter; margin: 0.45in; }
     body { font: 11px/1.35 system-ui, -apple-system, "Segoe UI", Arial, sans-serif; color: #111; margin: 0; }
     h1 { font-size: 18px; margin: 0 0 2px; } h2 { font-size: 13.5px; margin: 14px 0 4px; } .m { color: #666; font-weight: 400; font-size: 10px; }
@@ -75,7 +75,7 @@ export function printPickSheet(o: {
     .bad { color: #b00020; font-weight: 600; } .way { margin: 2px 0 4px; font-weight: 600; } section { break-inside: auto; } tr { break-inside: avoid; }
     .sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; } .sign div { border-top: 1px solid #111; padding-top: 3px; }
   </style></head><body>
-    <div class="top"><div><h1>Pick sheet: ${esc(o.title)}</h1>${o.sub ? `<div>${esc(o.sub)}</div>` : ''}${orderHead}</div>
+    <div class="top"><div><h1>Pick sheet${/plan my pick/i.test(o.title) ? '' : `: ${esc(o.title)}`}</h1>${o.sub && o.orders.length !== 1 ? `<div>${esc(o.sub)}</div>` : ''}${orderHead}</div>
       <div style="text-align:right"><div><b>${esc(o.site ?? '')}</b></div><div>Printed ${esc(new Date().toLocaleString())}</div></div></div>
     <div class="sum">${groups.length} freezer${groups.length === 1 ? '' : 's'} · ${nPal} pallet${nPal === 1 ? '' : 's'} · ${o.splits} split${o.splits === 1 ? '' : 's'}${o.inWay ? ` · ${o.inWay} to move out of the way` : ''} · closest to the door first</div>
     <table><thead><tr><th>Line</th><th class="n">Ordered lbs</th><th class="n">Already picked</th><th class="n">On this sheet</th><th class="n">Short</th></tr></thead><tbody>${lineRows}</tbody></table>
