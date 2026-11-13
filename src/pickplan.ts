@@ -20,6 +20,41 @@ export interface PRow { lineId: number; pallet: Pallet; lbs: number; whole: bool
 export interface Plan { rows: PRow[]; short: Map<number, number>; freezers: number[]; moves: number; splits: number }
 
 const w = (p: Pallet) => Number(p.current_weight ?? 0)
+const round = (x: number) => Math.round(x * 100) / 100
+
+// BOX-1 (Aziz 11/13): never break a box. Fresh frozen is packed in 10 lb boxes plus at most one odd (partial) box per
+// pallet, e.g. 506.54 lbs = 50 x 10 lb + 1 x 6.54 lb. Partial boxes stay partial and 10 lb boxes stay 10 lb boxes,
+// so a split can only take whole 10 lb boxes, with or without that pallet's odd box. Never top up a partial box.
+export const BOX = 10
+const boxed = (p: Pallet) => p.kind !== 'mixed' && (p.product ?? 'fresh_frozen') === 'fresh_frozen'
+/** a pallet's boxes: full 10 lb boxes and its one odd box (0 = none) */
+export function boxesOf(p: Pallet): { full: number; odd: number } {
+  const W = w(p), r = Math.round(W / BOX)
+  if (Math.abs(W - r * BOX) < 0.05) return { full: r, odd: 0 }
+  const full = Math.floor(W / BOX)
+  return { full, odd: round(W - full * BOX) }
+}
+/** the amount to split off a pallet for `want` lbs using whole boxes only: closest to `want`, a tie takes more */
+export function boxTake(p: Pallet, want: number): number {
+  if (!boxed(p)) return round(want)
+  const { full, odd } = boxesOf(p)
+  let best = 0
+  const consider = (x: number) => { const d = Math.abs(x - want), db = Math.abs(best - want); if (d < db - 0.001 || (Math.abs(d - db) <= 0.001 && x > best)) best = x }
+  for (let k = 0; k <= full; k++) { consider(k * BOX); if (odd) consider(k * BOX + odd) }
+  return round(best)
+}
+/** "4 boxes", "4 boxes + the 6.54 lb odd box", or "" when it isn't whole boxes (not fresh frozen) */
+export function boxText(p: Pallet, lbs: number): string {
+  if (!boxed(p)) return ''
+  const { odd } = boxesOf(p)
+  const withOdd = odd > 0 && Math.abs(((lbs - odd) / BOX) - Math.round((lbs - odd) / BOX)) < 0.01 && lbs + 0.01 >= odd
+  const n = Math.round((withOdd ? lbs - odd : lbs) / BOX)
+  if (!withOdd && Math.abs(lbs - n * BOX) > 0.01) return ''
+  const full = n ? `${n} box${n === 1 ? '' : 'es'}` : ''
+  return withOdd ? `${full ? full + ' + ' : ''}the ${odd} lb odd box` : full
+}
+/** BOX-1: how far off a line can end because only whole boxes move; within this it counts as filled */
+export const boxSlack = (tol: number) => Math.max(tol, BOX / 2)
 const hd = (p: Pallet) => p.harvest_date ?? '9999'
 
 /** PICK-12 (default mode): closest to the door first. Take from the pallets with the fewest still in the way
@@ -30,18 +65,25 @@ function fillFront(need: number, pool: Pallet[], tol: number, loc: (p: Pallet) =
   const rows: PRow[] = []
   let left = need
   const depth = (p: Pallet) => loc(p).inFront.filter(id => !used.has(id)).length
-  while (left > tol) {
+  while (left > tol && left > 0.01) {
     const avail = pool.filter(p => !used.has(p.id) && w(p) > 0)
     if (!avail.length) break
     const d = Math.min(...avail.map(depth))
     const lvl = avail.filter(p => depth(p) === d).sort((a, b) => loc(a).front - loc(b).front)
     const exact = lvl.find(p => Math.abs(w(p) - left) <= tol)
     const fits = lvl.filter(p => w(p) <= left + tol).sort((a, b) => w(b) - w(a))[0]
-    const big = lvl.filter(p => w(p) > left + tol).sort((a, b) => w(a) - w(b))[0]
+    // BOX-1: a split takes whole boxes, so pick the one whose boxes come closest to what's left, then the smallest
+    const gap = (p: Pallet) => Math.abs(boxTake(p, left) - left)
+    const big = lvl.filter(p => w(p) > left + tol).sort((a, b) => gap(a) - gap(b) || w(a) - w(b))[0]
     const p = exact ?? fits ?? big
-    used.add(p.id)
-    if (p === big && !exact && !fits) { rows.push({ lineId, pallet: p, lbs: round(left), whole: false }); left = 0 }
-    else { rows.push({ lineId, pallet: p, lbs: w(p), whole: true }); left -= w(p) }
+    if (p === big && !exact && !fits) {
+      const take = boxTake(p, left)
+      if (take <= 0) break   // less than a box left: stop, don't break a box
+      used.add(p.id)
+      if (take >= w(p) - 0.01) rows.push({ lineId, pallet: p, lbs: w(p), whole: true })
+      else rows.push({ lineId, pallet: p, lbs: take, whole: false })
+      left = 0
+    } else { used.add(p.id); rows.push({ lineId, pallet: p, lbs: w(p), whole: true }); left -= w(p) }
   }
   return rows
 }
@@ -67,23 +109,26 @@ function fillLine(need: number, pool: Pallet[], tol: number, mode: Mode, loc: (p
       if (!p) break
       used.add(p.id)
       if (w(p) <= left + tol) { rows.push({ lineId, pallet: p, lbs: w(p), whole: true }); left -= w(p) }
-      else { rows.push({ lineId, pallet: p, lbs: round(left), whole: false }); left = 0 }
+      else { const take = boxTake(p, left); if (take > 0) rows.push({ lineId, pallet: p, lbs: take, whole: take >= w(p) - 0.01 }); left = 0 }
       continue
     }
     // nothing fits whole: split the smallest one that covers what's left
-    const big = c.filter(p => !used.has(p.id) && w(p) > left + tol).sort((a, b) => w(a) - w(b) || order(a, b))[0]
+    const gap = (p: Pallet) => Math.abs(boxTake(p, left) - left)
+    const big = c.filter(p => !used.has(p.id) && w(p) > left + tol).sort((a, b) => gap(a) - gap(b) || w(a) - w(b) || order(a, b))[0]
     if (!big) break
-    used.add(big.id); rows.push({ lineId, pallet: big, lbs: round(left), whole: false }); left = 0
+    const take = boxTake(big, left)   // BOX-1: whole boxes only
+    if (take <= 0) break
+    used.add(big.id); rows.push({ lineId, pallet: big, lbs: take, whole: take >= w(big) - 0.01 }); left = 0
   }
   return rows
 }
-const round = (x: number) => Math.round(x * 100) / 100
 
-function score(lines: PLine[], rows: PRow[], loc: (p: Pallet) => Loc): Plan {
+function score(lines: PLine[], rows: PRow[], loc: (p: Pallet) => Loc, tol = 0): Plan {
   const short = new Map<number, number>()
   for (const l of lines) {
     const got = rows.filter(r => r.lineId === l.id).reduce((a, r) => a + r.lbs, 0)
-    if (l.need - got > 0.5) short.set(l.id, round(l.need - got))
+    // BOX-1: whole boxes only, so a line within half a box (or the fill tolerance) counts as filled
+    if (l.need - got > Math.max(0.5, boxSlack(tol))) short.set(l.id, round(l.need - got))
   }
   const picked = new Set(rows.map(r => r.pallet.id))
   const block = new Set<number>()
@@ -107,7 +152,7 @@ function plain(lines: PLine[], tol: number, mode: Mode, loc: (p: Pallet) => Loc,
     const pool = allow ? l.cands.filter(p => allow.has(loc(p).fz ?? -1)) : l.cands
     rows.push(...(mode === 'freezers' ? fillFront(l.need, pool, tol, loc, used, l.id) : fillLine(l.need, pool, tol, mode, loc, used, l.id)))
   }
-  return score(lines, rows, loc)
+  return score(lines, rows, loc, tol)
 }
 
 function* combos(xs: number[], k: number, start = 0, cur: number[] = []): Generator<number[]> {
@@ -173,4 +218,4 @@ export function makePlan(lines: PLine[], tol: number, mode: Mode, loc: (p: Palle
 }
 const sumShort = (p: Plan) => [...p.short.values()].reduce((a, b) => a + b, 0)
 
-export function rescore(lines: PLine[], rows: PRow[], loc: (p: Pallet) => Loc): Plan { return score(lines, rows, loc) }
+export function rescore(lines: PLine[], rows: PRow[], loc: (p: Pallet) => Loc, tol = 0): Plan { return score(lines, rows, loc, tol) }

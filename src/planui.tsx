@@ -79,18 +79,19 @@ export function UndoPill({ n, onUndo, onClose }: { n: number; onUndo: () => void
   )
 }
 
-export function ChooseDialog({ p, occ, where, canSwap, onPick, onClose }: {
-  p: Pallet; occ: Pallet[]; where: string; canSwap: boolean
+export function ChooseDialog({ p, what, occ, where, canSwap, onPick, onClose }: {
+  p: Pallet; what?: string; occ: Pallet[]; where: string; canSwap: boolean
   onPick: (mode: 'stack' | 'swap' | 'bump') => void; onClose: () => void
 }) {
   const names = occ.map(o => o.code).join(', ')
+  const me = what ?? p.code   // STACK-1: a whole stack being moved
   return (
     <div className="scrim" onClick={onClose}>
       <div className="sheet form" onClick={e => e.stopPropagation()}>
         <div className="sheet-h"><h2>{where} has {names}</h2><button className="ghost" onClick={onClose}>✕</button></div>
         <div className="choices col">
-          <button onClick={() => onPick('stack')}><b>Stack</b> <span className="muted">{p.code} shares the slot. Each pallet keeps its own number.</span></button>
-          <button disabled={!canSwap} onClick={() => onPick('swap')}><b>Swap</b> <span className="muted">{canSwap ? `${names} goes to ${p.code}'s old spot.` : `${p.code} has no slot to swap into.`}</span></button>
+          <button onClick={() => onPick('stack')}><b>Stack</b> <span className="muted">{me} shares the slot. Each pallet keeps its own number.</span></button>
+          <button disabled={!canSwap} onClick={() => onPick('swap')}><b>Swap</b> <span className="muted">{canSwap ? `${names} goes to ${what ? 'the stack' : p.code}'s old spot.` : `${p.code} has no slot to swap into.`}</span></button>
           <button onClick={() => onPick('bump')}><b>Move it too</b> <span className="muted">{names} goes in the tray so you can place it next.</span></button>
         </div>
       </div>

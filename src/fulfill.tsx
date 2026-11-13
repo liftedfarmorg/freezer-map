@@ -11,7 +11,7 @@ import { StageAlerts, StageForm, useStages } from './stage'
 import { Meter } from './dash'
 import { PRODUCT_LABEL } from './types'
 import { PlanMyPick } from './pickplanui'
-import type { Loc } from './pickplan'
+import { boxTake, boxText, type Loc } from './pickplan'
 import { useSaved } from './saved'
 
 const n0 = (x: number) => Math.round(Number(x)).toLocaleString()
@@ -450,7 +450,8 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart, lo
     <div key={p.id} className={`drow ${on ? 'picked' : ''}`}>
       <span className="grow"><b>{p.code}</b> <span className="muted">{where(p)}{p.package_tag ? ` · ${tagTxt(p.package_tag)}` : ''}</span> {hint(p)}</span>
       <b>{n0(w(p))} lbs</b>
-      {need > 0 && w(p) > need && <button className="primary small" disabled={busy} onClick={() => setPart({ p, lbs: String(Math.round(need * 100) / 100), tag: '' })}>Take {n0(need)}</button>}
+      {need > 0 && w(p) > need && boxTake(p, need) > 0 && boxTake(p, need) < w(p) - 0.01 && <button className="primary small" disabled={busy} title={boxText(p, boxTake(p, need)) || undefined}
+        onClick={() => setPart({ p, lbs: String(boxTake(p, need)), tag: '' })}>Take {boxTake(p, need)}</button>}
       {w(p) > 0 && <button className="ghost small" disabled={busy} onClick={() => setPart({ p, lbs: '', tag: '' })}>Part…</button>}
       <button className={`${need > 0 && w(p) > need ? 'ghost' : 'primary'} small`} disabled={busy} onClick={() => onWhole(p)}>{need > 0 && w(p) > need ? 'Whole' : 'Assign'}</button>
     </div>
@@ -476,7 +477,15 @@ function Pick({ line, need, cands, where, rank, busy, close, onWhole, onPart, lo
           <div className="sheet form" onClick={e => e.stopPropagation()}>
             <div className="sheet-h"><h2>Take part of {part.p.code}</h2><button className="ghost" onClick={() => setPart(null)}>✕</button></div>
             <p className="muted">{part.p.code} has {n0(w(part.p))} lbs. The part you take becomes its own package for this order (the rest stays as {part.p.code}). Split it for real when you pull it.</p>
-            <div className="field"><label>Lbs for this order</label><input type="number" inputMode="decimal" value={part.lbs} onChange={e => setPart({ ...part, lbs: e.target.value })} /></div>
+            <div className="field"><label>Lbs for this order</label><input type="number" inputMode="decimal" value={part.lbs} onChange={e => setPart({ ...part, lbs: e.target.value })} />
+              {(() => { // BOX-1: whole boxes only. 10 lb boxes stay 10 lb, the odd box stays as it is
+                const v = Number(part.lbs); if (!(v > 0)) return null
+                const t = boxText(part.p, v); if (t) return <div className="muted small">{t}</div>
+                const lo = boxTake(part.p, v - 5.001), hi = boxTake(part.p, v + 4.999)
+                if (!boxText(part.p, lo) && !boxText(part.p, hi)) return null
+                return <div className="warnbox small">That means breaking a box. Partial boxes stay partial and 10 lb boxes stay 10 lb.{' '}
+                  {[...new Set([lo, hi])].filter(x => x > 0 && x < w(part.p)).map(x => <button key={x} className="linkbtn" onClick={() => setPart({ ...part, lbs: String(x) })}>Use {x} ({boxText(part.p, x)})</button>)}</div>
+              })()}</div>
             <div className="field"><label>New METRC tag <span className="muted">(blank = tag pending)</span></label><TagInput value={part.tag} onChange={tag => setPart({ ...part, tag })} where={{ pallet: part.p.id }} placeholder="Last digits, scan, or leave blank" /></div>
             <div className="row between"><span /><div className="row">
               <button className="ghost" onClick={() => setPart(null)}>Cancel</button>

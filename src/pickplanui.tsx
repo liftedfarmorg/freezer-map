@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Backend } from './api'
 import type { FLine, FOrder, Pallet } from './types'
-import { makePlan, rescore, route, type Loc, type Mode, type PLine, type PRow } from './pickplan'
+import { boxTake, boxText, makePlan, rescore, route, type Loc, type Mode, type PLine, type PRow } from './pickplan'
 import { useBack, scrollTop } from './nav'
 import { ScanButton } from './scan'
 import { sameTag, useScanHandler } from './scanroute'
@@ -21,7 +21,8 @@ const MODES: { k: Mode; label: string }[] = [
 const REASONS = ['Not there', 'Buried', 'Damaged', 'Other']
 /** a mixed pallet's strains, short: "A, B and 13 more" */
 const mixList = (cs: Pallet[]) => { const n = [...new Set(cs.map(c => c.strain).filter(Boolean))] as string[]; return n.length > 3 ? `${n.slice(0, 2).join(', ')} and ${n.length - 2} more` : n.join(', ') || `${cs.length} packages` }
-const boxes = (lbs: number) => lbs % 10 === 0 ? ` ${lbs / 10} box${lbs === 10 ? '' : 'es'}` : ''
+/** BOX-1: " 4 boxes + the 6.54 lb odd box" for a split (whole boxes only) */
+const boxes = (lbs: number, p: Pallet) => { const t = boxText(p, lbs); return t ? ` ${t}` : '' }
 
 /** a row on the route: a planned pick, or a pallet already assigned (held) that still has to come out of a freezer */
 export interface RRow extends PRow { held?: boolean }
@@ -80,7 +81,7 @@ export async function pickSheetPdf(o: SheetArgs): Promise<Blob> {
         const L = loc(r.pallet), p = r.pallet, mix = p.kind === 'mixed' ? o.contents(p.id) : []
         const what = mix.length ? `Mixed pallet: ${mix.length} packages\n${mix.map(c => `${c.package_tag ?? ''} ${c.strain ?? ''} ${n0(w(c))} lbs`).join('\n')}` : (p.strain ?? '')
         return ['', `${L.spot}\n${L.side}${L.side ? (L.front === 1 ? ', at the door' : `, ${L.front} back`) : ''}`, p.code, p.package_tag ?? '',
-          `${tagTxt(r.lineId) ? tagTxt(r.lineId) + ' · ' : ''}${what}`, n0(r.lbs), n0(w(p)), r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs).replace(/<[^>]+>/g, '')}`]
+          `${tagTxt(r.lineId) ? tagTxt(r.lineId) + ' · ' : ''}${what}`, n0(r.lbs), n0(w(p)), r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs, p).replace(/<[^>]+>/g, '')}`]
       }),
       styles: { fontSize: 8, cellPadding: 2.5, lineColor: [190, 190, 190], lineWidth: 0.4, valign: 'top' }, headStyles: head,
       columnStyles: { 0: { cellWidth: 14 }, 3: { font: 'courier', fontSize: 7 }, 5: { halign: 'right', fontStyle: 'bold' }, 6: { halign: 'right' } },
@@ -117,7 +118,7 @@ export function printPickSheet(o: {
       const what = mix.length ? `Mixed pallet: ${mix.length} packages<div class="mix">${mix.map(c => `${esc(c.package_tag ?? '')} ${esc(c.strain ?? '')} ${n0(w(c))} lbs`).join('<br>')}</div>` : esc(p.strain ?? '')
       return `<tr><td class="ck">☐</td><td><b>${esc(L.spot)}</b><div class="m">${esc(L.side)}${L.side ? (L.front === 1 ? ', at the door' : `, ${L.front} back`) : ''}</div></td>
         <td><b>${esc(p.code)}</b></td><td class="tagc">${esc(p.package_tag ?? '')}</td><td>${who(r.lineId)}${what}</td>
-        <td class="n"><b>${n0(r.lbs)}</b></td><td class="n">${n0(w(p))}</td><td>${r.held ? 'Assigned' : r.whole ? 'Whole' : `<b>Split</b>${boxes(r.lbs)}`}</td><td class="note"></td></tr>` }).join('')
+        <td class="n"><b>${n0(r.lbs)}</b></td><td class="n">${n0(w(p))}</td><td>${r.held ? 'Assigned' : r.whole ? 'Whole' : `<b>Split</b>${boxes(r.lbs, p)}`}</td><td class="note"></td></tr>` }).join('')
     return `<section><h2>${gi + 1}. ${esc(L0.fzLabel)} <span class="m">${rs.length} pallet${rs.length === 1 ? '' : 's'}</span></h2>
       ${way.size ? `<p class="way">Move out of the way first: ${[...way.values()].map(p => `${esc(p.code)} (${esc(loc(p).spot)})`).join(', ')}</p>` : ''}
       <table><thead><tr><th></th><th>Spot</th><th>Pallet</th><th>METRC tag</th><th>Strain</th><th class="n">Take lbs</th><th class="n">Pallet lbs</th><th>Do</th><th>Notes</th></tr></thead><tbody>${body}</tbody></table></section>` }).join('')
@@ -194,7 +195,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
   const [rows, setRows] = useState<PRow[] | null>(null)
   const [change, setChange] = useState<number | null>(null)   // pallet id being changed
   useEffect(() => { setRows(null); setChange(null) }, [mode, st, tol])
-  const plan = rows ? rescore(lines, rows, loc) : fresh
+  const plan = rows ? rescore(lines, rows, loc, tol) : fresh
   const [showMap, setShowMap] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const heldHere = held.filter(r => loc(r.pallet).site === st)
@@ -246,8 +247,8 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
   }
   const alts = (r: PRow) => altsFor(r.lineId, r.lbs, new Set(routeRows.map(x => x.pallet.id)), new Set(routeRows.filter(x => x !== r).map(x => loc(x.pallet).fz)))
   const swap = (r: PRow, p: Pallet) => {
-    const whole = w(p) <= r.lbs + tol
-    setRows(plan.rows.map(x => x === r ? { lineId: r.lineId, pallet: p, lbs: whole ? w(p) : r.lbs, whole } : x))
+    const take = boxTake(p, r.lbs), whole = w(p) <= r.lbs + tol || take >= w(p) - 0.01   // BOX-1: whole boxes only
+    setRows(plan.rows.map(x => x === r ? { lineId: r.lineId, pallet: p, lbs: whole ? w(p) : take, whole } : x))
     setChange(null)
   }
   const chip = (lineId: number) => { const t = tagOf?.(lineId); return t ? <span className="pmp-tag" style={{ background: t.color }}>{t.label}</span> : null }
@@ -309,7 +310,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
                       <b className="pmp-code">{r.pallet.code}</b>
                       <span className="grow">{chip(r.lineId)} {r.pallet.kind === 'mixed' ? `Mixed: ${mixList(contents(r.pallet.id))}` : r.pallet.strain}<span className="muted small"> {L.side ? `· ${L.side}${L.front === 1 ? ', at the door' : `, ${L.front} back`}` : ''}{L.inFront.length ? ` · ${L.inFront.length} in the way` : ''}</span></span>
                       <span className="pmp-lbs">{n0(r.lbs)}{!r.whole ? <span className="muted"> of {n0(w(r.pallet))}</span> : ''} lbs</span>
-                      <span className={`pmp-do ${r.held ? 'held' : r.whole ? '' : 'split'}`}>{r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs)}`}</span>
+                      <span className={`pmp-do ${r.held ? 'held' : r.whole ? '' : 'split'}`}>{r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs, r.pallet)}`}</span>
                       {r.held ? <span className="pmp-chg" /> : <button className="linkbtn pmp-chg" onClick={() => { setChange(change === r.pallet.id ? null : r.pallet.id) }}>{change === r.pallet.id ? 'Cancel' : 'Change'}</button>}
                     </div>
                     {change === r.pallet.id && (
@@ -363,14 +364,14 @@ function Walk({ walk, save, pallet, contents, loc, altsFor, chip, busy, lineOf, 
     const r = rows.find(x => sameTag(x.p.package_tag, tag) || (x.p.kind === 'mixed' && contents(x.id).some(c => sameTag(c.package_tag, tag))))
     if (!r) { setMsg({ t: "That tag isn't on this pick. Check the label and scan again.", bad: true }); return }
     if (done.has(r.id)) { setMsg({ t: `${r.p.code} is already picked.` }); return }
-    mark(r.id); setMsg({ t: `${r.p.code} picked${r.whole ? '' : `: split ${n0(r.lbs)} lbs off it`}.` })
+    mark(r.id); setMsg({ t: `${r.p.code} picked${r.whole ? '' : `: split${boxes(r.lbs, r.p) || ` ${r.lbs} lbs`} off it`}.` })
   }
   useScanHandler(tag => { scan(tag); return true })
   const swapRow = swapFor != null ? rows.find(r => r.id === swapFor) : undefined
   const doSwap = (p: Pallet) => {
     if (!swapRow) return
-    const whole = w(p) <= swapRow.lbs + tol
-    save({ ...walk, rows: walk.rows.map(r => r.id === swapRow.id ? { lineId: r.lineId, id: p.id, lbs: whole ? w(p) : r.lbs, whole } : r),
+    const take = boxTake(p, swapRow.lbs), whole = w(p) <= swapRow.lbs + tol || take >= w(p) - 0.01   // BOX-1: whole boxes only
+    save({ ...walk, rows: walk.rows.map(r => r.id === swapRow.id ? { lineId: r.lineId, id: p.id, lbs: whole ? w(p) : take, whole } : r),
       notes: { ...walk.notes, [swapRow.id]: `${why}: ${swapRow.p.code} (${loc(swapRow.p).spot}), took ${p.code} instead` } })
     setSwapFor(null); setMsg({ t: `Swapped ${swapRow.p.code} for ${p.code}.` })
   }
@@ -400,7 +401,7 @@ function Walk({ walk, save, pallet, contents, loc, altsFor, chip, busy, lineOf, 
                 <div><span>Strain</span><b>{next.p.strain}</b></div>
                 <div><span>On the pallet</span><b>{n0(w(next.p))} lbs{next.p.boxes ? ` · ${next.p.boxes} boxes` : ''}</b></div></>}
           </div>
-          <div className={`walk-do ${next.whole ? '' : 'split'}`}>{next.whole ? 'Take the whole pallet' : `Take${boxes(next.lbs)} (${n0(next.lbs)} lbs). Leave ${n0(w(next.p) - next.lbs)} lbs on ${next.p.code}.`}</div>
+          <div className={`walk-do ${next.whole ? '' : 'split'}`}>{next.whole ? 'Take the whole pallet' : `Take${boxes(next.lbs, next.p)} (${next.lbs} lbs). Don't break a box. Leave ${Math.round((w(next.p) - next.lbs) * 100) / 100} lbs on ${next.p.code}.`}</div>
         </div>
         {here.filter(r => !done.has(r.id) && r !== next).map(r => <div key={r.id} className="walk-done muted"><b>{loc(r.p).spot} · {r.p.code}</b> {r.p.strain} · {n0(r.lbs)} lbs</div>)}
         {(() => { const nf = left.find(r => loc(r.p).fz !== fzNow); return nf ? <div className="muted small">Then: <b>{loc(nf.p).fzLabel}</b> · {left.filter(r => loc(r.p).fz === loc(nf.p).fz).length} pallet(s)</div> : null })()}

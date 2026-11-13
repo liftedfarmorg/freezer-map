@@ -476,7 +476,7 @@ export default function App() {
   const [plan, setPlan] = useState<Plan>(EMPTY)
   const [selecting, setSelecting] = useState(false)
   const [sel, setSel] = useState<number[]>([])
-  const [choose, setChoose] = useState<{ id: number; slot: Slot } | null>(null)
+  const [choose, setChoose] = useState<{ id: number; slot: Slot; ids?: number[] } | null>(null)   // ids: a whole stack (STACK-1)
   const [removeP, setRemoveP] = useState<Pallet | null>(null)
   const [archQ, setArchQ] = useState<string | null>(null)
   const [lastBatch, setLastBatch] = useState<{ id: string; n: number; at: number } | null>(null)
@@ -641,13 +641,22 @@ export default function App() {
     const slot = ix.slot.get(t.slot)
     if (!slot) return
     if (ids.length === 1) { doPlace(d.id, slot); return }
-    // a whole stack: the first one lands like a single pallet would (into an empty spot), the rest stack on it
+    // a whole stack: into an empty spot it just moves. STACK-1 (Aziz 11/13): onto a spot that has pallets, ask
+    // Stack / Swap / Move it too like a single pallet does, instead of stacking on its own
+    const rest = { ...plan, moves: plan.moves.filter(m => !ids.includes(m.id)), tray: plan.tray.filter(x => !ids.includes(x)) }
+    if (occupants(slotView(L, rest, slot.id)).filter(p => !ids.includes(p.id)).length) { setChoose({ id: ids[0], ids, slot }); return }
+    placeStack(ids, slot)
+  })
+  /** move a whole stack: the first pallet lands with `mode` (stack / swap / bump), the rest stack on it */
+  function placeStack(ids: number[], slot: Slot, mode?: PlaceMode) {
+    if (!L) return
     setPlan(pl => {
       let next = pl
-      ids.forEach((id, i) => { const r = place(L, next, id, slot.id, i === 0 && occupants(slotView(L, next, slot.id)).length === 0 ? undefined : 'stack'); if (r !== 'choose') next = r })
+      ids.forEach((id, i) => { const r = place(L, next, id, slot.id, i === 0 ? (occupants(slotView(L, next, slot.id)).length === 0 ? undefined : mode ?? 'stack') : 'stack'); if (r !== 'choose') next = r })
       return next
     })
-  })
+    setChoose(null)
+  }
   async function applyPlan(skipCross = false) {
     if (!L) return
     const moves = toSave(L, plan)
@@ -1462,9 +1471,11 @@ export default function App() {
       {pickLoadMany && <PickLoad ctx={ctx} ps={pickLoadMany} onClose={() => { setPickLoadMany(null); setSel([]); setSelecting(false) }} />}
       {choose && (() => {
         const p = ix.pallet.get(choose.id)!
-        const occ = occupants(slotView(L!, { ...plan, moves: plan.moves.filter(m => m.id !== choose.id), tray: plan.tray.filter(x => x !== choose.id) }, choose.slot.id))
-        return <ChooseDialog p={p} occ={occ} where={slotLabel(choose.slot)} canSwap={p.slot_id != null}
-          onClose={() => setChoose(null)} onPick={m => doPlace(choose.id, choose.slot, m)} />
+        const ids = choose.ids ?? [choose.id]
+        const occ = occupants(slotView(L!, { ...plan, moves: plan.moves.filter(m => !ids.includes(m.id)), tray: plan.tray.filter(x => !ids.includes(x)) }, choose.slot.id)).filter(o => !ids.includes(o.id))
+        const what = choose.ids ? `The stack (${choose.ids.map(i => ix.pallet.get(i)?.code).filter(Boolean).join(', ')})` : undefined
+        return <ChooseDialog p={p} what={what} occ={occ} where={slotLabel(choose.slot)} canSwap={p.slot_id != null}
+          onClose={() => setChoose(null)} onPick={m => choose.ids ? placeStack(choose.ids, choose.slot, m) : doPlace(choose.id, choose.slot, m)} />
       })()}
       {removeP && <RemoveForm p={removeP} busy={busy} onClose={() => setRemoveP(null)}
         onSubmit={(r, note) => { const p = removeP; setRemoveP(null); act(() => backend.removePallet(p.id, r, note), `${p.code} removed`) }} />}
