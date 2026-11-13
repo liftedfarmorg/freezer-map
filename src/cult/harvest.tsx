@@ -3,7 +3,8 @@ import { StrainLink } from '../strainCard'
 import { TagInput } from '../taginput'
 import { useBack, scrollTop } from '../nav'
 import { useEffect, useRef, useState } from 'react'
-import type { CultApi } from './api'
+import type { CultApi, CutTime } from './api'
+import { cutRate } from './api'
 import { addDays, appHarvestName, calcHarvest, fieldName, fmtD, KIND_LABEL, n0, n1, sum, today } from './calc'
 import type { Ctx } from './calc'
 import type { CPallet, CWeight, CultData, Harvest } from './types'
@@ -192,6 +193,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
           <div><b>{n0(rawLbs)}</b><span>lbs raw ({raw.length || h.raw_bins.length} bin{(raw.length || h.raw_bins.length) === 1 ? '' : 's'})</span></div>
           <div><b>{k.palletLbs && (h.plants_harvested ?? h.plants) ? n1(k.palletLbs / (h.plants_harvested ?? h.plants)!) : ''}</b><span>lbs / plant{h.est_lbs_per_plant ? ` (est ${n1(h.est_lbs_per_plant)})` : ''}</span></div>
         </div>
+        <CuttingTime h={h} api={api} bins={raw.length} />
         <Weights title="Raw bins" kind="raw" rows={raw} busy={busy} done={locked} unit="bin" admin={canFix}
           onAdd={lbs => run(() => api.logWeight(h.id, 'raw', lbs), `Bin ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')}
           onEdit={(id, lbs) => run(() => api.editWeight(id, lbs), `Bin changed to ${n1(lbs)} lbs`)} />
@@ -201,6 +203,7 @@ function LogPage({ h, d, c, api, flash, onSaved, back }: { h: Harvest; d: CultDa
 
       {h.kind === 'dry' && <>
         <div className="ckpis hk"><div><b>{n0(rawLbs)}</b><span>lbs raw{k.estRaw ? ` of ~${n0(k.estRaw)}` : ''}</span></div><div><b>{raw.length || h.raw_bins.length}</b><span>bin{(raw.length || h.raw_bins.length) === 1 ? '' : 's'}</span></div></div>
+        <CuttingTime h={h} api={api} bins={raw.length} />
         <Weights title="Raw weight" kind="raw" rows={raw} busy={busy} done={locked} unit="bin" admin={canFix}
           onAdd={lbs => run(() => api.logWeight(h.id, 'raw', lbs), `Bin ${n0(lbs)} lbs`)} onRemove={id => run(() => api.removeWeight(id), 'Removed')}
           onEdit={(id, lbs) => run(() => api.editWeight(id, lbs), `Bin changed to ${n1(lbs)} lbs`)} />
@@ -621,4 +624,16 @@ function FixTotals({ h, api, busy, run, k, onDone, flash }: { h: Harvest; api: C
       <p className="cnote">Bins and pallets above are unlocked while you're editing. Reopen puts it back under Harvesting so the crew can keep logging, then Finish it again. Waste and finish still waiting to go to METRC are cancelled; Finish makes new ones.</p>
     </section>
   )
+}
+
+/** FB-0011 (Jordan): how long cutting took for this variety, from the raw bin times (breaks out) */
+function CuttingTime({ h, api, bins }: { h: Harvest; api: CultApi; bins: number }) {
+  const [t, setT] = useState<CutTime | null>(null)
+  useEffect(() => { if (bins < 3) { setT(null); return } api.cuttingTimes(h.crop_year, h.id).then(r => setT(r[0] ?? null)).catch(() => setT(null)) }, [h.id, bins])
+  if (!t) return null
+  const hrs = t.cut_min / 60, rate = cutRate(t)
+  const hm = `${Math.floor(t.cut_min / 60)}h ${String(Math.round(t.cut_min % 60)).padStart(2, '0')}m`
+  const at = (s: string) => new Date(s).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return <p className="cnote cuttime"><b>Cutting {hm}</b> ({at(t.first_at)} to {at(t.last_at)}{t.break_min ? `, ${Math.round(t.break_min)} min of breaks out` : ''})
+    {rate != null && <> · <b>{n0(rate)}</b> lbs raw / hr</>}{t.cutters && hrs > 0 ? <> · <b>{n0(t.raw_lbs / hrs / t.cutters)}</b> lbs / cutter / hr ({t.cutters} cutters)</> : ' · cutters not on the day card'}</p>
 }

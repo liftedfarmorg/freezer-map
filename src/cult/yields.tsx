@@ -1,6 +1,6 @@
 import { Select } from '../combo'
 import { useEffect, useState } from 'react'
-import type { CultApi } from './api'
+import type { CultApi, CutTime } from './api'
 import { avg, calcHarvest, fieldName, fmtD, n0, n1, n2, pct, sum, yieldsByStrain } from './calc'
 import type { Ctx } from './calc'
 import type { CultData, YieldHist } from './types'
@@ -14,6 +14,17 @@ export function YieldsTab({ d, c, site, q, api }: { d: CultData; c: Ctx; site: s
   const [hist, setHist] = useState<YieldHist[]>([])
   const [view, setView] = useSaved<'strain' | 'field' | 'harvest'>('cult.yields.YieldsTab.view', 'strain')
   useEffect(() => { api.history().then(setHist).catch(() => setHist([])) }, [api])
+  // FB-0011: cutting speed per strain from the raw bin times (harvests logged live only)
+  const [cuts, setCuts] = useState<CutTime[]>([])
+  useEffect(() => { api.cuttingTimes(d.year).then(setCuts).catch(() => setCuts([])) }, [api, d.year])
+  const cutOf = new Map(cuts.map(t => [t.harvest_id, t]))
+  const cutBy = (ids: number[]) => {
+    const ts = ids.map(id => cutOf.get(id)).filter((t): t is CutTime => !!t)
+    const min = sum(ts.map(t => t.cut_min)), lbs = sum(ts.map(t => t.raw_lbs))
+    const withC = ts.filter(t => t.cutters), cmin = sum(withC.map(t => t.cut_min * t.cutters!))
+    return { min, lbsHr: min > 0 ? lbs / (min / 60) : null, perCutter: cmin > 0 ? sum(withC.map(t => t.raw_lbs)) / (cmin / 60) : null }
+  }
+  const hm = (m: number) => (m > 0 ? `${Math.floor(m / 60)}:${String(Math.round(m % 60)).padStart(2, '0')}` : '')
   const ql = q.trim().toLowerCase()
   const ys = yieldsByStrain(d, c, site).filter(y => !ql || y.strain.toLowerCase().includes(ql))
   const histYears = [...new Set(hist.map(h => h.crop_year))].filter(y => y < d.year).sort((a, b) => b - a).slice(0, 2)
@@ -53,16 +64,17 @@ export function YieldsTab({ d, c, site, q, api }: { d: CultData; c: Ctx; site: s
 
       {view === 'strain' && <div className="cwrap"><table className="ctable">
         <thead><tr><th>#</th><th>Strain</th><th className="num">Plants</th><th className="num">FF lbs</th><th className="num">Lbs / plant</th><th className="num hide-s">Estimate</th><th className="num">vs est.</th>
-          <th className="num hide-s">Days in ground</th><th className="num hide-s">Days flowering</th>{histYears.map(y => <th key={y} className="num">{y} lbs/pl</th>)}</tr></thead>
+          <th className="num hide-s">Days in ground</th><th className="num hide-s">Days flowering</th><th className="num hide-s" title="Cutting time (h:mm, breaks out) from the raw bin times">Cutting</th><th className="num hide-s">Raw lbs / cutter / hr</th>{histYears.map(y => <th key={y} className="num">{y} lbs/pl</th>)}</tr></thead>
         <tbody>{sorted.map((y, i) => (
           <tr key={y.strain}><td className="muted">{i + 1}</td><td>{y.strain}{y.harvests > 1 && <span className="muted"> · {y.harvests} harvests</span>}</td>
             <td className="num">{n0(y.plants)}</td><td className="num">{n0(y.lbs)}</td><td className="num"><b>{n2(y.lbs / y.plants)}</b></td>
             <td className="num hide-s">{y.est ? n2(y.est / y.plants) : ''}</td>
             <td className={`num ${y.est && y.lbs < y.est ? 'neg' : 'pos'}`}>{y.est ? pct(y.lbs / y.est) : ''}</td>
             <td className="num hide-s">{n0(avg(y.daysInGround))}</td><td className="num hide-s">{n0(avg(y.daysFlower))}</td>
+            {(() => { const x = cutBy(d.harvests.filter(h => h.status === 'done' && h.kind === 'ff' && h.strain === y.strain && (!site || h.site === site)).map(h => h.id)); return <><td className="num hide-s">{hm(x.min)}</td><td className="num hide-s">{n0(x.perCutter)}</td></> })()}
             {histYears.map(yr => <td key={yr} className="num">{n2(hlpp(y.strain, yr))}</td>)}</tr>
         ))}
-        {!sorted.length && <tr><td colSpan={9 + histYears.length} className="muted">No fresh frozen harvests logged for {d.year}.</td></tr>}</tbody>
+        {!sorted.length && <tr><td colSpan={11 + histYears.length} className="muted">No fresh frozen harvests logged for {d.year}.</td></tr>}</tbody>
       </table></div>}
 
       {view === 'field' && <div className="cwrap tight"><table className="ctable">
@@ -73,12 +85,13 @@ export function YieldsTab({ d, c, site, q, api }: { d: CultData; c: Ctx; site: s
       </table></div>}
 
       {view === 'harvest' && <div className="cwrap"><table className="ctable">
-        <thead><tr><th>Harvested</th><th>Strain</th><th>Field</th><th className="num">Plants</th><th className="num">Raw lbs</th><th className="num">FF lbs</th><th className="num">FF / raw</th><th className="num">Lbs / plant</th><th className="num">Pallets</th></tr></thead>
+        <thead><tr><th>Harvested</th><th>Strain</th><th>Field</th><th className="num">Plants</th><th className="num">Raw lbs</th><th className="num">FF lbs</th><th className="num">FF / raw</th><th className="num">Lbs / plant</th><th className="num">Pallets</th><th className="num hide-s">Cutting</th><th className="num hide-s">Raw lbs / cutter / hr</th></tr></thead>
         <tbody>{done.filter(h => !ql || h.strain.toLowerCase().includes(ql)).sort((a, b) => (a.harvested_on ?? '').localeCompare(b.harvested_on ?? '')).map(h => {
           const k = calcHarvest(c, h)
           return <tr key={h.id}><td className="nowrap">{fmtD(h.harvested_on, true)}</td><td>{h.strain}</td><td><span className="fpill">{h.site} {fieldName(c, h.field_id)}</span></td>
             <td className="num">{n0(k.actPlants)}</td><td className="num">{n0(k.actRaw)}</td><td className="num">{n0(k.actFF)}</td>
-            <td className="num">{k.actFF && k.actRaw ? pct(k.actFF / k.actRaw) : ''}</td><td className="num"><b>{n2(k.actLbsPerPlant)}</b></td><td className="num">{k.pallets.length || ''}</td></tr>
+            <td className="num">{k.actFF && k.actRaw ? pct(k.actFF / k.actRaw) : ''}</td><td className="num"><b>{n2(k.actLbsPerPlant)}</b></td><td className="num">{k.pallets.length || ''}</td>
+            {(() => { const x = cutBy([h.id]); return <><td className="num hide-s">{hm(x.min)}</td><td className="num hide-s">{n0(x.perCutter)}</td></> })()}</tr>
         })}</tbody>
       </table></div>}
       <p className="cnote">Fresh frozen lbs are the packaged weight (Harvest METRC, or the sum of the harvest's pallets). Days in ground and days flowering need the planting date and first flower on the planting.</p>

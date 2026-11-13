@@ -3,6 +3,7 @@ import type { Backend } from './api'
 import { clock, computeBonus, hm, SPEED_MAX, SPEED_RED, SPEED_YELLOW, speedLevel } from './cult/bonuscalc'
 import type { BonusData, BonusView, Level } from './cult/bonuscalc'
 import './bonus.css'
+import { RateGraph } from './cult/rategraph'
 
 // Live Bonus: the TV screen in the pack shed. Public link /?bonus=<token> (one per site, from Cultivation > Harvest).
 // No login. Refreshes every 20 seconds; the clock ticks in between. Spanish on purpose: it's for the crew.
@@ -174,10 +175,6 @@ function Speed({ v }: { v: BonusView }) {
 }
 
 function Bottom({ v }: { v: BonusView }) {
-  // speed at each pallet (last 28), grouped by variety, shaded per variety
-  const shown = v.series.slice(-28)
-  const groups: { strain: string; bars: typeof shown }[] = []
-  for (const s of shown) { const g = groups[groups.length - 1]; if (g && g.strain === s.strain) g.bars.push(s); else groups.push({ strain: s.strain, bars: [s] }) }
   const tiles = [
     { label: 'Libras empacadas', value: n0(v.packed), sub: 'hoy' },
     { label: 'Tarimas', value: String(v.pallets), sub: 'hoy' },
@@ -188,12 +185,9 @@ function Bottom({ v }: { v: BonusView }) {
   return (
     <div className="bz-bottom">
       <div className="bz-card bz-spark">
-        <span className="bz-cap">Por tarima</span>
-        <div className="bz-groups">{groups.length ? groups.map((g, i) => (
-          <div key={i} className={`bz-group b${i % 2}`} style={{ flexGrow: g.bars.length }}>
-            <span className="bz-glab">{g.strain}</span>
-            <div className="bz-bars">{g.bars.map(b => <i key={b.code} className={`sp-${speedLevel(b.v)}`} style={{ height: pct(Math.min(b.v, SPEED_MAX), SPEED_MAX) }} title={`${b.code} · ${Math.round(b.v)}`} />)}</div>
-          </div>)) : <span className="bz-dim">Sin tarimas todavía</span>}</div>
+        <span className="bz-cap">Velocidad por tarima</span>
+        {/* FB-0011: line graph through the day, shaded per variety (replaced the bars) */}
+        <RateGraph v={v} tv es />
       </div>
       {tiles.map(t => <div key={t.label} className="bz-card bz-tile"><span className="bz-cap">{t.label}</span><b>{t.value}</b><span className="bz-dim">{t.sub}</span></div>)}
     </div>

@@ -1,0 +1,21 @@
+/* FB-0011: bucking rate graph (Harvest day card + Live Bonus) */
+.rgraph { margin: 8px 0 4px; }
+.rgraph svg { width: 100%; height: auto; display: block; }
+.rgraph.empty { font-size: 13px; color: var(--muted, #6b7280); padding: 6px 0; }
+.rgraph .rg-band { font-size: 10px; fill: currentColor; opacity: .8; }
+.rgraph .rg-ax { font-size: 10px; fill: currentColor; opacity: .55; }
+.rgraph .rg-base { stroke: currentColor; opacity: .25; }
+.rgraph .rg-mark { stroke-dasharray: 4 4; stroke-width: 1.2; }
+.rgraph .rg-mark.r { stroke: #dc2626; } .rgraph .rg-mark.y { stroke: #d97706; }
+.rgraph .rg-each { fill: none; stroke: currentColor; stroke-width: 1; opacity: .45; }
+.rgraph .rg-dot { fill: currentColor; opacity: .6; }
+.rgraph .rg-run { fill: none; stroke: #15803d; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.rgraph .rg-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; align-items: center; }
+.rgraph .rg-k { display: inline-block; width: 16px; height: 3px; margin-right: 5px; vertical-align: middle; background: #15803d; }
+.rgraph .rg-k.each { height: 1px; background: currentColor; opacity: .5; }
+/* Live Bonus (TV): bigger type inside the small card */
+.rgraph.tv { margin: 0; flex: 1; min-height: 0; color: #33443B; }
+.rgraph.tv svg { height: 100%; }
+.rgraph.tv .rg-band { font-size: 13px; font-weight: 600; }
+.rgraph.tv .rg-ax { font-size: 11px; }
+.rgraph.tv.empty { font-size: 22px; }

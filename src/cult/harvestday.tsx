@@ -6,6 +6,7 @@ import type { Flash } from './ui'
 import { can } from '../fold'
 import { clock, computeBonus, hm } from './bonuscalc'
 import type { BonusView } from './bonuscalc'
+import { RateGraph } from './rategraph'
 
 // Cultivation > Harvest: the day's card for a site. Entered once (first variety of the day) and used by every
 // harvest at that site that day: room start, first box tagged, labor, La Meta, breaks. Feeds the Live Bonus screen.
@@ -66,6 +67,7 @@ export function HarvestDayCard({ site, day, api, flash, startOpen }: { site: str
         <div><b>{live.avgPalletMin != null ? live.avgPalletMin.toFixed(1) : '—'}</b><span>min / pallet</span></div>
         <div><b>{money(live.bonusRate)}</b><span>{live.won ? 'bonus / hr earned' : 'bonus / hr so far (paid at the meta)'}</span></div>
       </div>}
+      {live && live.pallets > 0 && <RateGraph v={live} />}
       {!open && <p className="muted small">{summary}{going ? ` · ${KIND[going.kind].toLowerCase()} since ${fmtT(going.start_at)}` : ''}{d.end_at ? ` · ended ${fmtT(d.end_at)}` : ''}</p>}
       {open && <>
         {d.is_new && <p className="cnote">Not started yet. The numbers are from the last harvest day at {site}; fix them and Save.</p>}

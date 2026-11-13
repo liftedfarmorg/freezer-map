@@ -51,6 +51,9 @@ export interface BonusView {
   speed: number | null; need: number | null; avgPalletMin: number | null
   workedH: number; estHours: number; onBreak: BonusBreak | null; variety: string | null; ended: string | null
   series: { strain: string; v: number; min: number; code: string }[]
+  /** FB-0011: each pallet's own bucking rate (its lbs over its build time, breaks out), for the rate graph */
+  perPallet: { strain: string; v: number; min: number; code: string }[]
+  boxMin: number | null
 }
 
 export function computeBonus(d: BonusData, nowMin: number): BonusView {
@@ -82,6 +85,8 @@ export function computeBonus(d: BonusData, nowMin: number): BonusView {
   let prev = box
   if (box != null) for (const p of ps) { if (prev != null && p.min > prev) gaps.push(worked(d.breaks, prev, p.min, now)); prev = p.min }
   const avgPalletMin = gaps.length ? gaps.reduce((s, g) => s + g, 0) / gaps.length : null
+  const perPallet: BonusView['perPallet'] = []
+  if (box != null && buckers) { let pv = box; for (const p of ps) { const g = worked(d.breaks, pv, p.min, now); if (g > 0) perPallet.push({ strain: p.strain, v: Number(p.lbs || 0) / (g / 60) / buckers, min: p.min, code: p.code }); pv = Math.max(pv, p.min) } }
 
   const workedH = start != null ? worked(d.breaks, start, now, now) / 60 : 0
   const remaining = live ? Math.max(0, est - workedH) : 0
@@ -101,6 +106,6 @@ export function computeBonus(d: BonusData, nowMin: number): BonusView {
   return {
     ready: missing.length === 0, missing, packed, pallets: ps.length, people, buckers, corr, hurdle, proj, won, level,
     bonusNow, bonusRate: per(packed), bonusProj, bonusAtStake, hourly, payNow: hourly + bonusNow, payProj: hourly + bonusProj,
-    speed, need, avgPalletMin, workedH, estHours: est, onBreak, variety: last?.strain ?? null, series, ended: endMin != null ? c!.end_at! : null,
+    speed, need, avgPalletMin, workedH, estHours: est, onBreak, variety: last?.strain ?? null, series, perPallet, boxMin: box ?? null, ended: endMin != null ? c!.end_at! : null,
   }
 }

@@ -207,6 +207,12 @@ export class CultApi {
     if (error && /Could not find the function|does not exist/.test(error.message)) throw new Error('Run 084_harvest_days.sql in Supabase first')
     fail(error); return data as T
   }
+  /** FB-0011 (354): cutting time per harvest from the raw bin timestamps (live-logged harvests only) */
+  async cuttingTimes(year: number, harvestId: number | null = null): Promise<CutTime[]> {
+    const { data, error } = await this.sb.rpc('cult_cutting_times', { p_year: year, p_harvest: harvestId })
+    if (error && /Could not find the function|does not exist/.test(error.message)) throw new Error('Run 354_cutting_times.sql in Supabase first')
+    fail(error); return ((data ?? []) as CutTime[]).map(r => ({ ...r, raw_lbs: Number(r.raw_lbs), cut_min: Number(r.cut_min), break_min: Number(r.break_min) }))
+  }
   harvestDay(site: string, day: string) { return this.rpc84<HarvestDay>('harvest_day_get', { p_site: site, p_day: day }) }
   saveHarvestDay(site: string, day: string, p: Partial<Record<keyof HarvestDay, string | number | null>>) { return this.rpc84<number>('harvest_day_save', { p_site: site, p_day: day, p }) }
   breakStart(site: string, day: string, kind: 'break' | 'lunch' | 'pause', at: string | null = null) { return this.rpc84<number>('harvest_break_start', { p_site: site, p_day: day, p_kind: kind, p_at: at }) }
@@ -245,3 +251,7 @@ export class CultApi {
     return (data ?? []) as LogRow[]
   }
 }
+
+/** FB-0011: one harvest's cutting time (354) */
+export interface CutTime { harvest_id: number; site: string; day: string; strain: string; bins: number; raw_lbs: number; first_at: string; last_at: string; cut_min: number; break_min: number; cutters: number | null }
+export const cutRate = (t: { raw_lbs: number; cut_min: number }) => (t.cut_min > 0 ? t.raw_lbs / (t.cut_min / 60) : null)
