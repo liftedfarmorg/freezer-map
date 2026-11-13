@@ -26,6 +26,7 @@ async function harvestByName(license, name, path = '/v2/harvests/active') {
 }
 const isCount = p => /count/i.test(p.unitOfMeasureQuantityType ?? '') || /^(ea|each)$/i.test(p.unitOfMeasureAbbreviation ?? '')
 const strainMatch = (txt, strain) => lc(txt).includes(lc(strain))
+const READ_PAGE = 200   // METRC-1097-1: plants read per call while harvesting (writes stay 25)
 /** a server error / timeout / dropped connection (METRC may or may not have done it), not METRC refusing the data */
 const serverSide = e => Number(e?.status) >= 500 || ['TimeoutError', 'AbortError'].includes(e?.name)
   || ['ECONNRESET', 'UND_ERR_SOCKET', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(e?.cause?.code ?? e?.code)
@@ -486,21 +487,28 @@ export async function sendHarvestPlants(job, ctx) {
   // details.metrc_location: harvest from this METRC location instead (the plants sit somewhere else in METRC than the app's field)
   const places = d.metrc_location ? [String(d.metrc_location)] : [...new Set([loc.location, dry.location].filter(Boolean))]
   let at = 0
+  // METRC-1097-1 (11/12): read the plants left 200 at a time and write them 25 at a time (one read per 8 writes, not
+  // one per write), to save T3 calls on big harvests. A plant METRC already harvested ("not found in flowering") is
+  // dropped and a fresh list is read; nothing went in on that call.
+  let buf = [], stale = 0
+  const bad = new Set()
   while (prog.done < plants) {
     if (Date.now() > deadline) break
     if (await stopAsked(job)) throw new Held(`Stopped: ${prog.done} of ${plants} plants harvested into ${name}. Release to carry on.`)
     const n = Math.min(WRITE_MAX, plants - prog.done)   // METRC takes 25 entries per call
     const where = places[at]
-    let got
-    try {
-      got = await t3('GET', '/v2/harvests/create/source-plants', { query: { licenseNumber: lic, pageSize: n, filter: [`locationName__eq:${where}`, `strainName__eq:${strain.name}`], filterLogic: 'and', sort: 'label:asc' } })
-    } catch (e) {
-      // NAPA-6/8: a read that times out changed nothing in METRC; try again on the next run (never fails, see hiccup)
-      if (!ctx.live || !serverSide(e)) throw e
-      return hiccup(job, prog, e, `${prog.done} of ${plants} plants harvested into ${name}. METRC didn't answer the plant list`)
+    if (!buf.length) {
+      let got
+      try {
+        got = await t3('GET', '/v2/harvests/create/source-plants', { query: { licenseNumber: lic, pageSize: ctx.live ? READ_PAGE : n, filter: [`locationName__eq:${where}`, `strainName__eq:${strain.name}`], filterLogic: 'and', sort: 'label:asc' } })
+      } catch (e) {
+        // NAPA-6/8: a read that times out changed nothing in METRC; try again on the next run (never fails, see hiccup)
+        if (!ctx.live || !serverSide(e)) throw e
+        return hiccup(job, prog, e, `${prog.done} of ${plants} plants harvested into ${name}. METRC didn't answer the plant list`)
+      }
+      buf = list(got).filter(p => Number(p.harvestCount ?? 0) === 0 && lc(p.locationName) === lc(where) && !bad.has(Number(p.id)))
     }
-    const src = list(got)
-      .filter(p => Number(p.harvestCount ?? 0) === 0 && lc(p.locationName) === lc(where))
+    const src = buf
     if (!src.length) {
       if (++at < places.length) continue
       // catch-up clean-up: METRC has this strain somewhere else (e.g. a trial entered in the wrong field). If every flowering plant
@@ -514,7 +522,8 @@ export async function sendHarvestPlants(job, ctx) {
       }
       throw new Error(`No flowering ${strain.name} plants left in ${places.join(' or ')} on ${lic} (${prog.done} of ${plants} harvested)`)
     }
-    const body = src.slice(0, n).map((p, i) => {
+    const take = buf.splice(0, n)
+    const body = take.map((p, i) => {
       const last = prog.done + i + 1 === plants
       return { actualDate: day(d.metrc_date || h.harvested_on, job), harvestName: name,   // d.metrc_date: push day while catching up (146)
         id: p.id, weight: last ? r4(wet - prog.wet - per * i) : per, dryingLocationId: dry.location_id, unitOfWeightId: lb }
@@ -528,6 +537,21 @@ export async function sendHarvestPlants(job, ctx) {
       // doesn't show them and the error was a server error / timeout, wait for the next run (which reads METRC's count
       // first, so nothing is harvested twice) instead of failing. NAPA-8: never fails on these; 5 in a row = 15 min pause between tries.
       if (!ctx.live) throw e
+      // METRC-1097-1: METRC's plant list still had a plant it had just harvested. METRC refused the whole call, so drop
+      // that plant, read a fresh list and carry on (3 in a row: wait for the next run). One recount first, to be safe.
+      if (/PLANT_IDS_IN_FLOWERING|not found in flow/i.test(`${e?.message ?? ''} ${JSON.stringify(e?.body ?? '')}`)) {
+        for (const m of `${e?.message ?? ''} ${JSON.stringify(e?.body ?? '')}`.matchAll(/id=(\d+)/g)) bad.add(Number(m[1]))
+        buf = []
+        const ex1 = await harvestByName(lic, name)
+        const real1 = ex1 ? Number(ex1.plantCount ?? 0) - prog.base : -1
+        if (real1 > prog.done) {
+          prog.done = Math.min(real1, plants); prog.wet = r4(Number(ex1.totalWetWeight ?? 0) - prog.baseWet); prog.recovered = (prog.recovered ?? 0) + 1
+          await saveProgress(job, prog); stale = 0; continue
+        }
+        prog.stale = (prog.stale ?? 0) + 1
+        if (++stale >= 3) { await saveProgress(job, prog); throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}. METRC's plant list was out of date 3 times in a row; tries again on the next run`) }
+        continue
+      }
       let ex = null, real = -1
       for (const ms of [3000, 7000, 20000]) {
         await new Promise(r => setTimeout(r, ms))
@@ -546,7 +570,7 @@ export async function sendHarvestPlants(job, ctx) {
       continue
     }
     if (!ctx.live) return { state: 'checked', request: body, response: lastResp, info: `Dry run OK: first ${body.length} of ${plants} plants into ${name} (${per} lb each) from ${loc.location}` }
-    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0)); prog.unconfirmed = 0; delete prog.retry_after
+    prog.done += body.length; prog.wet = r4(prog.wet + body.reduce((s, x) => s + x.weight, 0)); prog.unconfirmed = 0; delete prog.retry_after; stale = 0
     await saveProgress(job, prog)
   }
   if (prog.done < plants) throw new Wait(`${prog.done} of ${plants} plants harvested into ${name}; the rest go on the next run`)
