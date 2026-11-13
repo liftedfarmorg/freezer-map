@@ -938,7 +938,7 @@ export const ES: Record<string, string> = {
  "Its CCOF listing had expired on this date. Tell Compliance.": "Su registro de CCOF ya había vencido en esta fecha. Avise a Cumplimiento.",
  "(auto)": "(automático)",
  "Expected %": "% esperado",
- "Leach % = leachate volume ÷ front mL. Expected % = average of front and back mL ÷ water per plant.": "% de lixiviado = volumen de lixiviado ÷ mL del frente. % esperado = promedio de mL del frente y de atrás ÷ agua por planta.",
+ "Leach % = leachate volume ÷ (front mL × 2): the catch collects from 2 emitters.": "% de lixiviado = volumen de lixiviado ÷ (mL del frente × 2): la bandeja recoge de 2 goteros.",
  "Vehicles: inspections, maintenance, incidents": "Vehículos: inspecciones, mantenimiento, incidentes",
  "Accident, damage, injury, near miss": "Accidente, daño, lesión, casi accidente",
  "Anyone hurt?": "¿Alguien se lastimó?",
