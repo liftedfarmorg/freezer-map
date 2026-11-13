@@ -1,4 +1,4 @@
--- Migration 349 (FB-0010, Aziz; Msg FBQ-3): Leach % was double.
+-- Migration 350 (FB-0010, Aziz; Msg FBQ-3): Leach % was double.
 -- The catch collects from 2 emitters, so Leach % = leachate mL / (front emitter mL x 2) x 100 (was / front mL).
 -- Expected % is dropped (Aziz 11/12): no longer calculated or shown; old values stay in the column, unused.
 -- Recalculates every row in the app (app entries and the PhenoHunt26 / Webb2026 imports), Aziz 11/12.

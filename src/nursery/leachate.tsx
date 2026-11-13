@@ -21,7 +21,7 @@ const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number =>
 const inEc = (r: Leach) => avg([r.front_ec, r.back_ec]), inPh = (r: Leach) => avg([r.front_ph, r.back_ph])
 
 // Leach % = leachate volume out ÷ (front emitter mL x 2): the catch collects from 2 emitters (FB-0010, Aziz 11/12; was ÷ front mL, double).
-// The database (349) recalculates on every save too. Expected % dropped (Aziz 11/12).
+// The database (350) recalculates on every save too. Expected % dropped (Aziz 11/12).
 const r1 = (v: number) => Math.round(v * 10) / 10
 export function leachPct(r: Partial<Leach>): number | null {
   return r.leach_vol != null && r.front_ml != null && r.front_ml > 0 ? r1(r.leach_vol / (r.front_ml * 2) * 100) : null
