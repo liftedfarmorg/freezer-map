@@ -1,5 +1,5 @@
 -- Migration 354 (FB-0011, Jordan's harvest doc; Msg FBQ-3): cutting time per variety from the raw weight timestamps.
--- For each harvest with 3+ raw bins logged live (spread over 5+ minutes): first bin to last bin (Pacific time), stretched by one bin interval because cutting
+-- For each harvest with 3+ raw bins logged live (spread over 5 minutes to 14 hours; bins typed in the next day don't count): first bin to last bin (Pacific time), stretched by one bin interval because cutting
 -- starts before the first bin is weighed (n bins span n-1 gaps), minus break / lunch / pause minutes inside that window
 -- (from that site's Harvest day card), and the cutters on the card. Read only. Safe to re-run.
 
@@ -13,7 +13,7 @@ language sql stable security definer set search_path = public as $$
      where x.kind = 'raw' and h.crop_year = p_year and (p_harvest is null or h.id = p_harvest)
      group by h.id, h.site, h.strain
     -- bins typed in all at once afterwards (or a tiny trial cut) don't say anything about cutting speed
-    having count(*) >= 3 and max(x.created_at) - min(x.created_at) >= interval '5 minutes'),
+    having count(*) >= 3 and max(x.created_at) - min(x.created_at) between interval '5 minutes' and interval '14 hours'),
   t as (
     select w.*, (w.a at time zone 'America/Los_Angeles') la, (w.b at time zone 'America/Los_Angeles') lb,
            extract(epoch from (w.b - w.a)) / 60.0 * w.n / (w.n - 1) span
