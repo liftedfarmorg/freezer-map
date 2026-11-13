@@ -1057,3 +1057,7 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 :root[data-theme="dark"] .kpill.cal-receive { background: #1e3a8a; color: #dbeafe; }
 :root[data-theme="dark"] .kpill.cal-ship { background: #4c1d95; color: #ede9fe; }
 :root[data-theme="dark"] .kpill.cal-cut { background: #78350f; color: #fef3c7; }
+/* FB-0024: strain merge */
+.smerge { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 6px 0 10px; }
+.smerge-check { margin-top: 8px; }
+.smerge-check p { margin: 4px 0; }
