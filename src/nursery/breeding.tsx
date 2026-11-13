@@ -676,7 +676,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
             <select value={sc[k] ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSc(s => ({ ...s, [k]: v })) }}>
               <option value="">–</option>{[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}</select>
           </label>)}</div>
-          <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} /></F>
+          <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} multi /></F>
           <button className="primary" disabled={busy || !TRAITS.some(([k]) => sc[k])} onClick={saveScore}>{t(mine ? 'Update my score' : 'Save my score')}</button>
         </>}
         <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} onCount={n => { if (n !== (b.photos.get(p.id) ?? 0)) void onSaved('', true) }} />
@@ -693,7 +693,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
           <F label={t('Ideal harvest day')}><DateIn value={(gn.ideal_harvest as string | null) ?? null} onChange={v => setG('ideal_harvest', v)} /></F>
           <F label={t('Actual harvest day')} hint={t('Filled in when the pheno is harvested in the app.')}><input value={fmtD(x.harvested_on ?? null) || '—'} readOnly /></F>
         </div>
-        <F label={t('Notes')}><TextIn value={(gn._notes as string | null) ?? null} onChange={v => setG('_notes', v)} /></F>
+        <F label={t('Notes')}><TextIn value={(gn._notes as string | null) ?? null} onChange={v => setG('_notes', v)} multi /></F>
         <button className="primary" disabled={busy} onClick={saveObs}>{t('Save grower notes')}</button>
         {gMine && <span className="muted small"> {t('Saved {d}', { d: fmtD(gMine.observed_on) })}</span>}
         {gOthers.length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">

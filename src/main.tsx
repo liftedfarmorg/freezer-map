@@ -9,9 +9,11 @@ import { installTabHeader } from './tabid'
 import { installPreviewGuard } from './preview'
 import { installDragScroll } from './dragscroll'
 import { installFbCapture } from './fbcapture'
+import { installKeyboardFit } from './kbfit'
 installPreviewGuard()
 installTabHeader()
 installFbCapture()   // FB-7: remember recent errors for bug reports
+installKeyboardFit() // KB-1: pop-ups stop at the top of the phone keyboard
 
 // Msg 319: on iPhones (Chrome and Safari) the browser bars float over the page, and pop-ups pinned to the screen slid under
 // the top bar (Aziz's readout: visual viewport starts 28 px down, visible height = 100svh). Pop-ups use --vvt to start below it.

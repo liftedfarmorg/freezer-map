@@ -1067,3 +1067,11 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .fulfill tr.mdim, .fulfill .fcard.mdim { opacity: .45; }
 .fulfill .mcheck { font-size: 15px; }
 .fulfill .multibar { position: sticky; top: 0; z-index: 3; }
+
+/* Msg KB-1: phones and tablets: while the keyboard is up, pop-ups end at the top of the keyboard (see kbfit.ts),
+   so whatever you're typing in can always be scrolled into view. Notes boxes wrap and grow instead of scrolling sideways. */
+@media (max-width: 999px) {
+  .kb .app.shell .scrim { height: var(--vvh, 100svh); }
+  .kb .app.shell .scrim > .sheet { max-height: 100%; }
+}
+.field > textarea.growtext { resize: none; overflow: hidden; min-height: 48px; line-height: 1.4; padding: 11px 12px; }

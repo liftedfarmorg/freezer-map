@@ -1,5 +1,5 @@
 import { Select } from '../combo'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { lang, t } from '../i18n'
 
@@ -35,9 +35,18 @@ export function DateIn({ value, onChange }: { value: string | null | undefined; 
   return <input type="date" value={value ?? ''} onChange={e => onChange(e.target.value || null)} />
 }
 
-export function TextIn({ value, onChange, placeholder, list, autoFocus }: { value: string | null | undefined; onChange: (v: string | null) => void; placeholder?: string; list?: string; autoFocus?: boolean }) {
+export function TextIn({ value, onChange, placeholder, list, autoFocus, multi }: { value: string | null | undefined; onChange: (v: string | null) => void; placeholder?: string; list?: string; autoFocus?: boolean; multi?: boolean }) {
+  if (multi) return <GrowText value={value} onChange={onChange} placeholder={placeholder} autoFocus={autoFocus} />
   if (list) return <Combo value={value} onChange={onChange} placeholder={placeholder} list={list} autoFocus={autoFocus} />
   return <input value={value ?? ''} placeholder={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value === '' ? null : e.target.value)} />
+}
+
+/** Msg KB-1: a notes box that wraps and grows as you type, so the whole note stays readable (one-line boxes scrolled sideways). */
+function GrowText({ value, onChange, placeholder, autoFocus }: { value: string | null | undefined; onChange: (v: string | null) => void; placeholder?: string; autoFocus?: boolean }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => { const el = ref.current; if (!el) return; el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` }, [value])
+  return <textarea ref={ref} className="growtext" rows={2} value={value ?? ''} placeholder={placeholder} autoFocus={autoFocus}
+    onChange={e => onChange(e.target.value === '' ? null : e.target.value)} />
 }
 
 /** a text box with a real drop-down: the choices come from the <datalist id={list}> on the page (shown on focus, filtered as you type).
