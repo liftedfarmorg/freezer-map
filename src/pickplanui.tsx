@@ -21,7 +21,7 @@ const MODES: { k: Mode; label: string }[] = [
 const REASONS = ['Not there', 'Buried', 'Damaged', 'Other']
 /** a mixed pallet's strains, short: "A, B and 13 more" */
 const mixList = (cs: Pallet[]) => { const n = [...new Set(cs.map(c => c.strain).filter(Boolean))] as string[]; return n.length > 3 ? `${n.slice(0, 2).join(', ')} and ${n.length - 2} more` : n.join(', ') || `${cs.length} packages` }
-const boxes = (lbs: number) => lbs % 10 === 0 ? ` ${lbs / 10} boxes` : ''
+const boxes = (lbs: number) => lbs % 10 === 0 ? ` ${lbs / 10} box${lbs === 10 ? '' : 'es'}` : ''
 
 /** a row on the route: a planned pick, or a pallet already assigned (held) that still has to come out of a freezer */
 export interface RRow extends PRow { held?: boolean }
@@ -35,6 +35,65 @@ const store = {
 /** PICK-12: print a real pick sheet (every freezer, every pallet, full METRC tags, check boxes, sign-off) in its own
  *  page instead of window.print() on the app screen, which only printed what was on screen. */
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+type SheetArgs = Parameters<typeof printPickSheet>[0]
+/** the pick sheet as a PDF (phones): same content as the printed page */
+export async function pickSheetPdf(o: SheetArgs): Promise<Blob> {
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  const pdf = new jsPDF({ unit: 'pt', format: 'letter' })
+  const W = pdf.internal.pageSize.getWidth(), M = 32
+  const { groups, loc } = o
+  const nPal = groups.reduce((a, [, rs]) => a + rs.length, 0)
+  const picked = new Set(groups.flatMap(([, rs]) => rs.map(r => r.pallet.id)))
+  const planned = (id: number) => groups.reduce((a, [, rs]) => a + rs.filter(r => r.lineId === id).reduce((b, r) => b + r.lbs, 0), 0)
+  const tagTxt = (id: number) => o.tagOf?.(id)?.label
+  const hex = (c: string): [number, number, number] => { const m = /^#?([0-9a-f]{6})$/i.exec(c); const n = m ? parseInt(m[1], 16) : 0x333333; return [n >> 16 & 255, n >> 8 & 255, n & 255] }
+  const head = { fillColor: [235, 235, 235] as [number, number, number], textColor: 20, fontStyle: 'bold' as const, fontSize: 7.5 }
+  let y = M + 6
+  pdf.setFont('helvetica', 'bold').setFontSize(16).text('Pick sheet', M, y)
+  pdf.setFont('helvetica', 'normal').setFontSize(8.5).text([o.site ?? '', `Printed ${new Date().toLocaleString()}`], W - M, y - 4, { align: 'right' })
+  y += 14
+  pdf.setFontSize(9)
+  for (const x of o.orders) { pdf.text(`${x.so ?? `Order ${x.id}`}  ${x.customer}${x.po ? ` · PO ${x.po}` : ''}${x.wanted_date ? ` · wanted ${x.wanted_date}` : ''}${x.stop ? ` · ${x.stop.load}` : ''}`, M, y); y += 11 }
+  pdf.setDrawColor(20).setLineWidth(1.2).line(M, y, W - M, y); y += 13
+  pdf.setFont('helvetica', 'bold').setFontSize(10).text(`${groups.length} freezer${groups.length === 1 ? '' : 's'} · ${nPal} pallet${nPal === 1 ? '' : 's'} · ${o.splits} split${o.splits === 1 ? '' : 's'}${o.inWay ? ` · ${o.inWay} to move out of the way` : ''} · closest to the door first`, M, y)
+  y += 6
+  const lineRows = o.orders.flatMap(x => x.lines.filter(l => !l.cant_fill).map(l => {
+    const pl = o.lines.find(z => z.id === l.id), need = pl?.need ?? 0, already = Number(l.lbs) - need, short = o.short.get(l.id)
+    return { id: l.id, cells: [`${tagTxt(l.id) ? tagTxt(l.id) + ' · ' : ''}${l.strain}${l.crop_year ? ` ${l.crop_year}` : ''}`, n0(Number(l.lbs)), already > 0.5 ? n0(already) : '', n0(planned(l.id)), short ? `${n0(short)} short` : ''] } }))
+  autoTable(pdf, { startY: y, margin: { left: M, right: M }, head: [['Line', 'Ordered lbs', 'Already picked', 'On this sheet', 'Short']], body: lineRows.map(r => r.cells),
+    styles: { fontSize: 8, cellPadding: 2.5, lineColor: [190, 190, 190], lineWidth: 0.4 }, headStyles: head,
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right', textColor: [176, 0, 32], fontStyle: 'bold' } },
+    didParseCell: h => { if (h.section === 'body' && h.column.index === 0) { const t = o.tagOf?.(lineRows[h.row.index].id); if (t) h.cell.styles.textColor = hex(t.color) } } })
+  groups.forEach(([, rs], gi) => {
+    const L0 = loc(rs[0].pallet)
+    let yy = ((pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY) + 16
+    if (yy > pdf.internal.pageSize.getHeight() - 80) { pdf.addPage(); yy = M + 10 }
+    pdf.setFont('helvetica', 'bold').setFontSize(11).setTextColor(20).text(`${gi + 1}. ${L0.fzLabel}  `, M, yy)
+    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(110).text(`${rs.length} pallet${rs.length === 1 ? '' : 's'}`, M + pdf.getTextWidth(`${gi + 1}. ${L0.fzLabel}  `) * 11 / 8.5 + 2, yy)
+    pdf.setTextColor(20)
+    const way = new Map<number, Pallet>()
+    for (const r of rs) for (const id of loc(r.pallet).inFront) if (!picked.has(id)) { const p = o.pallet(id); if (p) way.set(id, p) }
+    if (way.size) { yy += 12; pdf.setFont('helvetica', 'bold').setFontSize(8.5).text(`Move out of the way first: ${[...way.values()].map(p => `${p.code} (${loc(p).spot})`).join(', ')}`, M, yy, { maxWidth: W - 2 * M }) }
+    autoTable(pdf, { startY: yy + 5, margin: { left: M, right: M },
+      head: [['', 'Spot', 'Pallet', 'METRC tag', 'Strain', 'Take lbs', 'Pallet lbs', 'Do']],
+      body: rs.map(r => {
+        const L = loc(r.pallet), p = r.pallet, mix = p.kind === 'mixed' ? o.contents(p.id) : []
+        const what = mix.length ? `Mixed pallet: ${mix.length} packages\n${mix.map(c => `${c.package_tag ?? ''} ${c.strain ?? ''} ${n0(w(c))} lbs`).join('\n')}` : (p.strain ?? '')
+        return ['', `${L.spot}\n${L.side}${L.side ? (L.front === 1 ? ', at the door' : `, ${L.front} back`) : ''}`, p.code, p.package_tag ?? '',
+          `${tagTxt(r.lineId) ? tagTxt(r.lineId) + ' · ' : ''}${what}`, n0(r.lbs), n0(w(p)), r.held ? 'Assigned' : r.whole ? 'Whole' : `Split${boxes(r.lbs).replace(/<[^>]+>/g, '')}`]
+      }),
+      styles: { fontSize: 8, cellPadding: 2.5, lineColor: [190, 190, 190], lineWidth: 0.4, valign: 'top' }, headStyles: head,
+      columnStyles: { 0: { cellWidth: 14 }, 3: { font: 'courier', fontSize: 7 }, 5: { halign: 'right', fontStyle: 'bold' }, 6: { halign: 'right' } },
+      didParseCell: h => { if (h.section === 'body' && h.column.index === 4) { const t = o.tagOf?.(rs[h.row.index].lineId); if (t) h.cell.styles.textColor = hex(t.color) } },
+      didDrawCell: h => { if (h.section === 'body' && h.column.index === 0) pdf.setDrawColor(60).setLineWidth(0.7).rect(h.cell.x + 3, h.cell.y + 3.5, 8, 8) } })
+  })
+  let fy = ((pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY) + 34
+  if (fy > pdf.internal.pageSize.getHeight() - 30) { pdf.addPage(); fy = M + 30 }
+  const cw = (W - 2 * M - 36) / 3
+  ;['Picked by', 'Checked by', 'Date / time'].forEach((t, i) => { const x = M + i * (cw + 18); pdf.setDrawColor(20).setLineWidth(0.8).line(x, fy, x + cw, fy); pdf.setFont('helvetica', 'normal').setFontSize(8.5).text(t, x, fy + 11) })
+  return pdf.output('blob')
+}
+
 export function printPickSheet(o: {
   title: string; sub?: string; site: string | null; orders: FOrder[]; groups: [number, RRow[]][]; loc: (p: Pallet) => Loc
   pallet: (id: number) => Pallet | undefined; contents: (id: number) => Pallet[]; tagOf?: (lineId: number) => Tag | undefined
@@ -82,17 +141,17 @@ export function printPickSheet(o: {
     ${fzHtml}
     <div class="sign"><div>Picked by</div><div>Checked by</div><div>Date / time</div></div>
   </body></html>`
-  // FBQ-7 (Aziz): phones (iPhone Safari / Home Screen app) can't print a hidden frame. Open the sheet as its own page
-  // with a Print button; the iPhone print sheet also does Save to Files / share.
+  // FBQ-8 (Aziz): iPhone can't print a hidden frame or a page's own Print button inside the app. Phones get a real PDF
+  // instead, opened in the phone's PDF viewer: tap Share, then Print (or save / send it).
   const phone = matchMedia('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   if (phone) {
-    const bar = `<div class="pbar"><button onclick="window.print()">Print</button><button onclick="window.close()">Close</button></div>
-      <style>.pbar{position:sticky;top:0;display:flex;gap:10px;padding:10px 0;background:#fff;z-index:2}.pbar button{font:600 17px system-ui;padding:10px 18px;border-radius:10px;border:1px solid #166534;background:#166534;color:#fff}.pbar button+button{background:#fff;color:#166534}@media print{.pbar{display:none}}</style>`
-    const page = html.replace('<body>', `<body>${bar}`).replace('</body>', '<script>setTimeout(function(){try{window.print()}catch(e){}},400)</script></body>')
-    const url = URL.createObjectURL(new Blob([page], { type: 'text/html' }))
-    const w = window.open(url, '_blank')
-    if (!w) location.href = url
-    setTimeout(() => URL.revokeObjectURL(url), 120000)
+    const win = window.open('', '_blank')   // open now, while the tap still counts
+    pickSheetPdf(o).then(blob => {
+      const url = URL.createObjectURL(blob)
+      if (win) win.location.href = url
+      else { const a = document.createElement('a'); a.href = url; a.download = 'Pick sheet.pdf'; a.click() }
+      setTimeout(() => URL.revokeObjectURL(url), 300000)
+    }).catch(e => { win?.close(); alert(`Couldn't make the pick sheet: ${(e as Error).message}`) })
     return
   }
   const f = document.createElement('iframe')
