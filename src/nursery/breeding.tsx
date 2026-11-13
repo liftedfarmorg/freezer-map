@@ -647,6 +647,16 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
     }
     return r
   }, 'Score saved', true)
+  // Msg KB-2 (Tiffani): take your own score off a pheno completely (all traits and notes), e.g. scored the wrong plant
+  const delScore = async () => {
+    if (!mine || !confirm(t('Delete your score on this pheno? All your numbers and notes for it are erased.'))) return
+    setBusy(true)
+    const { error } = await sb.from('pheno_scores').delete().eq('id', mine.id)
+    setBusy(false)
+    if (error) { flash(error.message, true); return }
+    setSc({})
+    await onSaved(t('Score deleted'), true)
+  }
   const savePheno = (v: Partial<Pheno>, ok: string) => run(() => sb.from('phenos').update({ label: v.label ?? x.label, plant_tag: v.plant_tag ?? x.plant_tag, room_id: v.room_id ?? x.room_id, bed: v.bed ?? x.bed,
     status: v.status ?? x.status, notes: v.notes ?? x.notes, cut_on: v.cut_on !== undefined ? v.cut_on : x.cut_on, cut_qty: v.cut_qty !== undefined ? v.cut_qty : x.cut_qty,
     cull_reason: v.cull_reason !== undefined ? v.cull_reason : x.cull_reason }).eq('id', p.id), ok)
@@ -678,6 +688,7 @@ function PhenoSheet({ sb, d, c, b, p, lot, me, admin, flash, onClose, onSaved }:
           </label>)}</div>
           <F label={t('Notes')}><TextIn value={sc.notes} onChange={v => setSc(s => ({ ...s, notes: v }))} placeholder={t('Smells like…')} multi /></F>
           <button className="primary" disabled={busy || !TRAITS.some(([k]) => sc[k])} onClick={saveScore}>{t(mine ? 'Update my score' : 'Save my score')}</button>
+          {mine && <button className="ghost danger" disabled={busy} onClick={delScore} style={{ marginLeft: 8 }}>{t('Delete my score')}</button>}
         </>}
         <PhenoPhotos sb={sb} phenoId={p.id} me={me} admin={admin} flash={flash} onCount={n => { if (n !== (b.photos.get(p.id) ?? 0)) void onSaved('', true) }} />
         {others.length > 0 && <><h3>{t('Everyone else')}</h3><div className="cwrap tight"><table className="ctable">
