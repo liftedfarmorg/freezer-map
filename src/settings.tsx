@@ -1,6 +1,7 @@
 import { Select } from './combo'
 import { Fold } from './fold'
 import { DEFAULT_CATEGORIES, DEFAULT_NURSERIES, MultiPick, NURSERIES_KEY, PRODUCT_CATEGORIES_KEY, useCatList } from './catlists'
+import { StrainGrowth } from './strainGrowth'
 import { OnStrainTab, StrainProfileEdit, StrainTab, eff, loadProfiles, mmdd, yieldRange } from './strains'
 import { StrainWhere } from './strainWhere'
 import type { StrainProfile } from './strains'
@@ -711,6 +712,7 @@ export function EditForm({ list, row, busy, onClose, onSave, extra, terms, carri
         {!colorOk && <div className="warn-t">Color must look like #A1B2C3</div>}
         {!isCust && list !== 'strains' && carrier}
         {strainTabs ? <StrainTab.Provider value={stab}>{extra}</StrainTab.Provider> : extra}
+        {strainTabs && stab === 'cultivation' && <StrainGrowth sb={sb ?? null} name={String(row.name ?? '')} aliases={(row as Strain).aliases ?? []} />}
         {strainTabs && stab === 'details' && <StrainWhere compact onOpen={() => setStab('where')} sb={sb ?? null} name={String(row.name ?? '')} aliases={(row as Strain).aliases ?? []} />}
         {locked && <p className="muted">{String(row.name)} is a Lifted site. You can edit its details but not rename or retire it.</p>}
         {readOnly ? <div className="row between fbar"><span className="muted">View only</span><button className="ghost" onClick={onClose}>Close</button></div> : <div className="row between fbar">
