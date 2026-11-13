@@ -1,5 +1,5 @@
 import { Select } from './combo'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { Backend } from './api'
 import type { Balance, Customer, Invoice, NewOrderLine, PaymentTerm, Product, Strain } from './types'
 import { PRODUCT_LABEL, SALE_PRODUCTS } from './types'
@@ -404,7 +404,7 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
     <div className="no-sum-lines">{!used.length ? <p className="muted small" style={{ margin: 14 }}>Type lbs next to a strain. Lines show up here.</p>
       : used.map(p => { const k = pkey(p.product, p.strain, p.year), pr = priceOf(p)
         return <div key={k} className={`no-sline ${overOf(p) != null ? 'bad' : ''}`}><div className="grow"><b>{p.strain}</b> {p.year !== CUR_YEAR && <span className="muted small">{p.year}</span>}
-          <div className="muted small">{PRODUCT_LABEL[p.product]}{p.sample ? ' · sample' : ''}{overOf(p) != null ? ` · only ${n0f(overOf(p)!)} available` : ''}</div></div>
+          <div className="muted small">{PRODUCT_LABEL[p.product]}{p.sample ? (Number(p.hold || 0) > 0 ? ` · sample, holds ${n0f(Number(p.hold))} lbs` : ' · sample, no hold') : ''}{overOf(p) != null ? ` · only ${n0f(overOf(p)!)} available` : ''}</div></div>
           <span className="nw">{n0f(Number(p.lbs))} lbs</span><span className="nw">{pr != null ? usd(pr * Number(p.lbs)) : 'on invoice'}</span>
           <button className="linkbtn" aria-label={`Remove ${p.strain}`} onClick={() => setPicks(ps => { const n = { ...ps }; delete n[k]; return n })}>✕</button></div> })}</div>
     <div className="no-tot"><div><span className="muted">Total lbs</span><b>{n0f(lbsT)}</b></div><div><span className="muted">Product</span><span>{usd(dolT)}</span></div>
@@ -441,22 +441,37 @@ export function NewOrderSheet({ backend, customers, strains, flash, onClose, onD
               <div className="no-tabs"><span className="no-h">2 · What they want</span>{SALE_PRODUCTS.map(p => <button key={p} className={tab === p ? 'on' : ''} onClick={() => { setTab(p); setQ('') }}>{PRODUCT_LABEL[p]}{nIn(p) > 0 && <b>{nIn(p)}</b>}</button>)}</div>
               <input className="search" type="search" placeholder="Search strains" value={q} onChange={e => setQ(e.target.value)} aria-label="Search strains" />
               {loading ? <p className="muted">Loading what's available…</p> : !opts.length ? <p className="muted">Nothing available{q ? ` for "${q}"` : ''}.</p> :
-                <div className="no-twrap"><table className="ctable no-table"><thead><tr><th>Strain</th><th className="num">Open</th>{tab === 'fresh_frozen' && <th className="num">Their reserve</th>}<th className="num">$/lb</th><th className="num">Lbs</th>{tab === 'fresh_frozen' && <th />}</tr></thead>
+                <div className="no-twrap"><table className={`ctable no-table ${tab === 'fresh_frozen' ? 'ff' : ''}`}>
+                  {/* SAMPLE-UX-1: fixed column widths so the $/lb and Lbs boxes never get squeezed; the sample hold moved to its own row under the line */}
+                  <colgroup><col className="w-n" /><col className="w-o" />{tab === 'fresh_frozen' && <col className="w-r" />}<col className="w-p" /><col className="w-l" />{tab === 'fresh_frozen' && <col className="w-s" />}</colgroup>
+                  <thead><tr><th>Strain</th><th className="num">Open</th>{tab === 'fresh_frozen' && <th className="num">Their reserve</th>}<th className="num">$/lb</th><th className="num">Lbs</th>{tab === 'fresh_frozen' && <th className="ctr">Sample</th>}</tr></thead>
                   <tbody>{opts.map(o => { const k = pkey(tab, o.strain, o.year), p = picks[k], base = { product: tab, strain: o.strain, year: o.year }, auto = autoPrice(tab, o.year, o.strain)
-                    const over = p && overOf(p) != null
-                    return <tr key={k} className={p && Number(p.lbs) > 0 ? (over ? 'bad' : 'on') : ''}>
+                    const over = p && overOf(p) != null, has = !!p && Number(p.lbs) > 0, smp = has && tab === 'fresh_frozen' && !!p!.sample
+                    const holdN = smp ? Number(p!.hold || 0) : 0, room = Math.max(0, o.open + o.res - (has ? Number(p!.lbs) : 0))
+                    return <Fragment key={k}><tr className={`${has ? (over ? 'bad' : 'on') : ''} ${smp ? 'smp-on' : ''}`}>
                       <td className="c-n"><b>{o.strain}</b> {o.year !== CUR_YEAR && <span className="muted small">{o.year} crop</span>}</td>
                       <td className="num c-o" data-l="open ">{n0f(o.open)}</td>
                       {tab === 'fresh_frozen' && <td className={`num c-r ${o.res > 0 ? 'resv' : 'muted'}`} data-l="their reserve ">{o.res > 0 ? n0f(o.res) : '—'}</td>}
                       <td className="num c-p"><input className="qty price" type="number" step="0.25" min="0" inputMode="decimal" aria-label={`$/lb for ${o.strain}`}
-                        placeholder={auto == null ? 'set later' : ''} value={p?.price !== undefined ? p.price : auto != null ? String(auto) : ''} onChange={e => setPick(k, base, { price: e.target.value })} /></td>
+                        placeholder={auto == null ? 'later' : ''} value={p?.price !== undefined ? p.price : auto != null ? String(auto) : ''} onChange={e => setPick(k, base, { price: e.target.value })} /></td>
                       <td className="num c-l"><input className={`qty ${over ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" placeholder="0" aria-label={`Lbs of ${o.strain}`}
                         value={p?.lbs ?? ''} onChange={e => setPick(k, base, { lbs: e.target.value })} />{over && <div className="warn-t small">only {n0f(availOf(p!))}</div>}</td>
-                      {tab === 'fresh_frozen' && <td className="c-s">{p && Number(p.lbs) > 0 && <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-                        <button className={`smp ${p.sample ? 'on' : ''}`} aria-pressed={!!p.sample} onClick={() => setPick(k, base, { sample: !p.sample })}>Sample</button>
-                        {p.sample && <input className="qty" type="number" step="10" min="0" placeholder="hold" aria-label="Lbs to hold" value={p.hold ?? ''} onChange={e => setPick(k, base, { hold: e.target.value })} />}</span>}</td>}
-                    </tr> })}</tbody></table></div>}
-              {used.some(l => l.sample) && <p className="muted small">Sample lines hold the "hold" lbs for {c?.name ?? 'the customer'} from now until {c?.sample_hold_days ?? 10} days after the order ships. Cancelling the order drops the hold.</p>}
+                      {tab === 'fresh_frozen' && <td className="c-s ctr">{has
+                        ? <button className={`smp ${p!.sample ? 'on' : ''}`} aria-pressed={!!p!.sample} title="Make this line a sample and hold product for the customer"
+                            onClick={() => setPick(k, base, { sample: !p!.sample })}>{p!.sample ? '✓ Sample' : 'Sample'}</button>
+                        : <span className="muted small">—</span>}</td>}
+                    </tr>
+                    {smp && <tr className="no-hrow"><td colSpan={6}>
+                      <div className="no-hold">
+                        <span className="no-hold-l">Hold for {c?.name ?? 'the customer'}</span>
+                        <input className={`qty ${holdN > room ? 'bad' : ''}`} type="number" step="10" min="0" inputMode="numeric" placeholder="lbs" aria-label={`Lbs of ${o.strain} to hold`} autoFocus
+                          value={p!.hold ?? ''} onChange={e => setPick(k, base, { hold: e.target.value })} />
+                        <span className="muted">lbs</span>
+                        <span className="no-hold-q">{[100, 250, 500, 1000].filter(n => n <= Math.max(room, 100)).map(n => <button key={n} className={`chip ${holdN === n ? 'on' : ''}`} onClick={() => setPick(k, base, { hold: String(n) })}>{n.toLocaleString()}</button>)}</span>
+                        <span className="muted small no-hold-t">{holdN > 0 ? `${holdN > room ? `Only ${n0f(room)} more open after this order. ` : ''}Held until ${c?.sample_hold_days ?? 10} days after the sample ships.` : 'No hold yet: the sample ships but nothing is held for them.'}</span>
+                      </div></td></tr>}
+                  </Fragment> })}</tbody></table></div>}
+              {used.some(l => l.sample) && <p className="muted small">Sample holds take the lbs off the open menu for {c?.name ?? 'the customer'} once the order is confirmed, until {c?.sample_hold_days ?? 10} days after it ships. What they order of it after that uses the hold up. Cancelling the order drops the hold. See them all in Reserves › Sample holds.</p>}
             </section>
             <section className="no-sec">
               <button className="linkbtn no-det" onClick={() => setDet(!det)}>{det ? '▾' : '▸'} 3 · Details <span className="muted">PO, delivery date, terms, shipping, notes</span></button>

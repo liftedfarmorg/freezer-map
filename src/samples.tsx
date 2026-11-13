@@ -13,8 +13,8 @@ const live = (h: SampleHold) => h.state === 'waiting' || h.state === 'active'
 export const holdLine = (h: SampleHold) => h.state === 'waiting' ? 'holding, clock starts when the sample ships' : h.state === 'active' ? `held until ${d(h.until)}` : STATE_L[h.state].toLowerCase()
 
 /** a customer's (or everyone's) sample holds. Staff can release or extend. */
-export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample holds', showCustomer, rev = 0, onChanged }: {
-  backend: Backend; customerId?: number | null; staff?: boolean; flash?: (t: string, bad?: boolean) => void; title?: string; showCustomer?: boolean; rev?: number; onChanged?: () => void
+export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample holds', showCustomer, rev = 0, onChanged, q = '' }: {
+  backend: Backend; customerId?: number | null; staff?: boolean; flash?: (t: string, bad?: boolean) => void; title?: string; showCustomer?: boolean; rev?: number; onChanged?: () => void; q?: string
 }) {
   const [rows, setRows] = useState<SampleHold[] | null>(null)
   const [past, setPast] = useState(false)
@@ -22,16 +22,29 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
   const load = () => backend.sampleHolds(customerId, past).then(setRows).catch(() => setRows([]))
   useEffect(() => { load() }, [customerId, past, rev])
   if (!rows) return null
+  const ql = q.trim().toLowerCase()
+  // SAMPLE-UX-1: search, live ones first (soonest to run out on top), then by customer
+  const rank = (h: SampleHold) => live(h) ? 0 : h.state === 'submitted' ? 1 : 2
   const shown = rows.filter(h => past || live(h) || h.state === 'submitted' || (h.until && h.until >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)))
+    .filter(h => !ql || (h.customer ?? '').toLowerCase().includes(ql) || h.strain.toLowerCase().includes(ql) || (h.so_number ?? '').toLowerCase().includes(ql))
+    .sort((a, b) => rank(a) - rank(b) || (a.until ?? '9').localeCompare(b.until ?? '9') || (a.customer ?? '').localeCompare(b.customer ?? '') || a.strain.localeCompare(b.strain))
   if (!shown.length && !staff) return null
+  const liveRows = rows.filter(live), soon = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
+  const daysLeft = (h: SampleHold) => h.until ? Math.round((new Date(h.until + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
   async function act(h: SampleHold, release: boolean, until?: string) {
     try { await backend.setSampleHold(h.line_id, release, until ?? null); flash?.(release ? `${h.strain} hold released` : `${h.strain} held until ${d(until)}`); setExt(null); await load(); onChanged?.() }
     catch (e) { flash?.(String((e as Error).message ?? e), true) }
   }
   return (
     <div className="sholds">
+      {showCustomer && staff && <div className="sh-kpis">
+        <div><span>Holding now</span><b>{n0(liveRows.reduce((a, h) => a + Number(h.remaining ?? 0), 0))} lbs</b></div>
+        <div><span>Holds</span><b>{liveRows.length}</b></div>
+        <div><span>Customers</span><b>{new Set(liveRows.map(h => h.customer)).size}</b></div>
+        <div className={liveRows.some(h => h.state === 'active' && h.until && h.until <= soon) ? 'warn' : ''}><span>Ending in 3 days</span><b>{liveRows.filter(h => h.state === 'active' && h.until && h.until <= soon).length}</b></div>
+      </div>}
       <h3>{title} {staff && <label className="check small-check sh-past"><input type="checkbox" checked={past} onChange={e => setPast(e.target.checked)} /> Show old ones</label>}</h3>
-      {!shown.length ? <p className="muted">No sample holds right now. Check "Sample order" on an order to hold product while the customer tries it.</p> : (
+      {!shown.length ? <p className="muted">{ql ? `No sample holds match "${q}".` : 'No sample holds right now. On a new order, type the lbs, tap Sample and enter how much to hold while the customer tries it.'}</p> : (
         <div className="cwrap"><table className="restable wide">
           <thead><tr>{showCustomer && <th>Customer</th>}<th>Strain</th><th className="num">Held</th><th>Status</th>{staff && <th className="hide-s">Sample</th>}{staff && <th />}</tr></thead>
           <tbody>{shown.map(h => <tr key={h.line_id} className={live(h) ? '' : 'muted'}>
@@ -39,7 +52,7 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
             <td>{h.strain}{h.crop_year !== new Date().getFullYear() && <span className="pill old">{h.crop_year} crop</span>}</td>
             <td className="num"><b>{n0(live(h) ? h.remaining : h.hold_lbs)}</b>{h.used_lbs > 0 && <div className="muted small">{n0(h.used_lbs)} of {n0(h.hold_lbs)} ordered</div>}</td>
             <td><span className={`pill ${h.state === 'active' ? 'cp-ok' : h.state === 'waiting' || h.state === 'submitted' ? 'cp-warn' : 'cp-mute'}`}>{STATE_L[h.state]}</span>
-              {h.state === 'active' && <div className="muted small">until {d(h.until)}</div>}</td>
+              {h.state === 'active' && <div className="muted small">until {d(h.until)}{daysLeft(h) != null && daysLeft(h)! >= 0 ? ` · ${daysLeft(h) === 0 ? 'ends today' : `${daysLeft(h)} day${daysLeft(h) === 1 ? '' : 's'} left`}` : ''}</div>}</td>
             {staff && <td className="hide-s small">{h.so_number ?? `#${h.order_id}`}{h.shipped_on ? ` · shipped ${d(h.shipped_on)}` : ''}</td>}
             {staff && <td className="nowrap">
               {ext?.id === h.line_id

@@ -51,13 +51,13 @@ async function readRoshi(f: File): Promise<RoshiRow[]> {
   }).filter(r => /FL2[56]/.test(r.sku_name) && /fresh frozen/i.test(r.sku_name) && r.so_number)
 }
 
-export type SalesMode = 'customer' | 'strain' | 'orders' | 'requests' | 'menu'
-export const SALES_TITLES: Record<SalesMode, string> = { menu: 'Open menu', orders: 'Orders', requests: 'Requests', customer: 'Reserves by customer', strain: 'Reserves by strain' }
+export type SalesMode = 'customer' | 'strain' | 'samples' | 'orders' | 'requests' | 'menu'
+export const SALES_TITLES: Record<SalesMode, string> = { menu: 'Open menu', orders: 'Orders', requests: 'Requests', customer: 'Reserves by customer', strain: 'Reserves by strain', samples: 'Sample holds' }
 
 /** Sales screens. The Sales module menu picks the screen (mode); isAdmin = Sales Admin (approvals, reserves, deadlines). */
-export function ReservesView({ backend, customers, strains, onHand, flash, isAdmin, mode, onCounts, fulfil, onFulfil, onNewOrder, onDoc, onInvoice }: {
+export function ReservesView({ backend, customers, strains, onHand, flash, isAdmin, mode, onMode, onCounts, fulfil, onFulfil, onNewOrder, onDoc, onInvoice }: {
   backend: Backend; customers: Customer[]; strains: Strain[]; onHand: Map<string, number>
-  flash: (t: string, bad?: boolean) => void; isAdmin: boolean; mode: SalesMode; onCounts?: () => void
+  flash: (t: string, bad?: boolean) => void; isAdmin: boolean; mode: SalesMode; onMode?: (m: SalesMode) => void; onCounts?: () => void
   fulfil?: Map<number, FOrder>; onFulfil?: () => Promise<void>
   onNewOrder?: () => void; onDoc?: (kind: 'invoice' | 'so', id: number) => void; onInvoice?: (orderId: number) => void
 }) {
@@ -173,6 +173,9 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 
   return (
     <div className="list reserves">
+      {/* SAMPLE-UX-1: Reserves section tabs; Sample holds lives here now (it used to sit on top of Requests) */}
+      {(mode === 'customer' || mode === 'strain' || mode === 'samples') && onMode && <div className="seg restabs">
+        {(['customer', 'strain', 'samples'] as SalesMode[]).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => onMode(m)}>{m === 'customer' ? 'By customer' : m === 'strain' ? 'By strain' : 'Sample holds'}</button>)}</div>}
       <h2>{SALES_TITLES[mode]} {(mode === 'customer' || mode === 'strain') && <span className="muted">{cur} reserves: {n0(sum(allBal.filter(r => (r.crop_year ?? cur) === cur), 'remaining'))} lbs left of {n0(sum(allBal.filter(r => (r.crop_year ?? cur) === cur), 'reserved'))}</span>}</h2>
       <div className="row toolbar">
         <input className="search" type="search" placeholder="Search customer, strain or SO #" value={q} onChange={e => setQ(e.target.value)} />
@@ -180,7 +183,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
           ? <>{onNewOrder && <button className="primary" onClick={onNewOrder}>+ New order</button>}
             <label className={`ghost filebtn ${busy ? 'disabled' : ''}`}>{busy ? 'Importing…' : 'Import Roshi orders'}
               <input type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile(f) }} /></label></>
-          : isAdmin && mode !== 'requests' && mode !== 'menu' && <button className="primary" onClick={() => setAdding({ preset: focus?.id ?? null })}>+ Add reserves</button>}
+          : isAdmin && mode !== 'requests' && mode !== 'menu' && mode !== 'samples' && <button className="primary" onClick={() => setAdding({ preset: focus?.id ?? null })}>+ Add reserves</button>}
       </div>
       {result && (
         <div className="okbox">
@@ -407,7 +410,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
         <OpenMenu backend={backend} reserves={false} />
       </>}
 
-      {mode === 'requests' && <SampleHolds backend={backend} staff showCustomer flash={flash} rev={holdRev} onChanged={load} />}
+      {mode === 'samples' && <SampleHolds backend={backend} staff showCustomer flash={flash} rev={holdRev} onChanged={load} q={q} title="" />}
       {mode === 'requests' && <RequestsPanel backend={backend} reqs={reqs.filter(r => !ql || cname(r.customer_id).toLowerCase().includes(ql) || r.strain.toLowerCase().includes(ql))}
         nums={nums} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={load} />}
 

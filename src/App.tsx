@@ -949,7 +949,7 @@ export default function App() {
   ]
   const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
   const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
-    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback'), sItem('yields', 'Reported Yields')]
+    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('samples', 'Sample holds'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback'), sItem('yields', 'Reported Yields')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
@@ -1249,7 +1249,7 @@ export default function App() {
           if (salesTab === 'invoices') return <InvoicesView backend={backend} customers={snap.customers ?? []} flash={flash} isAdmin={salesAdmin} sender={me?.display_name} />
           if (salesTab === 'settings') return salesSettings
           if (salesTab === 'customers') return customersHome(isAdminOf('sales') ? 'sales-cust' : 'sales-cust-ro', !isAdminOf('sales'))
-          return <ReservesView key={`sales-${ordersKey}`} backend={backend} flash={flash} isAdmin={salesAdmin} mode={salesTab} onCounts={refreshCounts} fulfil={new Map((forders ?? []).map(f => [f.id, f]))} onFulfil={refreshF} customers={snap.customers ?? []}
+          return <ReservesView key={`sales-${ordersKey}`} backend={backend} flash={flash} isAdmin={salesAdmin} mode={salesTab} onMode={goS} onCounts={refreshCounts} fulfil={new Map((forders ?? []).map(f => [f.id, f]))} onFulfil={refreshF} customers={snap.customers ?? []}
             onNewOrder={() => setNewOrder(true)} onDoc={(k, id) => setDoc({ kind: k, id })}
             onInvoice={async id => { try { const inv = await backend.makeInvoice(id); setDoc({ kind: 'invoice', id: inv.id }) } catch (e) { flash(String((e as Error).message ?? e), true) } }} strains={snap.strains ?? []}
             onHand={snap.pallets.reduce((m, p) => (p.kind !== 'mixed' && p.strain && (p.status === 'in_freezer' || p.status === 'unslotted'))

@@ -961,3 +961,46 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .sw-mini-go { margin-left: auto; color: var(--brand); font-weight: 700; }
 /* STRAIN-INV-6: Grown from pill */
 .pill.gf-seed { background: #fbf1dc; color: #8a5a12; } .pill.gf-clone { background: #e6f4ea; color: #2b6a3f; }
+
+/* SAMPLE-UX-1: New sales order lines. Fixed columns so the $/lb and Lbs boxes always show their numbers;
+   the sample hold sits on its own row under the line instead of squeezing into the last column. */
+.no2 .no-table { table-layout: fixed; }
+.no2 .no-table col.w-o { width: 70px; }
+.no2 .no-table col.w-r { width: 76px; }
+.no2 .no-table col.w-p { width: 92px; }
+.no2 .no-table col.w-l { width: 104px; }
+.no2 .no-table col.w-s { width: 96px; }
+.no2 .no-table th, .no2 .no-table td { padding-left: 6px; padding-right: 6px; }
+.no2 .no-table thead th { white-space: normal; line-height: 1.15; vertical-align: bottom; }
+.no2 .no-table th.ctr, .no2 .no-table td.ctr { text-align: center; }
+.no2 .no-table td.c-n b { overflow-wrap: anywhere; }
+.no2 .no-table td.c-p .qty, .no2 .no-table td.c-l .qty { width: 100%; min-width: 0; max-width: 92px; box-sizing: border-box; }
+.no2 .no-table td.c-s .smp { width: 100%; max-width: 88px; }
+.no2 .no-table tr.smp-on > td { border-bottom: 0; }
+.no2 .no-table tr.no-hrow > td { background: #fdf8e6; padding: 8px 10px 10px; }
+.no2 .no-hold { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.no2 .no-hold-l { font-size: 13px; font-weight: 600; color: #6b5200; }
+.no2 .no-hold .qty { width: 92px; box-sizing: border-box; }
+.no2 .no-hold-q { display: inline-flex; gap: 4px; }
+.no2 .no-hold-q .chip { border: 1px solid #e2c76a; background: var(--panel); cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; color: #6b5200; }
+.no2 .no-hold-q .chip.on { background: #fbf3cf; }
+.no2 .no-hold-t { flex-basis: 100%; }
+@media (max-width: 999px) {
+  .no2 .no-table colgroup { display: none; }
+  .no2 .no-table { table-layout: auto; }
+  .no2 .no-table td.c-p .qty, .no2 .no-table td.c-l .qty { width: 84px; max-width: none; }
+  .no2 .no-table td.c-s { text-align: left; }
+  .no2 .no-table td.c-s .muted { display: none; }
+  .no2 .no-table td.c-s .smp { width: auto; max-width: none; }
+  .no2 .no-table tr.no-hrow { display: block; padding: 0 0 10px; border-bottom: 1px solid var(--line); background: #fdf8e6; }
+  .no2 .no-table tr.no-hrow > td { display: block; background: #fdf8e6 !important; padding: 8px 6px; }
+  .no2 .no-table tr.smp-on { border-bottom: 0; }
+}
+/* SAMPLE-UX-1: Reserves section tabs + Sample holds summary */
+.reserves .restabs { margin: 0 0 10px; }
+.sholds .sh-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.sholds .sh-kpis > div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; display: grid; gap: 2px; }
+.sholds .sh-kpis > div.warn { background: #fbf3cf; border-color: #e2c76a; }
+.sholds .sh-kpis span { font-size: 12px; color: var(--muted); }
+.sholds .sh-kpis b { font-size: 18px; }
+@media (max-width: 700px) { .sholds .sh-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
