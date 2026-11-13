@@ -164,6 +164,9 @@ insert into ff_sheet values
 
 update ff_sheet set strain = 'Violet Torque' where strain = 'Newport Punch #6';
 update ff_sheet set strain = 'MBxBP x Pressure #5' where strain = 'MB x BP x P #5';
+update ff_sheet set strain = 'Dragonfruit Soda' where strain = 'Dragon Fruit  Soda';
+-- Strawberry Chocolate #30 has two plantings in the app, both 7/21 (60 plants each): both get the date
+update ff_sheet set planted_on = '2026-07-21' where strain = 'Strawberry Chocolate #30' and planted_on is null;
 create temp table ff_match on commit drop as
 select p.id, p.strain, p.planted_on, s.first_flower, p.first_flower as had
   from ff_sheet s join cult_plantings p
