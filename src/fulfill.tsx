@@ -147,7 +147,9 @@ export function FulfillView(props: FulfillProps) {
             <div className="fcards">{os.map(o => {
               const want = orderLbs(o), have = orderGot(o)
               const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
-              const when = g === 'shipped' ? (o.shipped_date ? `Shipped ${fmt(o.shipped_date)}` : '') : o.wanted_date ? `Wanted ${fmt(o.wanted_date)}` : o.order_date ? `Ordered ${fmt(o.order_date)}` : ''
+              // Msg FUL-DATE-1: phones show the requested delivery date on every card (plus the order date), not one or the other
+              const when = g === 'shipped' ? (o.shipped_date ? `Shipped ${fmt(o.shipped_date)}` : '') : o.order_date ? `Ordered ${fmt(o.order_date)}` : ''
+              const asked = g === 'shipped' ? null : o.wanted_date ? `Requested delivery ${fmt(o.wanted_date)}${late ? ' · late' : ''}` : 'No delivery date requested'
               return (
                 <button key={o.id} className={`fcard${multi && multi.has(o.id) ? ' msel' : ''}${multi && !canMulti(o) ? ' mdim' : ''}`} onClick={() => tap(o)}>
                   <span className="fcard-top"><b>{multi && canMulti(o) && <span className="mcheck">{multi.has(o.id) ? '☑' : '☐'} </span>}{o.customer}</b>
@@ -157,7 +159,8 @@ export function FulfillView(props: FulfillProps) {
                       : g === 'shipped' && o.stop?.stop_status === 'delivered' ? 'Delivered' : STATE_LABEL[g]}</span></span>
                   <span className="muted small">{o.so ?? `Order #${o.id}`} · {o.lines.length} strain{o.lines.length === 1 ? '' : 's'} · <b>{n0(want)} lbs</b></span>
                   {(g === 'open' || g === 'needs_ok') && <span className="fcard-m"><Meter value={have} max={want} tone={have > 0 ? 'ok' : undefined} /><span className="muted small">{n0(have)} picked</span></span>}
-                  {(when || o.stop) && <span className="small"><span className={late ? 'bad-t' : 'muted'}>{when}</span>{o.stop ? <span className="muted">{when ? ' · ' : ''}{o.stop.load} {fmt(o.stop.load_date)}</span> : null}</span>}
+                  {asked && <span className="small"><span className={late ? 'bad-t' : o.wanted_date ? '' : 'muted'}>{o.wanted_date ? <b>{asked}</b> : asked}</span></span>}
+                  {(when || o.stop) && <span className="small"><span className="muted">{when}</span>{o.stop ? <span className="muted">{when ? ' · ' : ''}{o.stop.load} {fmt(o.stop.load_date)}</span> : null}</span>}
                 </button>
               )
             })}</div>
