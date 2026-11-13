@@ -562,6 +562,7 @@ function OrderEditor({ backend, o, strains, flash, onChanged, isAdmin }: {
   const [edits, setEdits] = useState<Record<number, { lbs: string; price: string; year: number }>>({})
   const cy = new Date().getFullYear()
   const [add, setAdd] = useState({ strain: '', lbs: '' })
+  const [allPrice, setAllPrice] = useState('') // FB-0012: one $/lb on every line
   const [busy, setBusy] = useState(false)
   // Add a strain: what this customer can order right now = open menu + their own reserve left, per strain + crop year
   const [avail, setAvail] = useState<{ k: string; strain: string; year: number; open: number; res: number }[] | null>(null)
@@ -641,6 +642,16 @@ function OrderEditor({ backend, o, strains, flash, onChanged, isAdmin }: {
             <td className="num"><input className="qty" type="number" step="10" min="0" placeholder="lbs" value={add.lbs} onChange={e => setAdd({ ...add, lbs: e.target.value })} /></td>
             <td className="muted small">{addOver ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}>Only {n0(addMax)} lbs available</span> : 'customer price'}</td>
             <td className="num"><button className="ghost small" disabled={busy || !addPick || !(Number(add.lbs) > 0) || addOver} onClick={() => run(addLine, 'Line added')}>Add</button></td></tr>}
+          {open_ && o.order_lines.length > 1 && <tr className="allprice"><td className="muted small">Set all prices <span title="Lines with a contract price for that product keep it">(contract prices kept)</span></td>
+            <td />
+            <td className="num"><input className="qty" type="number" step="0.5" min="0" placeholder="$/lb" value={allPrice} onChange={e => setAllPrice(e.target.value)} aria-label="One price for every line" /></td>
+            <td className="num"><button className="ghost small" disabled={busy || allPrice === '' || !(Number(allPrice) >= 0)} onClick={() => run(async () => {
+              const { data, error } = await backend.client()!.rpc('set_order_prices', { p_order: o.id, p_price: Number(allPrice) })
+              if (error) throw new Error(/set_order_prices|schema cache/i.test(error.message) ? `${error.message} (run 348_set_order_prices.sql in Supabase)` : error.message)
+              const r = data as { changed: number; skipped: string[] }
+              setAllPrice('')
+              if (r.skipped.length) setTimeout(() => flash(`Contract price kept on ${r.skipped.join(', ')}`), 1800)
+            }, `All lines at $${Number(allPrice).toFixed(2)}/lb`)}>Set all</button></td></tr>}
           <tr><td colSpan={open_ ? 4 : 3}>
             <div className="muted">{total > 0 && <>Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · </>}{o.po_number && <>PO {o.po_number} · </>}{o.wanted_date && !open_ && <>requested delivery {fmtDate(o.wanted_date)} · </>}{o.placed_by && <>placed by {o.placed_by}</>}{o.confirmed_by && <> · confirmed by {o.confirmed_by}</>}</div>
             {o.notes && <div className="muted">"{o.notes}"</div>}
