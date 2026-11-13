@@ -72,7 +72,7 @@ export function SalesDashboard({ backend, customers, isAdmin, go }: { backend: B
         <Tile label="Reserve requests" value={pend.length} sub={pend.length ? `${plural(new Set(pend.map(r => r.customer_id)).size, 'customer')} waiting${isAdmin ? '' : ' (Sales Admin approves)'}` : 'none waiting'} tone={pend.length ? (isAdmin ? 'warn' : 'info') : 'ok'} foot={pend.length ? 'Review' : undefined} onClick={() => go('requests')} />
         <Tile label={`${cur} reserves left`} value={`${n0(S('remaining'))} lbs`} sub={`of ${n0(S('reserved'))} reserved · ${n0(S('shipped'))} shipped`} onClick={() => go('customer')} />
         {holds.length > 0 && <Tile label="Sample holds" value={`${Math.round(holds.reduce((a, h) => a + Number(h.remaining), 0)).toLocaleString()} lbs`}
-          sub={`${holds.length} hold${holds.length === 1 ? '' : 's'}${holds.some(h => h.until && h.until <= new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)) ? ' · some end in 3 days' : ''}`} onClick={() => go('requests')} />}
+          sub={`${holds.length} hold${holds.length === 1 ? '' : 's'}${holds.some(h => h.until && h.until <= new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)) ? ' · some end in 3 days' : ''}`} onClick={() => go('samples')} />}
         <Tile label="Open menu" value={`${n0(free)} lbs`} sub={`free to sell across ${menu.filter(m => Number(m.free) > 0).length} strains`} onClick={() => go('menu')} />
         <Tile wide label="Sold this month" value={`${n0(lbsMonth)} lbs`} onClick={() => go('orders')}
           range={<><Legend now={moName(t0)} then={moName(lmD)} /><span>Month to date</span></>}
