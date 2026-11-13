@@ -1318,3 +1318,12 @@ a.btnlink { display: inline-flex; align-items: center; text-decoration: none; co
 .fbinbox .seg.setf { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
 .fbinbox .seg.setf::-webkit-scrollbar { display: none; }
 .fbinbox .seg.setf > button { flex: none; white-space: nowrap; }
+
+/* Msg FB-10: Feedback & Bugs inbox, pick rows for Mark done / Delete */
+.fbtable th.fbpick, .fbtable td.fbpick { width: 34px; text-align: center; }
+.fbtable td.fbpick input, .fbtable th.fbpick input { width: 18px; height: 18px; }
+.fbbulk { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; margin: 8px 0;
+  border: 1px solid var(--line, #e5e7eb); border-radius: 10px; background: var(--panel, #fff); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.fbbulk input { flex: 1 1 220px; min-width: 0; }
+.fbbulk .row.end { margin-left: auto; }
+.fbdel p { margin: 0 0 8px; }

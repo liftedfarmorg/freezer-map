@@ -40,6 +40,15 @@ export const fbTitle = (r: Pick<FbRow, 'title' | 'details'>) => r.title || (r.de
 export const fbWhere = (r: Pick<FbRow, 'module' | 'screen'>) => [r.module ? MOD_L[r.module] ?? r.module : null, r.screen].filter(Boolean).join(' › ')
 export const StatusPill = ({ s }: { s: FbStatus }) => <span className={`pill fbs fbs-${s}`}>{t(FB_STATUS[s])}</span>
 
+/** delete a report for good (SQL 346): its pictures come out of the bucket first, then the report */
+export async function deleteFeedback(sb: SupabaseClient, id: number, reason?: string) {
+  const { data: fs } = await sb.from('feedback_files').select('file_path').eq('feedback_id', id)
+  const paths = ((fs ?? []) as { file_path: string }[]).map(x => x.file_path)
+  if (paths.length) await sb.storage.from('feedback').remove(paths)   // a leftover picture is harmless; don't stop the delete over it
+  const { error } = await sb.rpc('delete_feedback', { p_id: id, p_reason: reason?.trim() || null })
+  if (error) throw new Error(/delete_feedback|schema cache/i.test(error.message) ? 'Deleting needs SQL 346 run first.' : error.message)
+}
+
 const COLS = 'id, ref, type, status, severity, priority, module, screen, section, record_type, record_id, record_label, title, what_trying, details, edited_spec, decision_note, duplicate_of, reporter_email, reporter_name, context, app_version, source, created_at, updated_at, approved_at, ready_at, done_at, commit_ref, claude_notes'
 
 /** is this person a triager? (SQL 341) */
@@ -61,6 +70,10 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
   const [md, setMd] = useSaved<string>('fbinbox.FbInbox.md', '')
   const [q, setQ] = useSaved('fbinbox.FbInbox.q', '')
   const [open, setOpen] = useSaved<number | null>('fbinbox.FbInbox.open', null)
+  const [picked, setPicked] = useState<Set<number>>(new Set())
+  const [bulk, setBulk] = useState<null | 'done' | 'delete'>(null)
+  const [bulkNote, setBulkNote] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
   async function load() {
     if (!sb) { setRows([]); return }
     const { data, error } = await sb.from('feedback').select(COLS).order('id', { ascending: false }).limit(2000)
@@ -81,6 +94,25 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
         ? (OPEN.indexOf(a.status) - OPEN.indexOf(b.status)) || ((PRI_ORDER[a.priority ?? ''] ?? 3) - (PRI_ORDER[b.priority ?? ''] ?? 3)) || b.id - a.id
         : b.id - a.id)
   }, [rows, f, ty, md, q])
+  useEffect(() => { setPicked(new Set()); setBulk(null) }, [f, ty, md, q])
+  const pick = (id: number) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const allPicked = shown.length > 0 && shown.every(r => picked.has(r.id))
+  async function runBulk() {
+    if (!sb || !bulk || !picked.size) return
+    setBulkBusy(true)
+    let ok = 0, bad = 0, last = ''
+    for (const id of picked) {
+      try {
+        if (bulk === 'delete') await deleteFeedback(sb, id, bulkNote)
+        else { const { error } = await sb.rpc('triage_feedback', { p_id: id, p: { status: 'done', note: bulkNote.trim() || null } }); if (error) throw new Error(error.message) }
+        ok++
+      } catch (e) { bad++; last = (e as Error).message }
+    }
+    setBulkBusy(false)
+    flash(bad ? t('{ok} done, {bad} failed: {m}', { ok, bad, m: last }) : bulk === 'delete' ? t('Deleted {n}', { n: ok }) : t('Marked {n} done', { n: ok }), bad > 0)
+    if (open != null && picked.has(open) && bulk === 'delete') setOpen(null)
+    setPicked(new Set()); setBulk(null); setBulkNote(''); load(); onCount?.()
+  }
   const mods = useMemo(() => [...new Set((rows ?? []).map(r => r.module).filter((x): x is string => !!x))].sort(), [rows])
   const FILTERS: [Filter, string][] = [['open', 'Open'], ['new', 'New'], ['needs_info', 'Needs info'], ['approved', 'Approved'], ['in_progress', 'In progress'], ['ready_to_test', 'Ready to test'], ['closed', 'Closed'], ['all', 'All']]
 
@@ -102,10 +134,24 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
         <select value={md} onChange={e => setMd(e.target.value)} aria-label={t('Module')}><option value="">{t('All modules')}</option>{mods.map(m => <option key={m} value={m}>{t(MOD_L[m] ?? m)}</option>)}</select>
         <input className="search" type="search" placeholder={t('FB number, words, person or screen')} value={q} onChange={e => setQ(e.target.value)} />
       </div>
+      {triager && picked.size > 0 && <div className="fbbulk">
+        {bulk ? <>
+          <b>{bulk === 'delete' ? t('Delete {n} for good? Comments and pictures go too. This can\'t be undone.', { n: picked.size }) : t('Mark {n} done?', { n: picked.size })}</b>
+          <input value={bulkNote} onChange={e => setBulkNote(e.target.value)} placeholder={bulk === 'delete' ? t('Why (optional, kept in the log)') : t('Note (optional, shows in History)')} maxLength={300} />
+          <div className="row end"><button className="ghost" disabled={bulkBusy} onClick={() => { setBulk(null); setBulkNote('') }}>{t('Cancel')}</button>
+            <button className={bulk === 'delete' ? 'danger-bg' : 'primary'} disabled={bulkBusy} onClick={runBulk}>{bulkBusy ? t('Working…') : bulk === 'delete' ? t('Delete') : t('Mark done')}</button></div>
+        </> : <>
+          <b>{t('{n} picked', { n: picked.size })}</b>
+          <div className="row"><button className="primary small" onClick={() => setBulk('done')}>{t('Mark done')}</button>
+            <button className="ghost small danger" onClick={() => setBulk('delete')}>{t('Delete')}</button>
+            <button className="ghost small" onClick={() => setPicked(new Set())}>{t('Clear')}</button></div>
+        </>}
+      </div>}
       {rows === null ? <p className="muted">{t('Loading…')}</p> : !shown.length ? <p className="muted">{t('Nothing here.')}</p> :
         <div className="cwrap"><table className="ctable settable slimmable fbtable">
-          <thead><tr><th className="slim">#</th><th className="slim">{t('Report')}</th><th>{t('Where')}</th><th>{t('From')}</th><th>{t('How bad')}</th><th>{t('Priority')}</th><th className="slim">{t('Status')}</th><th>{t('Age')}</th></tr></thead>
+          <thead><tr>{triager && <th className="slim fbpick"><input type="checkbox" aria-label={t('Pick all')} checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(shown.map(r => r.id)))} /></th>}<th className="slim">#</th><th className="slim">{t('Report')}</th><th>{t('Where')}</th><th>{t('From')}</th><th>{t('How bad')}</th><th>{t('Priority')}</th><th className="slim">{t('Status')}</th><th>{t('Age')}</th></tr></thead>
           <tbody>{shown.map(r => <tr key={r.id} className={`tap ${open === r.id ? 'sel' : ''}`} onClick={() => setOpen(r.id)}>
+            {triager && <td className="slim fbpick" onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={t('Pick {r}', { r: r.ref })} checked={picked.has(r.id)} onChange={() => pick(r.id)} /></td>}
             <td className="slim nowrap mono">{r.ref}</td>
             <td className="slim fbt"><span className={`fbtype fbtype-${r.type}`}>{t(TYPE_L[r.type])}</span> <b>{fbTitle(r)}</b></td>
             <td className="nowrap">{fbWhere(r)}</td>
@@ -115,18 +161,18 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
             <td className="slim nowrap"><StatusPill s={r.status} /></td>
             <td className="nowrap muted">{age(r.created_at)}</td>
           </tr>)}</tbody>
-          <tfoot><tr><td colSpan={8}><b>{shown.length} {shown.length === 1 ? t('report') : t('reports')}</b></td></tr></tfoot>
+          <tfoot><tr><td colSpan={triager ? 9 : 8}><b>{shown.length} {shown.length === 1 ? t('report') : t('reports')}</b></td></tr></tfoot>
         </table></div>}
-      {open != null && <FbCard sb={sb} id={open} flash={flash} triager={triager} me={me} onClose={() => setOpen(null)} onChanged={() => { load(); onCount?.() }} onOpenOther={id => setOpen(id)} />}
+      {open != null && <FbCard sb={sb} id={open} flash={flash} triager={triager} me={me} onClose={() => setOpen(null)} onChanged={() => { load(); onCount?.() }} onDeleted={() => { setOpen(null); load(); onCount?.() }} onOpenOther={id => setOpen(id)} />}
     </div>
   )
 }
 
 // ===================================================================================================== one report
 type CTab = 'overview' | 'pictures' | 'comments' | 'details' | 'history'
-export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onOpenOther, sheetClass = 'side' }: {
+export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onDeleted, onOpenOther, sheetClass = 'side' }: {
   sb: SupabaseClient | null; id: number; flash: (t: string, bad?: boolean) => void; triager: boolean; me?: string | null
-  onClose: () => void; onChanged?: () => void; onOpenOther?: (id: number) => void; sheetClass?: string
+  onClose: () => void; onChanged?: () => void; onDeleted?: () => void; onOpenOther?: (id: number) => void; sheetClass?: string
 }) {
   const [r, setR] = useState<FbRow | null>(null)
   const [missing, setMissing] = useState(false)
@@ -135,7 +181,7 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onOpenO
   const [files, setFiles] = useState<FbFile[]>([])
   const [tab, setTab] = useState<CTab>('overview')
   const [busy, setBusy] = useState(false)
-  const [act, setAct] = useState<null | 'needs_info' | 'declined' | 'duplicate' | 'broken'>(null)
+  const [act, setAct] = useState<null | 'needs_info' | 'declined' | 'duplicate' | 'broken' | 'done' | 'delete'>(null)
   const [txt, setTxt] = useState('')
   const [edit, setEdit] = useState<{ title: string; priority: string; edited_spec: string } | null>(null)
   const [cmt, setCmt] = useState('')
@@ -186,6 +232,13 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onOpenO
     setBusy(false)
     if (error) { flash(error.message, true); return }
     setCmt(''); setInternal(false); setTxt(''); flash(t('Added')); await load(); onChanged?.()
+  }
+  async function del(reason: string) {
+    if (!sb || !r) return
+    setBusy(true)
+    try { await deleteFeedback(sb, id, reason); flash(t('{r} deleted', { r: r.ref })); (onDeleted ?? onClose)() }
+    catch (e) { flash((e as Error).message, true) }
+    finally { setBusy(false) }
   }
   async function copyBrief() {
     if (!sb) return
@@ -248,6 +301,13 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onOpenO
           <textarea rows={5} value={edit.edited_spec} onChange={e => setEdit({ ...edit, edited_spec: e.target.value })} /></div>
         <div className="row end"><button className="ghost" onClick={() => setEdit(null)}>{t('Cancel')}</button>
           <button className="primary" disabled={busy} onClick={() => triage({ title: edit.title, priority: edit.priority, edited_spec: edit.edited_spec }, t('Saved'))}>{t('Save')}</button></div>
+      </div> : act === 'done' || act === 'delete' ? <div className={`fbedit ${act === 'delete' ? 'fbdel' : ''}`}>
+        {act === 'delete' && <p><b>{t('Delete {r} for good?', { r: r.ref })}</b> {t("Its comments, history and pictures go too. This can't be undone. (Decline keeps it on record instead.)")}</p>}
+        <div className="field"><label>{act === 'done' ? t('What was done (optional, shows in History)') : t('Why (optional, kept in the log)')}</label>
+          <textarea rows={2} value={txt} onChange={e => setTxt(e.target.value)} autoFocus /></div>
+        <div className="row end"><button className="ghost" disabled={busy} onClick={() => { setAct(null); setTxt('') }}>{t('Cancel')}</button>
+          {act === 'done' ? <button className="primary" disabled={busy} onClick={() => triage({ status: 'done', note: txt.trim() || null }, t('Marked done'))}>{t('Mark done')}</button>
+            : <button className="danger-bg" disabled={busy} onClick={() => del(txt)}>{busy ? t('Deleting…') : t('Delete for good')}</button>}</div>
       </div> : act === 'needs_info' || act === 'declined' || act === 'duplicate' ? <div className="fbedit">
         <div className="field"><label>{act === 'needs_info' ? t('Your question for {n} (they get a push)', { n: r.reporter_name ?? t('them') }) : act === 'declined' ? t("Why it's declined (they'll see this)") : t('FB number it duplicates')}</label>
           {act === 'duplicate' ? <input inputMode="numeric" value={txt} onChange={e => setTxt(e.target.value.replace(/\D/g, ''))} placeholder="e.g. 17" />
@@ -264,9 +324,10 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onOpenO
         {open && <button className="ghost" disabled={busy} onClick={() => { setAct('declined'); setTxt('') }}>{t('Decline')}</button>}
         {open && <button className="ghost" disabled={busy} onClick={() => { setAct('duplicate'); setTxt('') }}>{t('Duplicate')}</button>}
         <button className="ghost" disabled={busy} onClick={() => setEdit({ title: r.title ?? '', priority: r.priority ?? '', edited_spec: r.edited_spec ?? '' })}>{t('Edit for Claude')}</button>
-        {(r.status === 'approved' || r.status === 'in_progress') && <button className="ghost" disabled={busy} onClick={() => triage({ status: 'done' }, t('Marked done'))}>{t('Mark done')}</button>}
+        {open && <button className="ghost" disabled={busy} onClick={() => { setAct('done'); setTxt('') }}>{t('Mark done')}</button>}
         {!open && <button className="ghost" disabled={busy} onClick={() => triage({ status: 'new' }, t('Reopened'))}>{t('Reopen')}</button>}
         <button className="ghost" onClick={copyBrief}>{t('Copy Claude brief')}</button>
+        <button className="ghost danger" disabled={busy} onClick={() => { setAct('delete'); setTxt('') }}>{t('Delete')}</button>
       </div>}
     </div>}
   </>
