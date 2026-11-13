@@ -20,6 +20,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 // on a customer pickup (P- load, 089): the customer comes to get it with their own driver and truck
 const isPk = (o: FOrder) => o.stop?.load_kind === 'pickup' || !!o.stop?.load?.startsWith('P-')
 export const STATE_LABEL: Record<string, string> = { open: 'Needs pallets', needs_ok: 'Waiting on Sales', ready: 'Ready to load', loaded: 'On a load', shipped: 'Shipped', cancelled: 'Cancelled', submitted: 'Not confirmed', draft: 'Draft' }
+const MULTI_COLORS = ['#2563eb', '#d97706', '#7c3aed', '#059669', '#db2777', '#0891b2', '#65a30d', '#dc2626']
 const GROUPS: FState[] = ['open', 'needs_ok', 'ready', 'loaded', 'shipped']
 /** PICK-2: pallets already assigned to these orders that are still sitting in a freezer (not Staging): they're on the pull route too */
 export function heldInFreezers(os: FOrder[], pal: Map<number, Pallet> | ((id: number) => Pallet | undefined), loc: (p: Pallet) => Loc) {
@@ -70,12 +71,32 @@ export function FulfillView(props: FulfillProps) {
   const setOpenId = props.setOpenId ?? setOwnId
   const [q, setQ] = useSaved('fulfill.FulfillView.q', '')
   const [allShipped, setAllShipped] = useState(false)
+  // FBQ-5 (Aziz): pick several orders and plan them as one pick (anything being fulfilled that day, not on a load yet)
+  const [multi, setMulti] = useState<Set<number> | null>(null)
+  const [multiPlan, setMultiPlan] = useState(false)
   useBack(openId != null, () => setOpenId(null))
+  useBack(multiPlan, () => setMultiPlan(false))
   const stage = useStages(props.backend.client())
   if (props.err) return <div className="list fulfill"><h2>Fulfillment</h2><div className="warnbox">{props.err}</div></div>
   if (!orders) return <p className="muted">Loading…</p>
   const cur = orders.find(o => o.id === openId)
   if (cur) return <OrderPage {...props} o={cur} back={() => setOpenId(null)} stage={stage} />
+  const canMulti = (o: FOrder) => !o.stop && (o.state === 'open' || o.state === 'needs_ok' || o.state === 'ready')
+  const picked = multi ? orders.filter(o => multi.has(o.id) && canMulti(o)) : []
+  if (multiPlan && props.loc && picked.length) {
+    const { pallets, heldBy, onLoad, inRun, canon, loc } = props
+    const pal = new Map(pallets.map(p => [p.id, p]))
+    const freeFor = (l: FLine) => pallets.filter(p => (p.status === 'in_freezer' || p.status === 'unslotted') && p.pushed !== false && !p.container_id && p.kind !== 'mixed' && (p.current_weight ?? 0) > 0
+      && canon(p.strain) === canon(l.strain) && (p.product ?? 'fresh_frozen') === (l.product ?? 'fresh_frozen')
+      && (p.crop_year == null || l.crop_year == null || p.crop_year === l.crop_year) && !heldBy.has(p.id) && !onLoad(p.id) && !inRun?.(p.id))
+    const orderOfLine = (lineId: number) => picked.findIndex(o => o.lines.some(l => l.id === lineId))
+    return <PlanMyPick orders={picked} cands={freeFor} loc={loc} pallet={id => pal.get(id)} contents={id => pallets.filter(p => p.container_id === id)} backend={props.backend} reload={props.reload} flash={props.flash}
+      back={() => { setMultiPlan(false); scrollTop() }} title={`Plan my pick · ${picked.length} orders`} sub={picked.map(o => o.customer).join(', ')} backLabel="Fulfillment"
+      walkKey={`pmp-walk:m${picked.map(o => o.id).sort((a, b) => a - b).join('-')}`} held={heldInFreezers(picked, pal, loc)}
+      tagOf={id => { const i = orderOfLine(id); return i < 0 ? undefined : { label: picked[i].customer, color: MULTI_COLORS[i % MULTI_COLORS.length] } }} />
+  }
+  const toggle = (o: FOrder) => setMulti(m => { const n = new Set(m ?? []); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n })
+  const tap = (o: FOrder) => { if (multi) { if (canMulti(o)) toggle(o) } else { setOpenId(o.id); scrollTop() } }
   const ql = q.trim().toLowerCase()
   const shown = orders.filter(o => !ql || `${o.customer} ${o.so ?? ''} ${o.po ?? ''} ${o.lines.map(l => l.strain).join(' ')}`.toLowerCase().includes(ql))
   return (
@@ -83,7 +104,12 @@ export function FulfillView(props: FulfillProps) {
       <h2>Fulfillment</h2>
       <p className="muted">Confirmed orders. Assign pallets to each line, then put the order on a load. Pallets you assign are held for that customer.</p>
       <StageAlerts sb={props.backend.client()} stages={stage.stages} refresh={stage.refresh} flash={props.flash} openLoad={props.openLoad} onChanged={props.reload} />
-      <div className="row toolbar"><input className="search" type="search" placeholder="Customer, SO # or strain" value={q} onChange={e => setQ(e.target.value)} /></div>
+      <div className="row toolbar"><input className="search" type="search" placeholder="Customer, SO # or strain" value={q} onChange={e => setQ(e.target.value)} />
+        {props.loc && (multi ? <button className="ghost" onClick={() => setMulti(null)}>Cancel</button>
+          : <button className="ghost" onClick={() => setMulti(new Set())} title="Pick several orders and plan them as one pick">Plan several orders</button>)}</div>
+      {multi && <div className="pmp-bar multibar"><div className="grow"><b>{picked.length ? `${picked.length} order${picked.length === 1 ? '' : 's'} picked` : 'Tap the orders to plan together'}</b>
+        <div className="small">Open orders not on a load yet. Orders already on a load: use Pull route on the load.</div></div>
+        <button className="primary" disabled={!picked.length} onClick={() => { setMultiPlan(true); scrollTop() }}>Plan my pick ›</button></div>}
       {!shown.length && <p className="muted">No open orders.</p>}
       {GROUPS.map(g => {
         const all = shown.filter(o => o.state === g)
@@ -102,8 +128,8 @@ export function FulfillView(props: FulfillProps) {
               const want = orderLbs(o), have = orderGot(o)
               const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
               return (
-                <tr key={o.id} className="tap" tabIndex={0} onClick={() => { setOpenId(o.id); scrollTop() }} onKeyDown={e => { if (e.key === 'Enter') { setOpenId(o.id); scrollTop() } }}>
-                  <td className="pin"><b>{o.customer}</b></td>
+                <tr key={o.id} className={`tap${multi && multi.has(o.id) ? ' msel' : ''}${multi && !canMulti(o) ? ' mdim' : ''}`} tabIndex={0} onClick={() => tap(o)} onKeyDown={e => { if (e.key === 'Enter') tap(o) }}>
+                  <td className="pin">{multi && canMulti(o) && <span className="mcheck">{multi.has(o.id) ? '☑' : '☐'} </span>}<b>{o.customer}</b></td>
                   <td>{o.so ?? `Order #${o.id}`}{o.source === 'portal' ? <span className="muted"> · portal</span> : o.source === 'roshi' ? <span className="muted"> · Roshi</span> : o.source === 'qbo' ? <span className="muted"> · QuickBooks</span> : ''}</td>
                   <td className="num">{o.lines.length}</td>
                   <td className="num"><b>{n0(want)}</b></td>
@@ -123,8 +149,8 @@ export function FulfillView(props: FulfillProps) {
               const late = o.wanted_date && o.wanted_date < today() && (g === 'open' || g === 'needs_ok' || g === 'ready')
               const when = g === 'shipped' ? (o.shipped_date ? `Shipped ${fmt(o.shipped_date)}` : '') : o.wanted_date ? `Wanted ${fmt(o.wanted_date)}` : o.order_date ? `Ordered ${fmt(o.order_date)}` : ''
               return (
-                <button key={o.id} className="fcard" onClick={() => { setOpenId(o.id); scrollTop() }}>
-                  <span className="fcard-top"><b>{o.customer}</b>
+                <button key={o.id} className={`fcard${multi && multi.has(o.id) ? ' msel' : ''}${multi && !canMulti(o) ? ' mdim' : ''}`} onClick={() => tap(o)}>
+                  <span className="fcard-top"><b>{multi && canMulti(o) && <span className="mcheck">{multi.has(o.id) ? '☑' : '☐'} </span>}{o.customer}</b>
                     <span className={`pill fs-${g === 'loaded' && o.fill && o.fill !== 'ready' ? o.fill : g}`}>{g === 'open' && have > 0 ? `${Math.round(have / want * 100)}%`
                       : g === 'loaded' && o.fill && o.fill !== 'ready' ? (o.fill === 'open' ? 'Needs pallets' : 'Needs OK')
                       : g === 'loaded' && isPk(o) ? 'Pickup'

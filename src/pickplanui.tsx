@@ -202,7 +202,18 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
         </div>
         {heldHere.length > 0 && <div className="muted small">{heldHere.length} already assigned pallet{heldHere.length === 1 ? '' : 's'} still in a freezer {heldHere.length === 1 ? 'is' : 'are'} on the route too (marked Assigned).</div>}
         {rows && <div className="muted small">You changed this plan. <button className="linkbtn" onClick={() => setRows(null)}>Start over</button></div>}
-        {[...plan.short.entries()].map(([id, lbs]) => <div key={id} className="warnbox">{chip(id)} {lineOf(id)?.strain}: {n0(lbs)} lbs short at {st}. Not enough free pallets in freezers here{sites.length > 1 ? '; try the other site' : ''}.</div>)}
+        {/* FBQ-5 (Aziz): short at this site: say what the other site has (freezers and reefers only, not Staging), or the total short */}
+        {[...plan.short.entries()].map(([id, lbs]) => {
+          const others = new Map<string, { lbs: number; n: number }>()
+          for (const p of all.find(l => l.id === id)?.cands ?? []) { const s = loc(p).site; if (!s || s === st) continue; const x = others.get(s) ?? { lbs: 0, n: 0 }; x.lbs += w(p); x.n++; others.set(s, x) }
+          const there = [...others.entries()].filter(([, x]) => x.lbs > 0.5)
+          const total = Math.max(0, lbs - there.reduce((a, [, x]) => a + x.lbs, 0))
+          return <div key={id} className="warnbox">{chip(id)} {lineOf(id)?.strain}: {n0(lbs)} lbs short at {st}.{' '}
+            {there.length ? <>{there.map(([s, x]) => `${s} has ${n0(x.lbs)} lbs free (${x.n} pallet${x.n === 1 ? '' : 's'})`).join(', ')}{total > 0.5 ? `; still ${n0(total)} lbs short in total` : ''}. {there.map(([s]) => <button key={s} className="linkbtn" onClick={() => setSite(s)}>Plan at {s} ›</button>)}
+              <div className="small muted">Assign what's here first, then plan the rest at the other site. Moving product between OHR and GVR needs a METRC manifest.</div></>
+              : <>No free pallets of it at the other site either: {n0(lbs)} lbs short in total.</>}
+          </div>
+        })}
 
         {groups.map(([fz, rs], gi) => {
           const L0 = loc(rs[0].pallet)

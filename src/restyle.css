@@ -1061,3 +1061,8 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .smerge { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 6px 0 10px; }
 .smerge-check { margin-top: 8px; }
 .smerge-check p { margin: 4px 0; }
+/* FBQ-5: Fulfillment > Plan several orders */
+.fulfill tr.msel td, .fulfill .fcard.msel { background: color-mix(in srgb, var(--brand, #166534) 12%, transparent); }
+.fulfill tr.mdim, .fulfill .fcard.mdim { opacity: .45; }
+.fulfill .mcheck { font-size: 15px; }
+.fulfill .multibar { position: sticky; top: 0; z-index: 3; }
