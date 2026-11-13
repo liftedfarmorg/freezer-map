@@ -82,6 +82,19 @@ export function printPickSheet(o: {
     ${fzHtml}
     <div class="sign"><div>Picked by</div><div>Checked by</div><div>Date / time</div></div>
   </body></html>`
+  // FBQ-7 (Aziz): phones (iPhone Safari / Home Screen app) can't print a hidden frame. Open the sheet as its own page
+  // with a Print button; the iPhone print sheet also does Save to Files / share.
+  const phone = matchMedia('(pointer: coarse)').matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  if (phone) {
+    const bar = `<div class="pbar"><button onclick="window.print()">Print</button><button onclick="window.close()">Close</button></div>
+      <style>.pbar{position:sticky;top:0;display:flex;gap:10px;padding:10px 0;background:#fff;z-index:2}.pbar button{font:600 17px system-ui;padding:10px 18px;border-radius:10px;border:1px solid #166534;background:#166534;color:#fff}.pbar button+button{background:#fff;color:#166534}@media print{.pbar{display:none}}</style>`
+    const page = html.replace('<body>', `<body>${bar}`).replace('</body>', '<script>setTimeout(function(){try{window.print()}catch(e){}},400)</script></body>')
+    const url = URL.createObjectURL(new Blob([page], { type: 'text/html' }))
+    const w = window.open(url, '_blank')
+    if (!w) location.href = url
+    setTimeout(() => URL.revokeObjectURL(url), 120000)
+    return
+  }
   const f = document.createElement('iframe')
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
   document.body.appendChild(f)
@@ -200,6 +213,12 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
           {plan.rows.length > 0 && <label className="pmp-mode">Plan for <select value={mode} onChange={e => setMode(e.target.value as Mode)}>
             {MODES.map(m => <option key={m.k} value={m.k}>{m.label}</option>)}</select></label>}
         </div>
+        <div className="row wrap pmp-act">
+          <button className="primary" disabled={busy || !routeRows.length} onClick={() => { startWalk(); setWalking(true) }}>Walk this plan ›</button>
+          {plan.rows.length > 0 && <button className="ghost" disabled={busy} onClick={async () => { if (await assign(plan.rows)) back() }}>{busy ? 'Assigning…' : 'Use this plan now'}</button>}
+          <button className="ghost" onClick={() => printPickSheet({ title, sub, site: st, orders, groups, loc, pallet, contents, tagOf, lineOf, lines, short: plan.short, splits: plan.splits, inWay })}>Print pick sheet</button>
+        </div>
+        <p className="muted small pmp-note">Walk this plan: scan each pallet as it comes out, swap any that aren't there, and assign what you picked at the end. Use this plan now: assigns and holds these pallets right away, same as + Assign pallets. Either way, splits get a pending tag until the new label goes on.</p>
         {heldHere.length > 0 && <div className="muted small">{heldHere.length} already assigned pallet{heldHere.length === 1 ? '' : 's'} still in a freezer {heldHere.length === 1 ? 'is' : 'are'} on the route too (marked Assigned).</div>}
         {rows && <div className="muted small">You changed this plan. <button className="linkbtn" onClick={() => setRows(null)}>Start over</button></div>}
         {/* FBQ-5 (Aziz): short at this site: say what the other site has (freezers and reefers only, not Staging), or the total short */}
@@ -256,12 +275,7 @@ export function PlanMyPick({ orders, cands, loc, pallet, contents, backend, relo
           )
         })}
 
-        <div className="row wrap pmp-act">
-          <button className="primary" disabled={busy || !routeRows.length} onClick={() => { startWalk(); setWalking(true) }}>Walk this plan ›</button>
-          {plan.rows.length > 0 && <button className="ghost" disabled={busy} onClick={async () => { if (await assign(plan.rows)) back() }}>{busy ? 'Assigning…' : 'Use this plan now'}</button>}
-          <button className="ghost" onClick={() => printPickSheet({ title, sub, site: st, orders, groups, loc, pallet, contents, tagOf, lineOf, lines, short: plan.short, splits: plan.splits, inWay })}>Print pick sheet</button>
-        </div>
-        <p className="muted small">Walk this plan: scan each pallet as it comes out, swap any that aren't there, and assign what you picked at the end. Use this plan now: assigns and holds these pallets right away, same as + Assign pallets. Either way, splits get a pending tag until the new label goes on.</p>
+
       </>}
     </div>
   )

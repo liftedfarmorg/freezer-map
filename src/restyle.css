@@ -391,7 +391,8 @@ html:not(:has(.cp)) body { font-family: Outfit, system-ui, -apple-system, "Segoe
 .pmp-cell.on { background: var(--brand); color: var(--brand-ink); }
 .pmp-cell.split { background: #fff7e0; color: #6b5200; outline: 2px solid #6b5200; }
 .pmp-door { margin-top: 6px; border-top: 4px solid var(--ink); text-align: center; font-size: 12px; font-weight: 700; padding-top: 3px; }
-.pmp-act { margin-top: 10px; }
+.pmp-act { margin: 8px 0 4px; }
+.pmp .pmp-note { margin: 0 0 10px; }
 @media (max-width: 600px) { .pmp-mode { margin-left: 0; } .pmp-lbs { min-width: 0; } }
 @media print { .pmp .linkbtn, .pmp .pmp-act, .pmp .seg, .pmp-mode { display: none !important; } }
 
