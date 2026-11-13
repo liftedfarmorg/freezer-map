@@ -113,7 +113,7 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
         await new Promise(r => setTimeout(r, i < 4 ? 1500 : 3000))
         const r = await sb.rpc('push_test_result', { p_id: id })
         const x = r.data as { sent: boolean; tries: number; error: string | null } | null
-        if (x?.sent) { setTestMsg({ text: devices === 1 ? t('Sent. It should show up on your device now.') : t('Sent to your {n} devices. It should show up now.', { n: devices }) }); return }
+        if (x?.sent) { setTestMsg({ text: devices === 1 ? t('Sent. It should show up on your phone or computer now.') : t('Sent to your {n} devices. It should show up now.', { n: devices }) }); return }
         if (x && x.tries > 0 && x.error) { setTestMsg({ text: t("Didn't go through: {e}. Turn notifications off and on again on this device.", { e: x.error }), bad: true }); return }
       }
       setTestMsg({ text: t('Still waiting to send. It goes out within a minute; if nothing shows up, turn notifications off and on again.') })
@@ -133,7 +133,8 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
         : st === 'blocked' ? <p className="warn-t small">{t('Notifications are blocked for this site. Allow them in the browser or phone settings.')}</p>
         : <div className="row"><button className={st === 'on' ? 'ghost small' : 'primary small'} disabled={work || !st} onClick={toggle}>{st === 'on' ? t('Turn off on this device') : t('Turn on notifications')}</button>
             {st === 'on' && <span className="muted small">{t('On for this device')}</span>}
-            {st === 'on' && <button className="ghost small" disabled={work} onClick={testPush}>{t('Send me a test push')}</button>}</div>}
+</div>}
+      <div className="row"><button className="ghost small" disabled={work} onClick={testPush}>{t('Send a test push to my devices')}</button></div>
       {testMsg && <p className={testMsg.bad ? 'neg small' : 'muted small'}>{testMsg.text}</p>}
       {msg && <p className="neg small">{msg}</p>}</div>
     <NotifyBox nf={nf} busy={busy} phone={phone} onSave={x => savePref({ notify: { ...p.notify, ...x } })} />
