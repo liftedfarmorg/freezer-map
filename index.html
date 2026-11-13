@@ -2,6 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Msg FB-12: if the app's main file fails to load (a deploy in progress, a bad cache), the page stays blank.
+      // Refresh the cached files and reload once (at most every 30 s). Lazy screens are handled in main.tsx.
+      (function () {
+        var K = 'fm.bootReload'
+        function retry(src) {
+          var last = 0
+          try { last = Number(sessionStorage.getItem(K)) || 0 } catch (e) {}
+          if (Date.now() - last < 30000) return
+          try { sessionStorage.setItem(K, String(Date.now())) } catch (e) {}
+          var go = function () { location.reload() }
+          if (!window.fetch) return go()
+          var p = [fetch('/', { cache: 'reload' })]
+          if (src) p.push(fetch(src, { cache: 'reload' }))
+          Promise.all(p).then(go, go)
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target
+          if (t && t.tagName === 'SCRIPT' && t.src && /\/assets\//.test(t.src)) retry(t.src)
+          else if (t && t.tagName === 'LINK' && t.rel === 'stylesheet' && /\/assets\//.test(t.href)) retry(t.href)
+        }, true)
+        setTimeout(function () {
+          var r = document.getElementById('root')
+          if (r && !r.childNodes.length) { var s = document.querySelector('script[type="module"][src]'); retry(s && s.src) }
+        }, 20000)
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#3f9e7c" />
     <title>Lifted Farms</title>

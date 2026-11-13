@@ -62,8 +62,9 @@ async function copyLater(text: Promise<string>) {
   await navigator.clipboard.writeText(await text)
 }
 async function briefs(sb: SupabaseClient, ids: number[]) {
-  const { data, error } = ids.length === 1 ? await sb.rpc('feedback_brief', { p_id: ids[0] }) : await sb.rpc('feedback_briefs', { p_ids: ids })
-  if (error) throw new Error(/feedback_briefs|schema cache/i.test(error.message) ? 'Copying several needs SQL 347 run first.' : error.message)
+  // 348: copying hands the reports off, open ones move to In progress
+  const { data, error } = await sb.rpc('feedback_hand_off', { p_ids: ids })
+  if (error) throw new Error(/feedback_hand_off|schema cache/i.test(error.message) ? 'Copying needs SQL 348 run first.' : error.message)
   return String(data)
 }
 
@@ -134,7 +135,7 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
   async function copyPicked() {
     if (!sb || !picked.size) return
     const ids = shown.filter(r => picked.has(r.id)).map(r => r.id)
-    try { await copyLater(briefs(sb, ids)); flash(t('{n} Claude briefs copied. Paste them into a chat with Claude.', { n: ids.length })) }
+    try { await copyLater(briefs(sb, ids)); flash(t('{n} Claude briefs copied and moved to In progress. Paste them into a chat with Claude.', { n: ids.length })); setPicked(new Set()); load(); onCount?.() }
     catch (e) { flash((e as Error).message && !/document is not focused|NotAllowed/i.test((e as Error).message) ? (e as Error).message : t("Couldn't copy here. Try again from a computer."), true) }
   }
   const mods = useMemo(() => [...new Set((rows ?? []).map(r => r.module).filter((x): x is string => !!x))].sort(), [rows])
@@ -267,7 +268,7 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onDelet
   }
   async function copyBrief() {
     if (!sb) return
-    try { await copyLater(briefs(sb, [id])); flash(t('Claude brief copied. Paste it into a chat with Claude.')) }
+    try { await copyLater(briefs(sb, [id])); flash(t('Claude brief copied and moved to In progress. Paste it into a chat with Claude.')); load(); onChanged?.() }
     catch (e) { flash((e as Error).message && !/document is not focused|NotAllowed/i.test((e as Error).message) ? (e as Error).message : t("Couldn't copy here. Try again from a computer."), true) }
   }
 
