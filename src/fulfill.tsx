@@ -106,7 +106,7 @@ export function FulfillView(props: FulfillProps) {
       <StageAlerts sb={props.backend.client()} stages={stage.stages} refresh={stage.refresh} flash={props.flash} openLoad={props.openLoad} onChanged={props.reload} />
       <div className="row toolbar"><input className="search" type="search" placeholder="Customer, SO # or strain" value={q} onChange={e => setQ(e.target.value)} />
         {props.loc && (multi ? <button className="ghost" onClick={() => setMulti(null)}>Cancel</button>
-          : <button className="ghost" onClick={() => setMulti(new Set())} title="Pick several orders and plan them as one pick">Plan several orders</button>)}</div>
+          : <button className="primary" onClick={() => setMulti(new Set())} title="Pick several orders and plan them as one pick">Plan several orders ›</button>)}</div>
       {multi && <div className="pmp-bar multibar"><div className="grow"><b>{picked.length ? `${picked.length} order${picked.length === 1 ? '' : 's'} picked` : 'Tap the orders to plan together'}</b>
         <div className="small">Open orders not on a load yet. Orders already on a load: use Pull route on the load.</div></div>
         <button className="primary" disabled={!picked.length} onClick={() => { setMultiPlan(true); scrollTop() }}>Plan my pick ›</button></div>}
