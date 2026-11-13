@@ -4,7 +4,7 @@ import { MODULES } from './types'
 import type { Me, ModKey, Prefs, Site } from './types'
 import { applyTheme } from './theme'
 import { LANGS, lang, t } from './i18n'
-import { pushOff, pushOn, pushState } from './push'
+import { kickNotify, pushOff, pushOn, pushState } from './push'
 import { NotifyBox } from './notifyprefs'
 import type { PushState } from './push'
 
@@ -99,6 +99,26 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
   useEffect(() => { pushState().then(setSt).catch(() => setSt('unsupported')) }, [])
   const sb = backend.client()
   const nf = (p.notify ?? {}) as Record<string, boolean | undefined>
+  const [testMsg, setTestMsg] = useState<{ text: string; bad?: boolean } | null>(null)
+  // Msg FB-11: send a test push to every device this person has turned on, then say whether Apple / Google took it
+  async function testPush() {
+    if (!sb) return
+    setWork(true); setTestMsg({ text: t('Sending…') })
+    try {
+      const { data, error } = await sb.rpc('send_test_push')
+      if (error) throw new Error(/send_test_push|schema cache/i.test(error.message) ? 'The test needs SQL 347 run first.' : error.message)
+      const { id, devices } = data as { id: number; devices: number }
+      kickNotify(sb)
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, i < 4 ? 1500 : 3000))
+        const r = await sb.rpc('push_test_result', { p_id: id })
+        const x = r.data as { sent: boolean; tries: number; error: string | null } | null
+        if (x?.sent) { setTestMsg({ text: devices === 1 ? t('Sent. It should show up on your device now.') : t('Sent to your {n} devices. It should show up now.', { n: devices }) }); return }
+        if (x && x.tries > 0 && x.error) { setTestMsg({ text: t("Didn't go through: {e}. Turn notifications off and on again on this device.", { e: x.error }), bad: true }); return }
+      }
+      setTestMsg({ text: t('Still waiting to send. It goes out within a minute; if nothing shows up, turn notifications off and on again.') })
+    } catch (e) { setTestMsg({ text: (e as Error).message, bad: true }) } finally { setWork(false) }
+  }
   async function toggle() {
     if (!sb) return
     setWork(true); setMsg(null)
@@ -112,7 +132,9 @@ function NotifySection({ backend, p, busy, savePref, phone }: { backend: Backend
         : st === 'unsupported' ? <p className="muted small">{t("This browser can't show notifications.")}</p>
         : st === 'blocked' ? <p className="warn-t small">{t('Notifications are blocked for this site. Allow them in the browser or phone settings.')}</p>
         : <div className="row"><button className={st === 'on' ? 'ghost small' : 'primary small'} disabled={work || !st} onClick={toggle}>{st === 'on' ? t('Turn off on this device') : t('Turn on notifications')}</button>
-            {st === 'on' && <span className="muted small">{t('On for this device')}</span>}</div>}
+            {st === 'on' && <span className="muted small">{t('On for this device')}</span>}
+            {st === 'on' && <button className="ghost small" disabled={work} onClick={testPush}>{t('Send me a test push')}</button>}</div>}
+      {testMsg && <p className={testMsg.bad ? 'neg small' : 'muted small'}>{testMsg.text}</p>}
       {msg && <p className="neg small">{msg}</p>}</div>
     <NotifyBox nf={nf} busy={busy} phone={phone} onSave={x => savePref({ notify: { ...p.notify, ...x } })} />
   </section>

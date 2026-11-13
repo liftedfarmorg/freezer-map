@@ -49,6 +49,24 @@ export async function deleteFeedback(sb: SupabaseClient, id: number, reason?: st
   if (error) throw new Error(/delete_feedback|schema cache/i.test(error.message) ? 'Deleting needs SQL 346 run first.' : error.message)
 }
 
+/** copy text that's still being fetched. Safari (iPhone) only allows a copy right on the tap, so the clipboard
+ *  is handed a promise; Chrome takes that too. Falls back to a plain copy. */
+async function copyLater(text: Promise<string>) {
+  const CI = (window as unknown as { ClipboardItem?: new (x: Record<string, Promise<Blob>>) => ClipboardItem }).ClipboardItem
+  let err: unknown = null
+  const blob = text.then(t => new Blob([t], { type: 'text/plain' })).catch(e => { err = e; throw e })
+  if (CI && navigator.clipboard?.write) {
+    try { await navigator.clipboard.write([new CI({ 'text/plain': blob })]); return }
+    catch (e) { if (err) throw err; void e }
+  }
+  await navigator.clipboard.writeText(await text)
+}
+async function briefs(sb: SupabaseClient, ids: number[]) {
+  const { data, error } = ids.length === 1 ? await sb.rpc('feedback_brief', { p_id: ids[0] }) : await sb.rpc('feedback_briefs', { p_ids: ids })
+  if (error) throw new Error(/feedback_briefs|schema cache/i.test(error.message) ? 'Copying several needs SQL 347 run first.' : error.message)
+  return String(data)
+}
+
 const COLS = 'id, ref, type, status, severity, priority, module, screen, section, record_type, record_id, record_label, title, what_trying, details, edited_spec, decision_note, duplicate_of, reporter_email, reporter_name, context, app_version, source, created_at, updated_at, approved_at, ready_at, done_at, commit_ref, claude_notes'
 
 /** is this person a triager? (SQL 341) */
@@ -113,6 +131,12 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
     if (open != null && picked.has(open) && bulk === 'delete') setOpen(null)
     setPicked(new Set()); setBulk(null); setBulkNote(''); load(); onCount?.()
   }
+  async function copyPicked() {
+    if (!sb || !picked.size) return
+    const ids = shown.filter(r => picked.has(r.id)).map(r => r.id)
+    try { await copyLater(briefs(sb, ids)); flash(t('{n} Claude briefs copied. Paste them into a chat with Claude.', { n: ids.length })) }
+    catch (e) { flash((e as Error).message && !/document is not focused|NotAllowed/i.test((e as Error).message) ? (e as Error).message : t("Couldn't copy here. Try again from a computer."), true) }
+  }
   const mods = useMemo(() => [...new Set((rows ?? []).map(r => r.module).filter((x): x is string => !!x))].sort(), [rows])
   const FILTERS: [Filter, string][] = [['open', 'Open'], ['new', 'New'], ['needs_info', 'Needs info'], ['approved', 'Approved'], ['in_progress', 'In progress'], ['ready_to_test', 'Ready to test'], ['closed', 'Closed'], ['all', 'All']]
 
@@ -142,7 +166,8 @@ export function FbInbox({ sb, me, flash, openId, onOpened, onCount }: {
             <button className={bulk === 'delete' ? 'danger-bg' : 'primary'} disabled={bulkBusy} onClick={runBulk}>{bulkBusy ? t('Working…') : bulk === 'delete' ? t('Delete') : t('Mark done')}</button></div>
         </> : <>
           <b>{t('{n} picked', { n: picked.size })}</b>
-          <div className="row"><button className="primary small" onClick={() => setBulk('done')}>{t('Mark done')}</button>
+          <div className="row"><button className="primary small" onClick={copyPicked}>{t('Copy Claude briefs')}</button>
+            <button className="ghost small" onClick={() => setBulk('done')}>{t('Mark done')}</button>
             <button className="ghost small danger" onClick={() => setBulk('delete')}>{t('Delete')}</button>
             <button className="ghost small" onClick={() => setPicked(new Set())}>{t('Clear')}</button></div>
         </>}
@@ -242,10 +267,8 @@ export function FbCard({ sb, id, flash, triager, me, onClose, onChanged, onDelet
   }
   async function copyBrief() {
     if (!sb) return
-    const { data, error } = await sb.rpc('feedback_brief', { p_id: id })
-    if (error) { flash(error.message, true); return }
-    try { await navigator.clipboard.writeText(String(data)); flash(t('Claude brief copied. Paste it into a chat with Claude.')) }
-    catch { flash(t("Couldn't copy here. Try again from a computer."), true) }
+    try { await copyLater(briefs(sb, [id])); flash(t('Claude brief copied. Paste it into a chat with Claude.')) }
+    catch (e) { flash((e as Error).message && !/document is not focused|NotAllowed/i.test((e as Error).message) ? (e as Error).message : t("Couldn't copy here. Try again from a computer."), true) }
   }
 
   const mine = !!r && !!me && r.reporter_email === me
