@@ -1021,3 +1021,12 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .sholds .shtable .sh-a button { height: 36px; }
   .sholds .shtable .sh-a input[type=date] { flex: 1; min-width: 0; }
 }
+/* SAMPLE-UX-3: customer heading rows (phones only); the cards under them drop the repeated customer name */
+.sholds .shtable tr.sh-grp { display: none; }
+@media (max-width: 700px) {
+  .sholds .shtable tr.sh-grp { display: block; padding: 12px 12px 6px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .sholds .shtable tr.sh-grp td { display: block; }
+  .sholds .shtable tr.sh-grp b { font-size: 15px; }
+  .sholds .shtable .sh-c { display: none; }
+  .sholds .shtable tr:has(.sh-c) { grid-template-areas: "s h" "st so" "a a"; }
+}

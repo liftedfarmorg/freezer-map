@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import type { Backend } from './api'
 import type { Order, SampleHold } from './types'
 
@@ -27,7 +27,10 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
   const rank = (h: SampleHold) => live(h) ? 0 : h.state === 'submitted' ? 1 : 2
   const shown = rows.filter(h => past || live(h) || h.state === 'submitted' || (h.until && h.until >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)))
     .filter(h => !ql || (h.customer ?? '').toLowerCase().includes(ql) || h.strain.toLowerCase().includes(ql) || (h.so_number ?? '').toLowerCase().includes(ql))
-    .sort((a, b) => rank(a) - rank(b) || (a.until ?? '9').localeCompare(b.until ?? '9') || (a.customer ?? '').localeCompare(b.customer ?? '') || a.strain.localeCompare(b.strain))
+    .sort((a, b) => (showCustomer ? (a.customer ?? '').localeCompare(b.customer ?? '') : 0) || rank(a) - rank(b) || (a.until ?? '9').localeCompare(b.until ?? '9') || a.strain.localeCompare(b.strain))
+  // SAMPLE-UX-3: phones group the cards under one heading per customer (desktop keeps the Customer column)
+  const grp = new Map<string, { n: number; lbs: number }>()
+  for (const h of shown) { const g = grp.get(h.customer ?? '') ?? { n: 0, lbs: 0 }; g.n++; if (live(h)) g.lbs += Number(h.remaining ?? 0); grp.set(h.customer ?? '', g) }
   if (!shown.length && !staff) return null
   const liveRows = rows.filter(live), soon = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
   const daysLeft = (h: SampleHold) => h.until ? Math.round((new Date(h.until + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
@@ -47,7 +50,9 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
       {!shown.length ? <p className="muted">{ql ? `No sample holds match "${q}".` : 'No sample holds right now. On a new order, type the lbs, tap Sample and enter how much to hold while the customer tries it.'}</p> : (
         <div className="cwrap"><table className="restable wide shtable">
           <thead><tr>{showCustomer && <th>Customer</th>}<th>Strain</th><th className="num">Held</th><th>Status</th>{staff && <th className="hide-s">Sample</th>}{staff && <th />}</tr></thead>
-          <tbody>{shown.map(h => <tr key={h.line_id} className={live(h) ? '' : 'muted'}>
+          <tbody>{shown.map((h, i) => <Fragment key={h.line_id}>
+            {showCustomer && (i === 0 || shown[i - 1].customer !== h.customer) && <tr className="sh-grp"><td colSpan={6}><b>{h.customer}</b><span className="muted"> · {grp.get(h.customer ?? '')!.n} hold{grp.get(h.customer ?? '')!.n === 1 ? '' : 's'}{grp.get(h.customer ?? '')!.lbs > 0 ? ` · ${n0(grp.get(h.customer ?? '')!.lbs)} lbs held` : ''}</span></td></tr>}
+            <tr className={live(h) ? '' : 'muted'}>
             {showCustomer && <td className="sh-c">{h.customer}</td>}
             <td className="sh-s">{h.strain}{h.crop_year !== new Date().getFullYear() && <span className="pill old">{h.crop_year} crop</span>}</td>
             <td className="num sh-h"><b>{n0(live(h) ? h.remaining : h.hold_lbs)}</b>{h.used_lbs > 0 && <div className="muted small">{n0(h.used_lbs)} of {n0(h.hold_lbs)} ordered</div>}</td>
@@ -61,7 +66,7 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
                 : <>{(live(h) || h.state === 'expired' || h.state === 'released') && <button className="ghost small" onClick={() => setExt({ id: h.line_id, until: h.until ?? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) })}>{live(h) ? 'Extend' : 'Hold again'}</button>}
                     {live(h) && <button className="ghost small" onClick={() => { if (confirm(`Release the ${n0(h.remaining)} lb ${h.strain} hold for ${h.customer}? It goes back on the open menu.`)) act(h, true) }}>Release</button>}</>}
             </td>}
-          </tr>)}</tbody>
+          </tr></Fragment>)}</tbody>
         </table></div>)}
     </div>
   )

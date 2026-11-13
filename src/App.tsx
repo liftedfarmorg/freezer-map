@@ -947,9 +947,9 @@ export default function App() {
     { k: 'activity', l: 'Activity', on: view === 'activity', go: () => go('activity') },
     ...(isAdminOf('dist') ? [{ k: 'settings', l: 'Settings', on: view === 'settings', go: () => go('settings') }] : []),
   ]
-  const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: view === 'sales' && salesTab === t, go: () => setSalesTab(t) })
+  const sItem = (t: SalesTab, l: ReactNode, x?: Partial<NavItem>): NavItem => ({ k: t, l, ...x, on: x?.on ?? (view === 'sales' && salesTab === t), go: () => setSalesTab(t) })
   const salesMain: NavItem[] = [sItem('dash', 'Dashboard'), sItem('inventory', 'Inventory'), itemsNav, sItem('menu', SALES_TITLES.menu), sItem('orders', <>Orders{badge(counts.orders, true)}</>, { s: 'Orders', n: counts.orders, warn: true }), sItem('invoices', 'Invoices'), sItem('returns', 'Returns'), sItem('shipping', 'Shipping'),
-    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves'), sItem('strain', 'By strain'), sItem('samples', 'Sample holds'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback'), sItem('yields', 'Reported Yields')]
+    sItem('requests', <>Requests{badge(counts.requests, salesAdmin)}</>, { s: 'Requests', n: counts.requests, warn: salesAdmin }), sItem('customer', 'Reserves', { on: view === 'sales' && (salesTab === 'customer' || salesTab === 'samples') }), sItem('strain', 'By strain'), sItem('customers', 'Customers'), sItem('feedback', 'Customer feedback'), sItem('yields', 'Reported Yields')]
   const fillsToOk = (forders ?? []).filter(o => o.state === 'needs_ok').length
   const salesTail: NavItem[] = [sItem('review', <>Review{badge(salesBadge + fillsToOk, true)}</>, { s: 'Review', n: salesBadge + fillsToOk, warn: true }), sItem('activity', 'Activity'), ...(isAdminOf('sales') ? [sItem('settings', 'Settings')] : [])]
   const cItem = (t: CultTab, l: string): NavItem => ({ k: t, l, on: view === 'cult' && cultTab === t, go: () => setCultTab(t) })
