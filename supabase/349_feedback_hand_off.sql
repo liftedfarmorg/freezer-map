@@ -1,4 +1,4 @@
--- 348_feedback_hand_off.sql  (Msg FB-12, 11/12)
+-- 349_feedback_hand_off.sql  (Msg FB-12, 11/12)
 -- Copying Claude briefs now hands the reports off: every picked report that's still open and not already
 -- In progress (New, Needs info, Approved, Ready to test) moves to In progress, with a History line
 -- "Handed to Claude (brief copied)". Done / Declined / Duplicate reports are copied but not moved.

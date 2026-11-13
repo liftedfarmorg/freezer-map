@@ -62,9 +62,9 @@ async function copyLater(text: Promise<string>) {
   await navigator.clipboard.writeText(await text)
 }
 async function briefs(sb: SupabaseClient, ids: number[]) {
-  // 348: copying hands the reports off, open ones move to In progress
+  // 349: copying hands the reports off, open ones move to In progress
   const { data, error } = await sb.rpc('feedback_hand_off', { p_ids: ids })
-  if (error) throw new Error(/feedback_hand_off|schema cache/i.test(error.message) ? 'Copying needs SQL 348 run first.' : error.message)
+  if (error) throw new Error(/feedback_hand_off|schema cache/i.test(error.message) ? 'Copying needs SQL 349 run first.' : error.message)
   return String(data)
 }
 
