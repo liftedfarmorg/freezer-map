@@ -16,6 +16,8 @@
 /* Live Bonus (TV): bigger type inside the small card */
 .rgraph.tv { margin: 0; flex: 1; min-height: 0; color: #33443B; }
 .rgraph.tv svg { height: 100%; }
-.rgraph.tv .rg-band { font-size: 13px; font-weight: 600; }
-.rgraph.tv .rg-ax { font-size: 11px; }
+/* the TV card is small: shape only (bands, marks, lines); the variety name is at the top of the screen */
+.rgraph.tv .rg-run { stroke-width: 5; }
+.rgraph.tv .rg-each { stroke-width: 2; }
+.rgraph.tv .rg-mark { stroke-width: 2; }
 .rgraph.tv.empty { font-size: 22px; }

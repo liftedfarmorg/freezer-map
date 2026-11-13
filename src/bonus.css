@@ -55,7 +55,7 @@
 .sp-g { color: var(--g); } .sp-y { color: var(--y); } .sp-r { color: var(--r); }
 .bz-fill.sp-g, .bz-bars i.sp-g { background: var(--gi); } .bz-fill.sp-y, .bz-bars i.sp-y { background: var(--yi); } .bz-fill.sp-r, .bz-bars i.sp-r { background: var(--ri); }
 .bz-fill.sp-g, .bz-fill.sp-y, .bz-fill.sp-r { opacity: 0.9; }
-.bz-bottom { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(5, minmax(0, 1fr)); gap: 20px; height: 210px; flex: none; }
+.bz-bottom { display: grid; grid-template-columns: minmax(0, 1.8fr) repeat(5, minmax(0, 1fr)); gap: 20px; height: 210px; flex: none; }
 .bz-spark { padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .bz-spark .bz-cap { font-size: 22px; }
 .bz-groups { flex: 1; display: flex; gap: 10px; min-height: 0; }
