@@ -209,6 +209,14 @@ function whereIs(ix: Index, slotId: number | null) {
   return f.kind === 'staging' ? `${f.site} Staging · ${s.row}` : f.kind === 'trailer' ? `${f.site} ${fName(f)} · ${s.code.slice(2)}` : `${f.site} F${f.number} · ${s.code}`
 }
 
+/** FB-0021 (Rama): map search card spells the place out (Freezer 3 · spot A12) so the freezer number isn't confused with the spot */
+function hitWhere(ix: Index, p: Pallet, where: (p: Pallet) => string) {
+  if (p.container_id || p.slot_id == null || p.status === 'in_transit') return where(p)
+  const sl = ix.slot.get(p.slot_id), f = sl ? ix.freezer.get(sl.freezer_id) : undefined
+  if (!sl || !f || f.kind === 'staging') return where(p)
+  return f.kind === 'trailer' ? `${f.site} ${fName(f)} · spot ${sl.code.slice(2)}` : `${f.site} Freezer ${f.number} · spot ${sl.code}`
+}
+
 function describe(ix: Index, e: InvEvent, names?: Map<number, string>) {
   const code = e.pallet_id != null ? (ix.pallet.get(e.pallet_id)?.code ?? names?.get(e.pallet_id) ?? (e.details as { code?: string } | null)?.code ?? `#${e.pallet_id}`) : ''
   switch (e.type) {
@@ -1696,12 +1704,12 @@ function MapView({ ix, freezers, trailers = [], staging, query, extra, where, on
           <div className="hitlist">
             {hits.slice(0, 60).map(p => (
               <button key={p.id} className="hit" onClick={() => onPallet(p.id)}>
-                <b>{p.code}</b> <span>{p.kind === 'mixed' ? 'Mixed' : p.strain}</span> <span className="muted">{where(p)}</span>
+                <b>{p.code}</b> <span>{p.kind === 'mixed' ? 'Mixed' : p.strain}</span> <span className="hitlbs">{lbs(weightOf(ix, p))}{p.boxes ? ` · ${p.boxes} box${p.boxes === 1 ? '' : 'es'}` : ''}</span> <span className="muted">{hitWhere(ix, p, where)}</span>
               </button>
             ))}
             {older.slice(0, 30).map(p => (
               <button key={p.id} className="hit old" onClick={() => onPallet(p.id)}>
-                <b>{p.code}</b> <span>{p.strain}</span> <span className="muted">{p.status}</span>
+                <b>{p.code}</b> <span>{p.strain}</span>{p.current_weight != null && <span className="hitlbs">{lbs(p.current_weight)}</span>} <span className="muted">{p.status}</span>
               </button>
             ))}
           </div>

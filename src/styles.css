@@ -126,6 +126,7 @@ main { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
 .hitlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; max-height: 210px; overflow: auto; }
 .hit { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 9px; display: flex; gap: 6px; align-items: baseline; text-align: left; }
 .hit.old { opacity: .65; }
+.hit .hitlbs { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; text-align: left; }

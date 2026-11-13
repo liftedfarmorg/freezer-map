@@ -113,6 +113,8 @@ export async function planTransfer(ctx, spec) {
   const transit = (Number(await setting('comp.metrc_transit_hours', '3')) || 3) * 3600000
   const arr = spec.arrive && spec.arrive.getTime() > dep.getTime() + 30 * 60000 ? spec.arrive : new Date(dep.getTime() + transit)
   const gross = !!type.requiresPackagesGrossWeight, destGross = !!type.requiresDestinationGrossWeight
+  // FB-0016: packages go on the manifest in ascending tag order
+  found.sort((a, b) => (up(a.tag) < up(b.tag) ? -1 : up(a.tag) > up(b.tag) ? 1 : 0))
   const total = r4(found.reduce((s, p) => s + Number(p.m.quantity || 0), 0))
   const body = [{
     destinations: [{

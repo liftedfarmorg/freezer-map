@@ -41,7 +41,12 @@ export async function manifestPdf(m: StopManifest): Promise<Blob> {
   if (m.orders.length) { pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...mute).text(`For: ${m.orders.join(', ')}`, M, y); y += 14 }
   pdf.setDrawColor(...line).setLineWidth(0.8).line(M, y, W - M, y); y += 8
 
-  const pk = m.packages, two = m.from.length > 1
+  const two = m.from.length > 1
+  // FB-0016 (Rama): tags in ascending order so they're easy to collect and check; per shipping license when a stop has two; tag pending last
+  const tagKey = (p: StopManifest['packages'][number]) => (p.tag ?? '').toUpperCase()
+  const pk = [...m.packages].sort((a, b) => (two ? (a.from ?? '').localeCompare(b.from ?? '') : 0)
+    || Number(!a.tag || !!a.tag_pending) - Number(!b.tag || !!b.tag_pending)
+    || (tagKey(a) < tagKey(b) ? -1 : tagKey(a) > tagKey(b) ? 1 : 0))
   const total = pk.reduce((a, p) => a + Number(p.lbs ?? 0), 0)
   autoTable(pdf, {
     startY: y, margin: { left: M, right: M },
