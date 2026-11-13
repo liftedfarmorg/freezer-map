@@ -19,6 +19,9 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
   const [rows, setRows] = useState<SampleHold[] | null>(null)
   const [past, setPast] = useState(false)
   const [ext, setExt] = useState<{ id: number; until: string } | null>(null)
+  // SAMPLE-UX-4: customer groups fold on every screen (start folded; searching opens the matches)
+  const [openG, setOpenG] = useState<Set<string>>(new Set())
+  const togG = (k: string) => setOpenG(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const load = () => backend.sampleHolds(customerId, past).then(setRows).catch(() => setRows([]))
   useEffect(() => { load() }, [customerId, past, rev])
   if (!rows) return null
@@ -31,6 +34,8 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
   // SAMPLE-UX-3: phones group the cards under one heading per customer (desktop keeps the Customer column)
   const grp = new Map<string, { n: number; lbs: number }>()
   for (const h of shown) { const g = grp.get(h.customer ?? '') ?? { n: 0, lbs: 0 }; g.n++; if (live(h)) g.lbs += Number(h.remaining ?? 0); grp.set(h.customer ?? '', g) }
+  const isOpen = (h: SampleHold) => !showCustomer || !!ql || openG.has(h.customer ?? '')
+  const allOpen = grp.size > 0 && [...grp.keys()].every(k => openG.has(k))
   if (!shown.length && !staff) return null
   const liveRows = rows.filter(live), soon = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
   const daysLeft = (h: SampleHold) => h.until ? Math.round((new Date(h.until + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
@@ -46,14 +51,16 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
         <div><span>Customers</span><b>{new Set(liveRows.map(h => h.customer)).size}</b></div>
         <div className={liveRows.some(h => h.state === 'active' && h.until && h.until <= soon) ? 'warn' : ''}><span>Ending in 3 days</span><b>{liveRows.filter(h => h.state === 'active' && h.until && h.until <= soon).length}</b></div>
       </div>}
-      <h3>{title} {staff && <label className="check small-check sh-past"><input type="checkbox" checked={past} onChange={e => setPast(e.target.checked)} /> Show old ones</label>}</h3>
+      <h3>{title} {staff && <label className="check small-check sh-past"><input type="checkbox" checked={past} onChange={e => setPast(e.target.checked)} /> Show old ones</label>}{showCustomer && grp.size > 1 && !ql && <button className="linkbtn small sh-all" onClick={() => setOpenG(allOpen ? new Set() : new Set(grp.keys()))}>{allOpen ? 'Close all' : 'Open all'}</button>}</h3>
       {!shown.length ? <p className="muted">{ql ? `No sample holds match "${q}".` : 'No sample holds right now. On a new order, type the lbs, tap Sample and enter how much to hold while the customer tries it.'}</p> : (
         <div className="cwrap"><table className="restable wide shtable">
-          <thead><tr>{showCustomer && <th>Customer</th>}<th>Strain</th><th className="num">Held</th><th>Status</th>{staff && <th className="hide-s">Sample</th>}{staff && <th />}</tr></thead>
+          <thead><tr><th>Strain</th><th className="num">Held</th><th>Status</th>{staff && <th className="hide-s">Sample</th>}{staff && <th />}</tr></thead>
           <tbody>{shown.map((h, i) => <Fragment key={h.line_id}>
-            {showCustomer && (i === 0 || shown[i - 1].customer !== h.customer) && <tr className="sh-grp"><td colSpan={6}><b>{h.customer}</b><span className="muted"> · {grp.get(h.customer ?? '')!.n} hold{grp.get(h.customer ?? '')!.n === 1 ? '' : 's'}{grp.get(h.customer ?? '')!.lbs > 0 ? ` · ${n0(grp.get(h.customer ?? '')!.lbs)} lbs held` : ''}</span></td></tr>}
-            <tr className={live(h) ? '' : 'muted'}>
-            {showCustomer && <td className="sh-c">{h.customer}</td>}
+            {showCustomer && (i === 0 || shown[i - 1].customer !== h.customer) && <tr className={`sh-grp ${isOpen(h) ? 'open' : ''}`}><td colSpan={5}>
+              <button className="sh-gbtn" aria-expanded={isOpen(h)} onClick={() => togG(h.customer ?? '')}><span className="sh-car">{isOpen(h) ? '▾' : '▸'}</span><b>{h.customer}</b>
+                <span className="muted"> · {grp.get(h.customer ?? '')!.n} hold{grp.get(h.customer ?? '')!.n === 1 ? '' : 's'}</span>
+                <span className="sh-glbs">{grp.get(h.customer ?? '')!.lbs > 0 ? `${n0(grp.get(h.customer ?? '')!.lbs)} lbs held` : ''}</span></button></td></tr>}
+            {isOpen(h) && <tr className={live(h) ? '' : 'muted'}>
             <td className="sh-s">{h.strain}{h.crop_year !== new Date().getFullYear() && <span className="pill old">{h.crop_year} crop</span>}</td>
             <td className="num sh-h"><b>{n0(live(h) ? h.remaining : h.hold_lbs)}</b>{h.used_lbs > 0 && <div className="muted small">{n0(h.used_lbs)} of {n0(h.hold_lbs)} ordered</div>}</td>
             <td className="sh-st"><span className={`pill ${h.state === 'active' ? 'cp-ok' : h.state === 'waiting' || h.state === 'submitted' ? 'cp-warn' : 'cp-mute'}`}>{STATE_L[h.state]}</span>
@@ -66,7 +73,7 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
                 : <>{(live(h) || h.state === 'expired' || h.state === 'released') && <button className="ghost small" onClick={() => setExt({ id: h.line_id, until: h.until ?? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) })}>{live(h) ? 'Extend' : 'Hold again'}</button>}
                     {live(h) && <button className="ghost small" onClick={() => { if (confirm(`Release the ${n0(h.remaining)} lb ${h.strain} hold for ${h.customer}? It goes back on the open menu.`)) act(h, true) }}>Release</button>}</>}
             </td>}
-          </tr></Fragment>)}</tbody>
+          </tr>}</Fragment>)}</tbody>
         </table></div>)}
     </div>
   )

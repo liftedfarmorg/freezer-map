@@ -1021,12 +1021,16 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .sholds .shtable .sh-a button { height: 36px; }
   .sholds .shtable .sh-a input[type=date] { flex: 1; min-width: 0; }
 }
-/* SAMPLE-UX-3: customer heading rows (phones only); the cards under them drop the repeated customer name */
-.sholds .shtable tr.sh-grp { display: none; }
+/* SAMPLE-UX-3/4: customer headings fold on every screen */
+.sholds .shtable tr.sh-grp > td { padding: 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.sholds .sh-gbtn { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: 0; font: inherit; color: var(--ink); padding: 11px 12px; cursor: pointer; }
+.sholds .sh-gbtn:hover { background: var(--r-teal-bg); }
+.sholds .sh-car { width: 14px; color: var(--muted); }
+.sholds .sh-glbs { margin-left: auto; font-weight: 700; white-space: nowrap; }
+.sholds .sh-all { margin-left: 12px; font-weight: 600; }
 @media (max-width: 700px) {
-  .sholds .shtable tr.sh-grp { display: block; padding: 12px 12px 6px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .sholds .shtable tr.sh-grp { display: block; padding: 0; border-bottom: 1px solid var(--line); }
   .sholds .shtable tr.sh-grp td { display: block; }
-  .sholds .shtable tr.sh-grp b { font-size: 15px; }
-  .sholds .shtable .sh-c { display: none; }
-  .sholds .shtable tr:has(.sh-c) { grid-template-areas: "s h" "st so" "a a"; }
+  .sholds .sh-gbtn { padding: 12px; min-height: 44px; }
+  .sholds .shtable tr:not(.sh-grp) { grid-template-areas: "s h" "st so" "a a"; }
 }
