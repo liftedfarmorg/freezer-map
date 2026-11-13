@@ -99,7 +99,7 @@ export function CultDashboard({ d, c, site, onOpen, go }: { d: CultData; c: Ctx;
       </Tiles>}
       {!thisYear && <p className="muted">Looking at the {d.year} season. The this-week numbers only show for {d.currentYear}.</p>}
       <Cards>
-        {thisYear && <Card title="Next 7 days" action="Week" onAction={() => go('week')} wide>
+        {thisYear && <Card title="Next 7 days" action="Calendar" onAction={() => go('week')} wide>
           <div className="cwrap"><table className="ctable">
             <thead><tr><th>Day</th>{!site && <th>Site</th>}<th>Harvesting</th><th className="num">Plants</th><th className="num">Lbs FF</th><th className="num">Dry ice</th><th className="num">Deleaf</th><th className="num">Buck</th></tr></thead>
             <tbody>{days.map(day => {
@@ -125,7 +125,7 @@ export function CultDashboard({ d, c, site, onOpen, go }: { d: CultData; c: Ctx;
           ))}{act.length > 8 && <div className="muted small-note">+{act.length - 8} more</div>}</div> : <Empty>No samples due right now.</Empty>}
         </Card>}
 
-        {thisYear && <Card title="Dry ice orders" action="Week" onAction={() => go('week')}>
+        {thisYear && <Card title="Dry ice orders" action="Calendar" onAction={() => go('week')}>
           {iceBy.size ? <div className="dlist">{[...iceBy.entries()].map(([on, g]) => (
             <div key={on} className="drow"><span><b>Order {fmtD(on, true)}</b><span className="muted"> · {g.hs.map(x => `${x.h.strain} ${fmtD(x.h.planned_on)}`).join(', ')}</span></span><b>{n0(g.lbs)} lbs</b></div>
           ))}</div> : <Empty>No dry ice orders due in the next two weeks.</Empty>}

@@ -769,6 +769,7 @@ export const ES: Record<string, string> = {
  "Settings": "Ajustes",
  "Schedule": "Calendario",
  "Week": "Semana",
+ "Calendar": "Calendario",
  "Testing": "Pruebas",
  "Fields": "Campos",
  "Availability": "Disponibilidad",

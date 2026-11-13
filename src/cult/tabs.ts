@@ -2,7 +2,7 @@
 export type CultTab = 'dashboard' | 'receiving' | 'harvest' | 'schedule' | 'week' | 'testing' | 'avail' | 'plantings' | 'yields' | 'plan' | 'logs' | 'review' | 'activity' | 'setup'
 /** main screens, top of the menu */
 export const CULT_TABS: { t: CultTab; l: string }[] = [
-  { t: 'dashboard', l: 'Dashboard' }, { t: 'receiving', l: 'Receiving' }, { t: 'harvest', l: 'Harvest' }, { t: 'schedule', l: 'Schedule' }, { t: 'week', l: 'Week' }, { t: 'testing', l: 'Testing' },
+  { t: 'dashboard', l: 'Dashboard' }, { t: 'receiving', l: 'Receiving' }, { t: 'harvest', l: 'Harvest' }, { t: 'schedule', l: 'Schedule' }, { t: 'week', l: 'Calendar' }, { t: 'testing', l: 'Testing' },
   { t: 'plantings', l: 'Fields' }, { t: 'avail', l: 'Availability' }, { t: 'yields', l: 'Yields' }, { t: 'plan', l: 'Plan' }, { t: 'logs', l: 'Logs' },
 ]
 /** bottom of the menu, same in every module ('setup' is Cultivation settings, Admins only) */

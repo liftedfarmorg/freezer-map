@@ -5,7 +5,7 @@ import { CultApi } from './api'
 import { makeCtx } from './calc'
 import type { CultData, Harvest } from './types'
 import { HarvestSheet, ScheduleTab } from './schedule'
-import { WeekTab } from './week'
+import { CalendarTab } from './calendar'
 import { TestingTab } from './testing'
 import { AvailabilityTab } from './avail'
 import { PlantingsTab } from './plantings'
@@ -83,7 +83,7 @@ export default function CultView({ backend, flash, onPalletsChanged, tab, go }: 
 
       {tab === 'dashboard' && <CultDashboard d={d} c={c} site={site} onOpen={setOpen} go={go} />}
       {tab === 'schedule' && <ScheduleTab d={d} c={c} site={site} q={q} onOpen={setOpen} api={api} flash={flash} onSaved={saved} />}
-      {tab === 'week' && <WeekTab d={d} c={c} site={site} onOpen={setOpen} />}
+      {tab === 'week' && <CalendarTab d={d} c={c} site={site} onOpen={setOpen} api={api} />}
       {tab === 'testing' && <TestingTab d={d} c={c} site={site} api={api} flash={flash} onSaved={saved} />}
       {tab === 'avail' && <AvailabilityTab d={d} c={c} site={site} q={q} api={api} flash={flash} onSaved={saved} />}
       {tab === 'plantings' && <PlantingsTab key={openPl?.n ?? 0} d={d} c={c} site={site} q={q} api={api} flash={flash} onSaved={saved} openId={openPl?.id} />}

@@ -1037,3 +1037,23 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .sholds .sh-gbtn { padding: 12px; min-height: 44px; }
   .sholds .shtable tr:not(.sh-grp) { grid-template-areas: "s h" "st so" "a a"; }
 }
+
+/* FB-0013: Cultivation > Calendar */
+.calsub { margin-bottom: 6px; }
+.calfilters { flex-wrap: wrap; gap: 8px; }
+.calfilters .search { min-width: 160px; flex: 1 1 160px; }
+.calkinds { flex-wrap: wrap; }
+.kpill.cal-plant { background: #dcfce7; color: #166534; }
+.kpill.cal-receive { background: #dbeafe; color: #1e40af; }
+.kpill.cal-ship { background: #ede9fe; color: #5b21b6; }
+.kpill.cal-cut { background: #fef3c7; color: #92400e; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .kpill.cal-plant { background: #14532d; color: #dcfce7; }
+  :root:not([data-theme="light"]) .kpill.cal-receive { background: #1e3a8a; color: #dbeafe; }
+  :root:not([data-theme="light"]) .kpill.cal-ship { background: #4c1d95; color: #ede9fe; }
+  :root:not([data-theme="light"]) .kpill.cal-cut { background: #78350f; color: #fef3c7; }
+}
+:root[data-theme="dark"] .kpill.cal-plant { background: #14532d; color: #dcfce7; }
+:root[data-theme="dark"] .kpill.cal-receive { background: #1e3a8a; color: #dbeafe; }
+:root[data-theme="dark"] .kpill.cal-ship { background: #4c1d95; color: #ede9fe; }
+:root[data-theme="dark"] .kpill.cal-cut { background: #78350f; color: #fef3c7; }
