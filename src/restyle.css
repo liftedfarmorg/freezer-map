@@ -1004,3 +1004,19 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
 .sholds .sh-kpis span { font-size: 12px; color: var(--muted); }
 .sholds .sh-kpis b { font-size: 18px; }
 @media (max-width: 700px) { .sholds .sh-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* SAMPLE-UX-2: Sample holds on phones = cards (customer + lbs, strain, status, then Extend / Release) */
+@media (max-width: 700px) {
+  .sholds .shtable { min-width: 0 !important; width: 100%; }
+  .sholds .shtable thead { display: none; }
+  .sholds .shtable tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "c h" "s h" "st st" "a a"; gap: 4px 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .sholds .shtable tr:not(:has(.sh-c)) { grid-template-areas: "s h" "st st" "a a"; }
+  .sholds .shtable td { display: block; border: 0; padding: 0; }
+  .sholds .shtable .sh-c { grid-area: c; font-weight: 700; }
+  .sholds .shtable .sh-s { grid-area: s; }
+  .sholds .shtable .sh-h { grid-area: h; text-align: right; font-size: 17px; }
+  .sholds .shtable .sh-st { grid-area: st; }
+  .sholds .shtable .sh-a { grid-area: a; display: flex; gap: 8px; flex-wrap: wrap; white-space: normal; }
+  .sholds .shtable .sh-a:empty { display: none; }
+  .sholds .shtable .sh-a button { height: 36px; }
+  .sholds .shtable .sh-a input[type=date] { flex: 1; min-width: 0; }
+}

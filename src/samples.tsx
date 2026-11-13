@@ -45,16 +45,16 @@ export function SampleHolds({ backend, customerId, staff, flash, title = 'Sample
       </div>}
       <h3>{title} {staff && <label className="check small-check sh-past"><input type="checkbox" checked={past} onChange={e => setPast(e.target.checked)} /> Show old ones</label>}</h3>
       {!shown.length ? <p className="muted">{ql ? `No sample holds match "${q}".` : 'No sample holds right now. On a new order, type the lbs, tap Sample and enter how much to hold while the customer tries it.'}</p> : (
-        <div className="cwrap"><table className="restable wide">
+        <div className="cwrap"><table className="restable wide shtable">
           <thead><tr>{showCustomer && <th>Customer</th>}<th>Strain</th><th className="num">Held</th><th>Status</th>{staff && <th className="hide-s">Sample</th>}{staff && <th />}</tr></thead>
           <tbody>{shown.map(h => <tr key={h.line_id} className={live(h) ? '' : 'muted'}>
-            {showCustomer && <td>{h.customer}</td>}
-            <td>{h.strain}{h.crop_year !== new Date().getFullYear() && <span className="pill old">{h.crop_year} crop</span>}</td>
-            <td className="num"><b>{n0(live(h) ? h.remaining : h.hold_lbs)}</b>{h.used_lbs > 0 && <div className="muted small">{n0(h.used_lbs)} of {n0(h.hold_lbs)} ordered</div>}</td>
-            <td><span className={`pill ${h.state === 'active' ? 'cp-ok' : h.state === 'waiting' || h.state === 'submitted' ? 'cp-warn' : 'cp-mute'}`}>{STATE_L[h.state]}</span>
+            {showCustomer && <td className="sh-c">{h.customer}</td>}
+            <td className="sh-s">{h.strain}{h.crop_year !== new Date().getFullYear() && <span className="pill old">{h.crop_year} crop</span>}</td>
+            <td className="num sh-h"><b>{n0(live(h) ? h.remaining : h.hold_lbs)}</b>{h.used_lbs > 0 && <div className="muted small">{n0(h.used_lbs)} of {n0(h.hold_lbs)} ordered</div>}</td>
+            <td className="sh-st"><span className={`pill ${h.state === 'active' ? 'cp-ok' : h.state === 'waiting' || h.state === 'submitted' ? 'cp-warn' : 'cp-mute'}`}>{STATE_L[h.state]}</span>
               {h.state === 'active' && <div className="muted small">until {d(h.until)}{daysLeft(h) != null && daysLeft(h)! >= 0 ? ` · ${daysLeft(h) === 0 ? 'ends today' : `${daysLeft(h)} day${daysLeft(h) === 1 ? '' : 's'} left`}` : ''}</div>}</td>
-            {staff && <td className="hide-s small">{h.so_number ?? `#${h.order_id}`}{h.shipped_on ? ` · shipped ${d(h.shipped_on)}` : ''}</td>}
-            {staff && <td className="nowrap">
+            {staff && <td className="hide-s small sh-so">{h.so_number ?? `#${h.order_id}`}{h.shipped_on ? ` · shipped ${d(h.shipped_on)}` : ''}</td>}
+            {staff && <td className="nowrap sh-a">
               {ext?.id === h.line_id
                 ? <span className="row"><input type="date" value={ext.until} onChange={e => setExt({ id: h.line_id, until: e.target.value })} />
                     <button className="primary small" disabled={!ext.until} onClick={() => act(h, false, ext.until)}>Save</button><button className="ghost small" onClick={() => setExt(null)}>✕</button></span>
