@@ -2,6 +2,7 @@
 -- (copy in Lifted Operations Platform > Crop Tracking Spreadsheets > Source Files, saved 10/28; first flower was all set by mid-September).
 -- Matches strain (through other names) + planting date; rows with no planting date (trials) match only when that strain has
 -- exactly one OHR 2026 planting. Fills blanks only, never overwrites a first flower already in the app. Logged to events.
+-- Sheet names: Newport Punch #6 = Violet Torque (METRC's older name); spacing and old/renamed names compared loosely.
 -- Sheet fix: Plantain Pressure first flower typed 8/30/3036, read as 8/30/2026. Safe to re-run.
 begin;
 create temp table ff_sheet (strain text, planted_on date, first_flower date) on commit drop;
@@ -161,14 +162,16 @@ insert into ff_sheet values
 ('Blackberry Maple #11',null,'2026-08-20'),
 ('Runtz',null,'2026-08-14');
 
+update ff_sheet set strain = 'Violet Torque' where strain = 'Newport Punch #6';
+update ff_sheet set strain = 'MBxBP x Pressure #5' where strain = 'MB x BP x P #5';
 create temp table ff_match on commit drop as
 select p.id, p.strain, p.planted_on, s.first_flower, p.first_flower as had
   from ff_sheet s join cult_plantings p
     on p.site = 'OHR' and p.crop_year = 2026
-   and lower(canonical_strain(p.strain)) = lower(coalesce(canonical_strain(s.strain), s.strain))
+   and lower(regexp_replace(coalesce(canonical_strain(p.strain), p.strain), '\s+', ' ', 'g')) = lower(regexp_replace(coalesce(canonical_strain(s.strain), s.strain), '\s+', ' ', 'g'))
    and (p.planted_on = s.planted_on
         or (s.planted_on is null and (select count(*) from cult_plantings x where x.site = 'OHR' and x.crop_year = 2026
-                                       and lower(canonical_strain(x.strain)) = lower(coalesce(canonical_strain(s.strain), s.strain))) = 1));
+                                       and lower(regexp_replace(coalesce(canonical_strain(x.strain), x.strain), '\s+', ' ', 'g')) = lower(regexp_replace(coalesce(canonical_strain(s.strain), s.strain), '\s+', ' ', 'g'))) = 1));
 
 insert into events (user_email, type, note, details)
 select 'claude (FB-0023)', 'planting_first_flower', strain, jsonb_build_object('planting_id', id, 'first_flower', first_flower, 'source', 'Farm Data OHR 2026 Summary')
@@ -181,5 +184,5 @@ select (select count(*) from ff_sheet) as sheet_rows, (select count(distinct id)
        (select count(*) from cult_plantings where site = 'OHR' and crop_year = 2026) as ohr_2026_plantings,
        (select count(*) from cult_plantings where site = 'OHR' and crop_year = 2026 and first_flower is not null) as now_with_first_flower,
        (select string_agg(s.strain || coalesce(' ' || s.planted_on, ''), ', ') from ff_sheet s
-         where not exists (select 1 from ff_match m where m.first_flower = s.first_flower and lower(canonical_strain(m.strain)) = lower(coalesce(canonical_strain(s.strain), s.strain)))) as not_matched;
+         where not exists (select 1 from ff_match m where m.first_flower = s.first_flower and lower(regexp_replace(coalesce(canonical_strain(m.strain), m.strain), '\s+', ' ', 'g')) = lower(regexp_replace(coalesce(canonical_strain(s.strain), s.strain), '\s+', ' ', 'g')))) as not_matched;
 commit;
