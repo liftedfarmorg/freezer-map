@@ -1075,3 +1075,9 @@ fieldset.rofs:disabled :is(input, textarea, select, button) { opacity: 1; color:
   .kb .app.shell .scrim > .sheet { max-height: 100%; }
 }
 .field > textarea.growtext { resize: none; overflow: hidden; min-height: 48px; line-height: 1.4; padding: 11px 12px; }
+
+/* ZOOM-1: iPhone zooms the whole page in when you tap a box with text under 16px, and it stays zoomed (top bar looks cut off).
+   On phones every text box, dropdown and note field is 16px so tapping one never zooms. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+}
