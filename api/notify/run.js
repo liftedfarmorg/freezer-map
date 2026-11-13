@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     await rpc('gvr_stage_sweep').catch(() => {})
     // 230: carrier stops nobody recorded by the end of the day (6pm Pacific): one push per stop per day
     await rpc('stop_unrecorded_sweep').catch(() => {})
-    // 351: Feedback & Bugs reports In progress 3 days with nothing happening go back to Approved
+    // 351: Feedback & Bugs reports In progress 7 days (app setting feedback.stale_days) with nothing happening go back to Approved
     await rpc('feedback_stale_sweep').catch(() => {})
     const q = await rpc('notify_claim', { p_limit: 50 })
     // ---- push ----
