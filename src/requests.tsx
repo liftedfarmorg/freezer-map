@@ -17,7 +17,7 @@ export function RequestsPanel({ backend, reqs, nums, cname, cur, isAdmin, flash,
   const done = reqs.filter(r => r.status !== 'pending').slice(0, 80)
   return (
     <>
-      {!isAdmin && <p className="muted">Only an Admin can approve reserve changes.</p>}
+      {!isAdmin && <p className="muted">Only a Sales Admin can approve reserve changes.</p>}
       {groups.size === 0 && <p className="muted">No requests waiting.</p>}
       {[...groups.entries()].map(([k, rs]) => <Batch key={k} backend={backend} rs={rs} nums={nums} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={onDone} />)}
       {done.length > 0 && <>
