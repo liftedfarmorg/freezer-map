@@ -1,5 +1,5 @@
-// Accounting actions: { action: 'status' | 'push' | 'link' | 'push_cm' | 'link_cm' (credit_memo_id) | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
-import { Busy, ENV, caller, classId, companyName, connection, creditMemoEmails, itemId, linkCreditMemo, linkInvoice, missingSetup, pushCreditMemo, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, upsert } from './_lib.js'
+// Accounting actions: { action: 'status' | 'push' | 'link' | 'unlink' | 'push_cm' | 'link_cm' (credit_memo_id) | 'sync' | 'check' | 'setup' | 'disconnect' | 'auto', invoice_id?, qbo_doc?, confirm?, on? }
+import { Busy, ENV, caller, classId, companyName, connection, creditMemoEmails, itemId, linkCreditMemo, linkInvoice, missingSetup, pushCreditMemo, pushInvoice, qbo, query, revoke, rpc, send, syncBalances, syncCustomers, table, unlinkInvoice, upsert } from './_lib.js'
 
 export const config = { maxDuration: 60 }
 
@@ -60,6 +60,13 @@ export default async function handler(req, res) {
       if (!id) return send(res, 400, { error: 'Which invoice?' })
       const c = await connection()
       return send(res, 200, { env: ENV, ...(await linkInvoice(c, id, body.qbo_doc, { confirm: body.confirm === true, admin: !!me.admin && !me.viewing_as, by: me.email })) })
+    }
+    if (action === 'unlink') {
+      // matched to the wrong QuickBooks invoice: back to To send, nothing changes in QuickBooks (Accounting Admins)
+      if (!me.admin || me.viewing_as) return send(res, 403, { error: 'Only an Accounting Admin can unlink an invoice' })
+      const id = Number(body.invoice_id)
+      if (!id) return send(res, 400, { error: 'Which invoice?' })
+      return send(res, 200, { env: ENV, ...(await unlinkInvoice(id, { by: me.email })) })
     }
     if (action === 'sync') {
       const t0 = Date.now()

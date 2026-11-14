@@ -450,6 +450,11 @@ function SendSheet({ api, id, flash, canEdit, isAdmin = false, env, onClose, onC
         </div>
         {canEdit && p.status !== 'void' && (!locked || isAdmin) &&
           <LinkBox api={api} id={id} env={env} relink={locked} flash={flash} onLinked={async () => { await load(); onChanged() }} />}
+        {canEdit && isAdmin && p.push?.status === 'sent' && p.status !== 'void' &&
+          <p className="muted small"><button className="linkbtn" disabled={busy} onClick={() => {
+            if (!confirm(`Unlink ${p.doc_number} from ${env === 'sandbox' ? 'sandbox' : 'QuickBooks'} #${p.push?.doc_number}?\n\nNothing changes in QuickBooks. ${p.doc_number} goes back to To send, so you can send it as its own invoice or link it to the right one.\n\nIf the QuickBooks invoice uses the same number (${p.push?.doc_number}), change that number in QuickBooks first, then send.`)) return
+            run(() => api.server('run', { action: 'unlink', invoice_id: id }), `${p.doc_number} unlinked. It's back in To send.`)
+          }}>Matched to someone else's invoice? Unlink it</button></p>}
       </div>
     </div>
   )

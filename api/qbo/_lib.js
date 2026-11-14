@@ -343,6 +343,17 @@ async function pushInvoice_(c, invoiceId, by) {
   const existing = (p.push && p.push.qbo_id) ? (await query(c, `select * from Invoice where Id = '${esc(p.push.qbo_id)}'`)).Invoice?.[0]
     : (await query(c, `select * from Invoice where DocNumber = '${esc(body.DocNumber)}'`)).Invoice?.[0]
   let inv, note = null, mode = 'created'
+  if (existing && ENV === 'production' && !(p.push && p.push.qbo_id)) {
+    // same number in the real books: only the same sale (same customer and total) is linked. Anything else is a different
+    // invoice that happens to share the number: send nothing and say how to sort it out (Matt, 11/13: INV-26110402)
+    const sameCustomer = String(existing.CustomerRef?.value ?? '') === String(custId)
+    const sameTotal = r2(existing.TotalAmt) === r2(p.total)
+    if (!sameCustomer || !sameTotal) {
+      throw new Error(`QuickBooks already has an invoice numbered ${body.DocNumber}, but it's a different one: ${existing.CustomerRef?.name ?? 'another customer'}, `
+        + `$${r2(existing.TotalAmt).toFixed(2)}, dated ${existing.TxnDate}. Nothing was sent. Change that invoice's number in QuickBooks, then send this one again. `
+        + `(If it really is this sale, use "Already in QuickBooks under another number?" below to link it.)`)
+    }
+  }
   if (existing && ENV === 'production') {
     // never overwrite something already in the real books: link it and say so
     inv = existing; mode = 'linked'
@@ -723,6 +734,29 @@ export async function linkInvoice(c, invoiceId, docNumber, { confirm = false, ad
   await table(`acct_pushes?invoice_id=eq.${invoiceId}&env=eq.${ENV}`, { method: 'PATCH', body: JSON.stringify({ line_map: null, pulled_at: null }), headers: { Prefer: 'return=minimal' } })
   await table('acct_qbo_docs?env=eq.' + ENV + '&kind=eq.Invoice&qbo_id=eq.' + encodeURIComponent(q.Id), { method: 'PATCH', body: JSON.stringify({ invoice_id: invoiceId }), headers: { Prefer: 'return=minimal' } }).catch(() => {})
   return { linked: true, warnings, qbo: info }
+}
+
+// ---------- unlink: the app invoice was matched to the wrong QuickBooks invoice (Matt, 11/13) ----------
+// Nothing changes in QuickBooks. The app invoice goes back to To send (no auto-send clock) so it can be sent as its own invoice,
+// or linked to the right one. Invoices that are copies of QuickBooks invoices (history imports) can't be unlinked: fix those in QuickBooks.
+export async function unlinkInvoice(invoiceId, { by = null } = {}) {
+  const p = (await table(`acct_pushes?invoice_id=eq.${invoiceId}&env=eq.${ENV}&select=status,qbo_id,doc_number`))?.[0]
+  if (!p || p.status !== 'sent') throw new Error(`This invoice isn't linked to ${ENV === 'sandbox' ? 'the sandbox' : 'QuickBooks'}.`)
+  const inv = (await table(`invoices?id=eq.${invoiceId}&select=id,inv_number,status,created_by`))?.[0]
+  if (!inv) throw new Error('Invoice not found')
+  if (String(inv.created_by || '').startsWith('QuickBooks history import')) throw new Error(`${inv.inv_number} is a copy of a QuickBooks invoice. Change it in QuickBooks instead.`)
+  await table(`acct_pushes?invoice_id=eq.${invoiceId}&env=eq.${ENV}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+  const now = new Date().toISOString()
+  if (ENV === 'production') {
+    // paid only ever came from the wrong QuickBooks invoice: open again until the right one says otherwise
+    await table(`invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+      acct_status: 'pending', acct_ref: null, acct_error: null, acct_push_after: null, updated_at: now,
+      ...(inv.status === 'paid' ? { status: 'open', paid_at: null } : {}) }) })
+  }
+  await table(`acct_qbo_docs?env=eq.${ENV}&invoice_id=eq.${invoiceId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ invoice_id: null }) }).catch(() => {})
+  await table('events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify([{ user_email: by || 'system', type: 'acct_unlinked',
+    note: `${inv.inv_number} unlinked from QuickBooks #${p.doc_number}`, details: { invoice_id: invoiceId, inv: inv.inv_number, env: ENV, qbo_id: p.qbo_id, doc_number: p.doc_number, reopened: inv.status === 'paid' } }]) }).catch(() => {})
+  return { unlinked: true, was: { qbo_id: p.qbo_id, doc_number: p.doc_number }, reopened: inv.status === 'paid' }
 }
 
 export function send(res, status, body) { res.status(status).setHeader('Cache-Control', 'no-store'); return res.json(body) }
