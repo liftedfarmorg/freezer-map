@@ -412,7 +412,7 @@ export function ReservesView({ backend, customers, strains, onHand, flash, isAdm
 
       {mode === 'samples' && <SampleHolds backend={backend} staff showCustomer flash={flash} rev={holdRev} onChanged={load} q={q} title="" />}
       {mode === 'requests' && <RequestsPanel backend={backend} reqs={reqs.filter(r => !ql || cname(r.customer_id).toLowerCase().includes(ql) || r.strain.toLowerCase().includes(ql))}
-        nums={nums} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={load} />}
+        nums={nums} bal={bal ?? []} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={load} />}
 
       {mode === 'orders' && (
         <>

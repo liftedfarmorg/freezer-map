@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import type { Backend } from './api'
-import type { MenuNumbers, ReserveRequest } from './types'
+import type { Balance, MenuNumbers, ReserveRequest } from './types'
 
 const n0 = (x: number) => Math.round(x).toLocaleString()
 const when = (s: string) => new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 /** Sales > Requests: waiting requests grouped by what the customer sent together; Admins approve or decline
  *  several at once and can approve a different amount than asked. */
-export function RequestsPanel({ backend, reqs, nums, cname, cur, isAdmin, flash, onDone }: {
-  backend: Backend; reqs: ReserveRequest[]; nums: MenuNumbers[]; cname: (id: number) => string; cur: number; isAdmin: boolean
+export function RequestsPanel({ backend, reqs, nums, bal, cname, cur, isAdmin, flash, onDone }: {
+  backend: Backend; reqs: ReserveRequest[]; nums: MenuNumbers[]; bal: Balance[]; cname: (id: number) => string; cur: number; isAdmin: boolean
   flash: (t: string, bad?: boolean) => void; onDone: () => Promise<void>
 }) {
   const pending = reqs.filter(r => r.status === 'pending')
@@ -19,7 +19,7 @@ export function RequestsPanel({ backend, reqs, nums, cname, cur, isAdmin, flash,
     <>
       {!isAdmin && <p className="muted">Only a Sales Admin can approve reserve changes.</p>}
       {groups.size === 0 && <p className="muted">No requests waiting.</p>}
-      {[...groups.entries()].map(([k, rs]) => <Batch key={k} backend={backend} rs={rs} nums={nums} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={onDone} />)}
+      {[...groups.entries()].map(([k, rs]) => <Batch key={k} backend={backend} rs={rs} nums={nums} bal={bal} cname={cname} cur={cur} isAdmin={isAdmin} flash={flash} onDone={onDone} />)}
       {done.length > 0 && <>
         <h3 className="grouph">Decided</h3>
         <table className="restable wide">
@@ -39,13 +39,15 @@ export function RequestsPanel({ backend, reqs, nums, cname, cur, isAdmin, flash,
   )
 }
 
-function Batch({ backend, rs, nums, cname, cur, isAdmin, flash, onDone }: {
-  backend: Backend; rs: ReserveRequest[]; nums: MenuNumbers[]; cname: (id: number) => string; cur: number; isAdmin: boolean
+function Batch({ backend, rs, nums, bal, cname, cur, isAdmin, flash, onDone }: {
+  backend: Backend; rs: ReserveRequest[]; nums: MenuNumbers[]; bal: Balance[]; cname: (id: number) => string; cur: number; isAdmin: boolean
   flash: (t: string, bad?: boolean) => void; onDone: () => Promise<void>
 }) {
   const first = rs[0]
+  // REQ-PICKED-1: lbs the customer already picked up on this reserve; Now, Asked and Approve at show what's left after that
+  const got = (r: ReserveRequest) => Number(bal.find(b => b.customer_id === r.customer_id && b.strain.toLowerCase() === r.strain.toLowerCase() && (b.crop_year ?? cur) === (r.crop_year ?? cur))?.shipped ?? 0)
   const [pick, setPick] = useState<Set<number>>(() => new Set(rs.map(r => r.id)))
-  const [amt, setAmt] = useState<Record<number, string>>(() => Object.fromEntries(rs.map(r => [r.id, String(Number(r.requested_lbs))])))
+  const [amt, setAmt] = useState<Record<number, string>>(() => Object.fromEntries(rs.map(r => [r.id, String(Math.max(0, Number(r.requested_lbs) - got(r)))])))
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const yr = first.crop_year ?? cur
@@ -59,7 +61,7 @@ function Batch({ backend, rs, nums, cname, cur, isAdmin, flash, onDone }: {
     if (bad) { flash(`${bad.strain}: enter an amount`, true); return }
     setBusy(true)
     try {
-      const res = await backend.decideRequests(ids.map(r => ({ id: r.id, approve, lbs: approve ? Number(amt[r.id]) : null })), note)
+      const res = await backend.decideRequests(ids.map(r => ({ id: r.id, approve, lbs: approve ? Number(amt[r.id]) + got(r) : null })), note)
       await onDone()
       flash(approve ? `Approved ${res.approved}. Reserves updated.` : `Declined ${res.declined}`)
     } catch (e) { flash(String((e as Error).message ?? e), true) } finally { setBusy(false) }
@@ -72,15 +74,15 @@ function Batch({ backend, rs, nums, cname, cur, isAdmin, flash, onDone }: {
       </div>
       <table className="restable">
         <thead><tr>{isAdmin && <th className="selcol"><input type="checkbox" checked={all} onChange={() => setPick(all ? new Set() : new Set(rs.map(r => r.id)))} aria-label="Pick all" /></th>}
-          <th>Strain</th><th className="num">Now</th><th className="num">Asked</th>{isAdmin && <th className="num">Approve at</th>}{yr === cur && <th className="num">Free</th>}</tr></thead>
+          <th>Strain</th><th className="num">Picked up</th><th className="num">Now</th><th className="num">Asked</th>{isAdmin && <th className="num">Approve at</th>}{yr === cur && <th className="num">Free</th>}</tr></thead>
         <tbody>{sorted.map(r => {
-          const d = Number(r.requested_lbs) - Number(r.current_lbs)
+          const d = Number(r.requested_lbs) - Number(r.current_lbs), g = got(r)
           const m = yr === cur ? nums.find(x => x.strain.toLowerCase() === r.strain.toLowerCase() && x.crop_year === cur) : undefined
           return (
             <tr key={r.id} className={pick.has(r.id) ? '' : 'unpicked'}>
               {isAdmin && <td className="selcol"><input type="checkbox" checked={pick.has(r.id)} onChange={() => tog(r.id)} aria-label={`Pick ${r.strain}`} /></td>}
-              <td>{r.strain}</td><td className="num">{n0(Number(r.current_lbs))}</td>
-              <td className="num"><b>{n0(Number(r.requested_lbs))}</b> <span className={d > 0 ? 'up' : 'down'}>({d > 0 ? '+' : ''}{n0(d)})</span></td>
+              <td>{r.strain}</td><td className="num">{g ? n0(g) : ''}</td><td className="num">{n0(Math.max(0, Number(r.current_lbs) - g))}</td>
+              <td className="num"><b>{n0(Math.max(0, Number(r.requested_lbs) - g))}</b> <span className={d > 0 ? 'up' : 'down'}>({d > 0 ? '+' : ''}{n0(d)})</span></td>
               {isAdmin && <td className="num"><input className="qty" type="number" min="0" step="10" value={amt[r.id] ?? ''} onChange={e => setAmt({ ...amt, [r.id]: e.target.value })} aria-label={`Approve ${r.strain} at`} /></td>}
               {yr === cur && <td className="num">{m ? n0(Number(m.free)) : ''}</td>}
             </tr>
